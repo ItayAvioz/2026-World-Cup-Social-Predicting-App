@@ -127,14 +127,20 @@
   <div class="globe-header">
     <div class="section-pill">Interactive World Map</div>
     <h2 class="section-title" style="text-align:center">48 Nations on the Map</h2>
-    <p style="color:var(--muted);font-size:.93rem">Hover to highlight · Click a flag for team info</p>
+    <p class="globe-header-hint" style="color:var(--muted);font-size:.93rem"><span class="hint-hover">Hover to highlight · </span>Click a flag for team info</p>
   </div>
-  <div id="globe-container"></div>
+  <div id="globe-scroll-wrap">
+    <div id="globe-container"></div>
+  </div>
+  <div id="globe-filter-bar" style="display:none">
+    <span>Group <strong id="globe-filter-letter"></strong> only</span>
+    <button onclick="filterGlobe(null)" style="background:none;border:1px solid var(--accent);color:var(--accent);padding:.2rem .7rem;border-radius:6px;cursor:pointer;font-size:.78rem">Show all</button>
+  </div>
   <div class="globe-legend">
     <span>Gold border = Host nation</span>
-    <span>·</span>
-    <span>Click any flag for team details & schedule</span>
+    <span class="legend-mobile"> · Tap 📍 to filter by group</span>
   </div>
+  <p class="globe-scroll-hint">← Scroll to explore →</p>
 </section>
 
 <!-- REGISTER -->

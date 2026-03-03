@@ -210,7 +210,7 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
     const card = document.createElement('div');
     card.className = 'group-card';
 
-    let html = `<div class="group-header">GROUP ${letter}</div><div class="group-teams">`;
+    let html = `<div class="group-header">GROUP ${letter}<button class="grp-map-btn" data-filter="${letter}" title="Show on map">📍</button></div><div class="group-teams">`;
     groupTeams.forEach(team => {
       const idx = TEAMS.indexOf(team);
       html += `
@@ -241,10 +241,22 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
     container.appendChild(card);
   });
 
-  // Event delegation — click any team row
+  // Event delegation — click team row, map button, or group header (accordion on mobile)
   container.addEventListener('click', e => {
     const row = e.target.closest('[data-team-idx]');
-    if (row) openModal(TEAMS[+row.dataset.teamIdx], 'stats');
+    if (row) { if (window.innerWidth > 768) { openModal(TEAMS[+row.dataset.teamIdx], 'stats'); } else { location.href = 'team.html?code=' + TEAMS[+row.dataset.teamIdx].code + '&mode=stats'; } return; }
+    const mapBtn = e.target.closest('.grp-map-btn');
+    if (mapBtn) {
+      e.stopPropagation();
+      filterGlobe(mapBtn.dataset.filter);
+      document.getElementById('globe-section').scrollIntoView({ behavior:'smooth' });
+      return;
+    }
+    const header = e.target.closest('.group-header');
+    if (header) {
+      const card = header.closest('.group-card');
+      if (card) card.classList.toggle('open');
+    }
   });
 })();
 
@@ -282,6 +294,7 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
 
     var wrap = document.createElement('div');
     wrap.title = d.name + ' · Group ' + d.group;
+    wrap.dataset.teamGroup = d.group;
     wrap.style.cssText = [
       'position:absolute',
       'left:' + p.x + '%',
@@ -290,11 +303,13 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
       'cursor:pointer',
       'z-index:' + (big ? 15 : 10),
       'transition:transform .18s',
-      'pointer-events:auto'
+      'pointer-events:auto',
+      'padding:6px',        /* larger touch target — 26px flag + 12px padding = 38px tap area */
+      '-webkit-tap-highlight-color:transparent'
     ].join(';');
 
     var img = document.createElement('img');
-    img.src = 'https://flagcdn.com/w' + (big ? 56 : 40) + '/' + d.code + '.png';
+    img.src = 'https://flagcdn.com/w' + (big ? 80 : 40) + '/' + d.code + '.png';
     img.alt = d.name;
     img.style.cssText = [
       'width:'  + fw + 'px',
@@ -303,8 +318,8 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
       'object-fit:cover',
       'display:block',
       'pointer-events:none',
-      'box-shadow:0 2px 10px rgba(0,0,0,.9)',
-      big ? 'border:2.5px solid #f5c518' : 'border:1px solid rgba(255,255,255,.4)'
+      big ? 'border:3px solid #f5c518;box-shadow:0 0 10px rgba(245,197,24,.65),0 2px 10px rgba(0,0,0,.9)'
+          : 'border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.9)'
     ].join(';');
 
     img.onerror = function() {
@@ -325,13 +340,92 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
     };
 
     wrap.appendChild(img);
-    wrap.addEventListener('click',      function() { openModal(d, 'nation'); });
+    wrap.addEventListener('click', function() { if (window.innerWidth > 768) { openModal(d, 'nation'); } else { location.href = 'team.html?code=' + d.code + '&mode=nation'; } });
+    // hover scale (desktop only — touch devices use click)
     wrap.addEventListener('mouseenter', function() { this.style.transform='translate(-50%,-50%) scale(1.55)'; this.style.zIndex='40'; });
     wrap.addEventListener('mouseleave', function() { this.style.transform='translate(-50%,-50%) scale(1)';   this.style.zIndex= big ? '15' : '10'; });
+    // touch: brief visual feedback
+    wrap.addEventListener('touchstart', function() { this.style.transform='translate(-50%,-50%) scale(1.4)'; }, { passive:true });
+    wrap.addEventListener('touchend',   function() { this.style.transform='translate(-50%,-50%) scale(1)'; },  { passive:true });
 
     container.appendChild(wrap);
   });
+
+  // ── HOST COUNTRY BORDERS (SVG overlay) ───────────────────────
+  (function() {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:6';
+    svg.setAttribute('viewBox', '0 0 360 180');
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    function mkPoly(pts) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      el.setAttribute('points', pts.map(function(p) {
+        return (p[0]+180).toFixed(1)+','+(90-p[1]).toFixed(1);
+      }).join(' '));
+      el.setAttribute('fill', 'rgba(245,197,24,0.07)');
+      el.setAttribute('stroke', '#f5c518');
+      el.setAttribute('stroke-width', '0.8');
+      el.setAttribute('stroke-linejoin', 'round');
+      return el;
+    }
+
+    // Canada
+    svg.appendChild(mkPoly([
+      [-124,49],[-122,49],[-110,49],[-95,49],[-89.5,48],[-88,48],[-87,47],
+      [-84,46.5],[-82,45.5],[-83,44],[-83,42],[-80,42.5],[-76,44],[-67,47],
+      [-64,44],[-60,46],[-53,47],
+      [-53,52],[-58,60],[-62,63],[-68,63],[-75,63],[-80,63],
+      [-87,65],[-90,63],[-96,63],[-100,63],[-110,63],[-120,63],
+      [-130,63],[-135,60],[-130,54],[-126,50],[-124,49]
+    ]));
+
+    // Continental USA
+    svg.appendChild(mkPoly([
+      [-124,48.5],[-124,46],[-124,43],[-124,39],[-122,38],[-120,35],[-117,32.5],
+      [-114,32.5],[-111,31.5],[-108,31.5],[-106,32],[-104,29.5],[-100,28],[-97,26],
+      [-94,29],[-90,29],[-88,30],[-85,30],[-81.5,25],[-80,25.5],
+      [-80,28],[-80,31],[-76,35],[-74,38.5],[-72,41],[-70,42],[-67,44.5],
+      [-67,47],[-76,44],[-80,42.5],[-83,42],[-83,44],[-82,45.5],[-84,46.5],
+      [-87,47],[-88,48],[-89.5,48],[-95,49],[-100,49],[-110,49],[-122,49],[-124,48.5]
+    ]));
+
+    // Mexico — Baja California peninsula
+    svg.appendChild(mkPoly([
+      [-117,32.5],[-115,30],[-114,28],[-113,26],[-110,24],[-109.5,22.9],
+      [-110,25],[-113.5,29],[-114.8,32],[-117,32.5]
+    ]));
+
+    // Mexico — Mainland
+    svg.appendChild(mkPoly([
+      [-114.8,32],[-111,31.5],[-108,31.5],[-106,32],[-104,29.5],[-100,28],[-97,26],
+      [-97,22],[-94.5,18.5],[-91.5,18.5],
+      [-90.4,21],[-90,21.5],[-86.9,21.5],[-87,20.5],[-87.5,18.5],[-87.8,16.5],
+      [-88.5,15.5],[-90.5,15.5],[-92,15.5],
+      [-94,16],[-99.5,16.5],[-103,19],[-105,21],[-109,23.5],[-110,24.5],[-112,27],[-114.5,30],[-114.8,32]
+    ]));
+
+    container.appendChild(svg);
+  })();
+
 })();
+
+// ── GLOBE FILTER ─────────────────────────────────────────────
+var _activeGroupFilter = null;
+function filterGlobe(letter) {
+  _activeGroupFilter = (_activeGroupFilter === letter) ? null : letter;
+  var wrappers = document.querySelectorAll('#globe-container > div[data-team-group]');
+  wrappers.forEach(function(el) {
+    var match = !_activeGroupFilter || el.dataset.teamGroup === _activeGroupFilter;
+    el.style.opacity        = match ? '1' : '0.1';
+    el.style.pointerEvents  = match ? 'auto' : 'none';
+    el.style.transition     = 'opacity .3s';
+  });
+  var bar    = document.getElementById('globe-filter-bar');
+  var letter_el = document.getElementById('globe-filter-letter');
+  if (bar) bar.style.display = _activeGroupFilter ? 'flex' : 'none';
+  if (letter_el) letter_el.textContent = _activeGroupFilter || '';
+}
 
 // ── MODAL ────────────────────────────────────────────────────
 function openModal(team, mode) {
@@ -614,7 +708,7 @@ document.getElementById('host-modal').addEventListener('click', function(e) {
 
 document.querySelectorAll('.host-card').forEach(function(card) {
   card.addEventListener('click', function() {
-    openHostSchedule(card.dataset.host);
+    if (window.innerWidth > 768) { openHostSchedule(card.dataset.host); } else { location.href = 'host.html?name=' + encodeURIComponent(card.dataset.host); }
   });
 });
 
