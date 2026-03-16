@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Failed Summaries</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 900px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input, select { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; border-radius: 4px; }
+    input { width: 260px; } select { width: 220px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    button.danger { background: #e53e3e; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 28px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #333; padding: 6px 12px; text-align: left; font-size: 13px; }
+    th { background: #1a1a1a; color: #aaa; }
+  </style>
+</head>
+<body>
+<h1>🔴 Test — Failed Summaries (Migration 20)</h1>
+<p style="color:#888;font-size:13px">
+  Tests the <code>failed_summaries</code> table — used by the nightly-summary Edge Function
+  to record groups that failed AI generation. The Edge Function reads this table on retry.
+</p>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In (service role not needed — anon can read/write via RLS)</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── LIST FAILED SUMMARIES ────────────────────────────────── -->
+<section>
+  <h2>1. List All Failed Summaries</h2>
+  <button onclick="listFailed()">Load Failed Summaries</button>
+  <div class="result" id="r-list">
+    <table id="failed-table">
+      <thead><tr><th>ID</th><th>Group ID</th><th>Date</th><th>Reason</th><th>Attempt #</th><th>Resolved</th><th>Created At</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─── INSERT TEST FAILURE ──────────────────────────────────── -->
+<section>
+  <h2>2. Insert Test Failed Summary</h2>
+  <p style="color:#888;font-size:12px">Uses a service-role SQL call (or direct insert if RLS allows). Check table schema: group_id, summary_date, reason, attempt_count.</p>
+  <input id="ins-group-id" placeholder="group_id (uuid)">
+  <input id="ins-date" placeholder="date (e.g. 2026-06-12)" style="width:160px">
+  <input id="ins-reason" placeholder="reason text" style="width:280px">
+  <button onclick="insertFailed()">Insert Test Record</button>
+  <div class="result" id="r-insert"></div>
+</section>
+
+<!-- ─── MARK AS RESOLVED ─────────────────────────────────────── -->
+<section>
+  <h2>3. Mark as Resolved</h2>
+  <input id="resolve-id" placeholder="failed_summaries.id (uuid)">
+  <button onclick="markResolved()">Mark Resolved</button>
+  <div class="result" id="r-resolve"></div>
+</section>
+
+<!-- ─── VERIFY TABLE SCHEMA ──────────────────────────────────── -->
+<section>
+  <h2>4. Expected Schema (from migration 20)</h2>
+  <div class="result" style="color:#63b3ed">
+-- failed_summaries table (migration 20)
+-- id              uuid PK DEFAULT gen_random_uuid()
+-- group_id        uuid REFERENCES groups(id)
+-- summary_date    date NOT NULL
+-- reason          text (error message from Claude API or DB write)
+-- attempt_count   int NOT NULL DEFAULT 1
+-- resolved        boolean NOT NULL DEFAULT false
+-- created_at      timestamptz DEFAULT now()
+
+-- RLS:
+--   SELECT: members of the group (is_group_member(group_id))
+--   INSERT/UPDATE: SECURITY DEFINER RPC only (Edge Function uses service role)
+
+-- Usage by Edge Function:
+--   On failure → INSERT into failed_summaries (or UPDATE attempt_count if already exists)
+--   On retry   → SELECT WHERE resolved = false ORDER BY summary_date
+--   On success → UPDATE SET resolved = true
+
+-- SQL to check unresolved failures (run in SQL editor):
+SELECT * FROM public.failed_summaries WHERE resolved = false ORDER BY summary_date DESC;
+  </div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin', `✓ Signed in as: ${data.user.email}  (${data.user.id})`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function listFailed() {
+    const { data, error } = await _supabase
+      .from('failed_summaries')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) return show('r-list', `Error: ${error.message}\n(RLS: must be signed in as a group member, or table may be empty)`, 'err')
+
+    const tbody = document.querySelector('#failed-table tbody')
+    if (!data?.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:#666">No failed summaries found (table empty or no access)</td></tr>'
+      return
+    }
+
+    tbody.innerHTML = data.map(r => `<tr>
+      <td style="font-size:11px;color:#888">${r.id}</td>
+      <td style="font-size:11px;color:#888">${r.group_id}</td>
+      <td>${r.summary_date}</td>
+      <td>${r.reason ?? '—'}</td>
+      <td style="text-align:center">${r.attempt_count}</td>
+      <td style="text-align:center">${r.resolved ? '✅' : '❌'}</td>
+      <td>${r.created_at?.slice(0,16)}</td>
+    </tr>`).join('')
+  }
+
+  async function insertFailed() {
+    const group_id    = $('ins-group-id').value.trim()
+    const summary_date = $('ins-date').value.trim()
+    const reason      = $('ins-reason').value.trim()
+
+    if (!group_id || !summary_date)
+      return show('r-insert', 'group_id and date are required', 'err')
+
+    const { data, error } = await _supabase
+      .from('failed_summaries')
+      .insert({ group_id, summary_date, reason: reason || 'Manual test insert', attempt_count: 1, resolved: false })
+      .select()
+      .single()
+
+    if (error) return show('r-insert',
+      `Error: ${error.message}\n(Note: if INSERT is blocked by RLS, this table may require service role — correct for EF use)`, 'err')
+
+    show('r-insert', `✓ Inserted:\n  id:          ${data.id}\n  group_id:    ${data.group_id}\n  date:        ${data.summary_date}\n  reason:      ${data.reason}\n  attempts:    ${data.attempt_count}\n  resolved:    ${data.resolved}`, 'ok')
+    $('resolve-id').value = data.id
+  }
+
+  async function markResolved() {
+    const id = $('resolve-id').value.trim()
+    if (!id) return show('r-resolve', 'Enter failed_summaries id', 'err')
+
+    const { data, error } = await _supabase
+      .from('failed_summaries')
+      .update({ resolved: true })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) return show('r-resolve', `Error: ${error.message}`, 'err')
+    show('r-resolve', `✓ Marked resolved:\n  id:       ${data.id}\n  resolved: ${data.resolved}`, 'ok')
+  }
+</script>
+</body>
+</html>

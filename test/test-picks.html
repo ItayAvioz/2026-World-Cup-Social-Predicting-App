@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Champion & Top Scorer Picks</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 900px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input, select { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; border-radius: 4px; }
+    input { width: 200px; } select { width: 220px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 28px; }
+    .locked { color: #e53e3e; font-weight: bold; }
+    .open { color: #48bb78; font-weight: bold; }
+  </style>
+</head>
+<body>
+<h1>🏆 Test — Champion & Top Scorer Picks (Feature 5)</h1>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── LOCK STATUS ─────────────────────────────────────────── -->
+<section>
+  <h2>1. Lock Status</h2>
+  <button onclick="checkLock()">Check Lock Status</button>
+  <div class="result" id="r-lock"></div>
+</section>
+
+<!-- ─── CHAMPION PICK ────────────────────────────────────────── -->
+<section>
+  <h2>2. Champion Pick</h2>
+  <select id="champion-team">
+    <option value="">-- Select team --</option>
+    <option>Mexico</option><option>South Africa</option><option>South Korea</option>
+    <option>Canada</option><option>Qatar</option><option>Switzerland</option>
+    <option>Brazil</option><option>Morocco</option><option>Haiti</option>
+    <option>Scotland</option><option>United States</option><option>Paraguay</option>
+    <option>Australia</option><option>Germany</option><option>Curaçao</option>
+    <option>Ivory Coast</option><option>Ecuador</option><option>Netherlands</option>
+    <option>Japan</option><option>Tunisia</option><option>Belgium</option>
+    <option>Egypt</option><option>Iran</option><option>New Zealand</option>
+    <option>Spain</option><option>Cape Verde</option><option>Saudi Arabia</option>
+    <option>Uruguay</option><option>France</option><option>Senegal</option>
+    <option>Norway</option><option>Argentina</option><option>Algeria</option>
+    <option>Austria</option><option>Jordan</option><option>Portugal</option>
+    <option>Uzbekistan</option><option>Colombia</option><option>England</option>
+    <option>Croatia</option><option>Ghana</option><option>Panama</option>
+    <option>UEFA PO-A</option><option>UEFA PO-B</option><option>UEFA PO-C</option>
+    <option>UEFA PO-D</option><option>IC PO-1</option><option>IC PO-2</option>
+  </select>
+  <button onclick="saveChampionPick()">Save Champion Pick</button>
+  <button class="sec" onclick="loadChampionPick()">Load My Pick</button>
+  <div class="result" id="r-champion"></div>
+</section>
+
+<!-- ─── TOP SCORER PICK ──────────────────────────────────────── -->
+<section>
+  <h2>3. Top Scorer Pick</h2>
+  <select id="scorer-name">
+    <option value="">-- Select player --</option>
+    <option data-id="278">Kylian Mbappé (France)</option>
+    <option data-id="1100">Erling Haaland (Norway)</option>
+    <option data-id="154">Lionel Messi (Argentina)</option>
+    <option data-id="2295">Vinicius Jr (Brazil)</option>
+    <option data-id="3501">Harry Kane (England)</option>
+    <option data-id="4200">Lautaro Martinez (Argentina)</option>
+    <option data-id="5001">Neymar Jr (Brazil)</option>
+  </select>
+  <button onclick="saveTopScorerPick()">Save Top Scorer Pick</button>
+  <button class="sec" onclick="loadTopScorerPick()">Load My Pick</button>
+  <div class="result" id="r-scorer"></div>
+</section>
+
+<!-- ─── ALL PICKS TABLE ──────────────────────────────────────── -->
+<section>
+  <h2>4. All Picks — Group &amp; Global (visible to all after June 11 2026)</h2>
+  <input id="picks-group-id" placeholder="group_id (optional — for group table)">
+  <button onclick="loadAllPicks()">Load Picks</button>
+  <div class="result" id="r-all-picks"></div>
+</section>
+
+<!-- ─── AUTO-ASSIGN TEST ─────────────────────────────────────── -->
+<section>
+  <h2>5. Auto-Assign Picks (simulates KO with no pick)</h2>
+  <p style="color:#888;font-size:12px;margin:4px 0">Fires fn_auto_assign_picks() — only assigns to users with no pick. Then reload section 4 to verify.</p>
+  <button onclick="triggerAutoAssign()">Trigger Auto-Assign</button>
+  <div class="result" id="r-auto-assign"></div>
+</section>
+
+<!-- ─── POINTS ──────────────────────────────────────────────── -->
+<section>
+  <h2>6. Verify Pick Points (after fn_calculate_pick_points fired)</h2>
+  <button onclick="loadPickPoints()">Load Points</button>
+  <div class="result" id="r-points"></div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const LOCK_DATE = new Date('2026-06-11T19:00:00Z')
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin', `✓ Signed in as: ${data.user.email}  (${data.user.id})`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function checkLock() {
+    const now = new Date()
+    const locked = now >= LOCK_DATE
+    const diff = LOCK_DATE - now
+    const days = Math.floor(diff / 86400000)
+    const hrs  = Math.floor((diff % 86400000) / 3600000)
+
+    show('r-lock',
+      locked
+        ? `🔒 LOCKED — picks are frozen (lock time: ${LOCK_DATE.toISOString()})`
+        : `🟢 OPEN — picks allowed\n  Locks in: ${days}d ${hrs}h\n  Lock time: ${LOCK_DATE.toISOString()}`,
+      locked ? 'err' : 'ok')
+  }
+
+  async function saveChampionPick() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-champion', 'Sign in first', 'err')
+
+    const team = $('champion-team').value
+    if (!team) return show('r-champion', 'Select a team', 'err')
+
+    const { data, error } = await _supabase
+      .from('champion_pick')
+      .upsert(
+        { user_id: session.user.id, team },
+        { onConflict: 'user_id' }
+      )
+      .select()
+      .single()
+
+    if (error) {
+      const msg = error.code === '42501'
+        ? '🔒 Picks are locked — World Cup has started'
+        : `Error: ${error.message} (${error.code})`
+      return show('r-champion', msg, 'err')
+    }
+
+    show('r-champion',
+      `✓ Champion pick saved\n  Team  : ${data.team}\n  Points: ${data.points_earned}\n  Saved : ${data.updated_at}`, 'ok')
+  }
+
+  async function loadChampionPick() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-champion', 'Sign in first', 'err')
+
+    const { data, error } = await _supabase
+      .from('champion_pick')
+      .select('team, points_earned, submitted_at, updated_at')
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+
+    if (error) return show('r-champion', `Error: ${error.message}`, 'err')
+    if (!data) return show('r-champion', 'No champion pick yet', 'info')
+
+    show('r-champion',
+      `Champion pick:\n  Team  : ${data.team}\n  Points: ${data.points_earned}\n  Saved : ${data.updated_at}`, 'ok')
+  }
+
+  async function saveTopScorerPick() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-scorer', 'Sign in first', 'err')
+
+    const select = $('scorer-name')
+    const player_name = select.options[select.selectedIndex]?.text?.split(' (')[0]
+    const top_scorer_api_id = parseInt(select.options[select.selectedIndex]?.dataset?.id)
+    if (!player_name || isNaN(top_scorer_api_id))
+      return show('r-scorer', 'Select a player', 'err')
+
+    const { data, error } = await _supabase
+      .from('top_scorer_pick')
+      .upsert(
+        { user_id: session.user.id, player_name, top_scorer_api_id },
+        { onConflict: 'user_id' }
+      )
+      .select()
+      .single()
+
+    if (error) {
+      const msg = error.code === '42501'
+        ? '🔒 Picks are locked — World Cup has started'
+        : `Error: ${error.message} (${error.code})`
+      return show('r-scorer', msg, 'err')
+    }
+
+    show('r-scorer',
+      `✓ Top scorer pick saved\n  Player   : ${data.player_name}\n  API ID   : ${data.top_scorer_api_id}\n  Points   : ${data.points_earned}`, 'ok')
+  }
+
+  async function loadTopScorerPick() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-scorer', 'Sign in first', 'err')
+
+    const { data, error } = await _supabase
+      .from('top_scorer_pick')
+      .select('player_name, top_scorer_api_id, points_earned, updated_at')
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+
+    if (error) return show('r-scorer', `Error: ${error.message}`, 'err')
+    if (!data) return show('r-scorer', 'No top scorer pick yet', 'info')
+
+    show('r-scorer',
+      `Top scorer pick:\n  Player   : ${data.player_name}\n  API ID   : ${data.top_scorer_api_id}\n  Points   : ${data.points_earned}\n  Saved    : ${data.updated_at}`, 'ok')
+  }
+
+  async function loadAllPicks() {
+    const group_id = $('picks-group-id').value.trim().split(/\s/)[0]
+
+    const [cpRes, tsRes] = await Promise.all([
+      _supabase.from('champion_pick').select('user_id, team, is_auto, points_earned, profiles(username)'),
+      _supabase.from('top_scorer_pick').select('user_id, player_name, is_auto, points_earned, profiles(username)')
+    ])
+    if (cpRes.error) return show('r-all-picks', `Error: ${cpRes.error.message}\n(Before June 11: only own pick visible)`, 'err')
+
+    const cpMap = {}, tsMap = {}
+    ;(cpRes.data ?? []).forEach(p => { cpMap[p.user_id] = p })
+    ;(tsRes.data ?? []).forEach(p => { tsMap[p.user_id] = p })
+    const allIds = [...new Set([...Object.keys(cpMap), ...Object.keys(tsMap)])]
+
+    // If group_id: fetch members to filter
+    let groupIds = null
+    if (group_id) {
+      const { data: members, error: me } = await _supabase
+        .from('group_members').select('user_id').eq('group_id', group_id)
+      if (me) return show('r-all-picks', `Group error: ${me.message}`, 'err')
+      groupIds = new Set((members ?? []).map(m => m.user_id))
+    }
+
+    const header  = `  ${'Username'.padEnd(20)} | ${'Champion'.padEnd(24)} | Top Scorer`
+    const divider = '  ' + '─'.repeat(72)
+
+    const fmtRow = uid => {
+      const cp   = cpMap[uid], ts = tsMap[uid]
+      const name = cp?.profiles?.username ?? ts?.profiles?.username ?? uid.slice(0,8)
+      const champ = cp
+        ? `${cp.team}${cp.is_auto ? ' [AUTO]' : ''} ${cp.points_earned > 0 ? '🟢'+cp.points_earned+'pt' : ''}`
+        : '—'
+      const scorer = ts
+        ? `${ts.player_name}${ts.is_auto ? ' [AUTO]' : ''} ${ts.points_earned > 0 ? '🟢'+ts.points_earned+'pt' : ''}`
+        : '—'
+      return `  ${name.padEnd(20)} | ${champ.padEnd(24)} | ${scorer}`
+    }
+
+    let out = ''
+
+    if (groupIds) {
+      const gIds = allIds.filter(id => groupIds.has(id))
+      out += `── Group (${gIds.length} members) ──────────────────────────────────\n`
+      out += header + '\n' + divider + '\n'
+      out += (gIds.length ? gIds.map(fmtRow).join('\n') : '  (no picks visible)') + '\n\n'
+    }
+
+    out += `── All Users (${allIds.length} visible) ──────────────────────────────\n`
+    out += header + '\n' + divider + '\n'
+    out += (allIds.length ? allIds.map(fmtRow).join('\n') : '  (no picks visible)') + '\n'
+    out += '\n  Note: before June 11 only own row visible'
+
+    show('r-all-picks', '✓ ' + out, 'ok')
+  }
+
+  async function triggerAutoAssign() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-auto-assign', 'Sign in first', 'err')
+
+    const { error } = await _supabase.rpc('fn_auto_assign_picks')
+    if (error) return show('r-auto-assign', `Error: ${error.message}`, 'err')
+
+    show('r-auto-assign',
+      '✓ fn_auto_assign_picks() ran\n  → Users without picks received random champion + top scorer\n  → Reload section 4 to see results (is_auto=true for new picks)', 'ok')
+  }
+
+  async function loadPickPoints() {
+    const [cp, ts] = await Promise.all([
+      _supabase.from('champion_pick').select('user_id, team, points_earned, profiles(username)').order('points_earned', { ascending: false }),
+      _supabase.from('top_scorer_pick').select('user_id, player_name, top_scorer_api_id, points_earned, profiles(username)').order('points_earned', { ascending: false })
+    ])
+
+    if (cp.error || ts.error)
+      return show('r-points', `Error: ${cp.error?.message ?? ts.error?.message}`, 'err')
+
+    const cpRows = (cp.data ?? []).map(p =>
+      `  ${(p.profiles?.username ?? '?').padEnd(20)} → ${p.team.padEnd(15)} ${p.points_earned > 0 ? '🟢 ' + p.points_earned + 'pt' : '⚪ 0pt'}`
+    ).join('\n')
+
+    const tsRows = (ts.data ?? []).map(p =>
+      `  ${(p.profiles?.username ?? '?').padEnd(20)} → ${p.player_name.padEnd(20)} (id:${p.top_scorer_api_id}) ${p.points_earned > 0 ? '🟢 ' + p.points_earned + 'pt' : '⚪ 0pt'}`
+    ).join('\n')
+
+    show('r-points',
+      `Champion picks:\n${cpRows || '  (none)'}\n\nTop scorer picks:\n${tsRows || '  (none)'}`, 'ok')
+  }
+</script>
+</body>
+</html>

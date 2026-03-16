@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Auth & Profiles</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 800px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; width: 220px; border-radius: 4px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.danger { background: #e53e3e; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 32px; }
+  </style>
+</head>
+<body>
+<h1>🔐 Test — Auth & Profiles (Feature 1)</h1>
+
+<!-- ─── SIGN UP ─────────────────────────────────────────────── -->
+<section>
+  <h2>1. Sign Up + Create Profile</h2>
+  <input id="su-email" placeholder="real@gmail.com (test.com blocked by MX check)">
+  <input id="su-password" placeholder="password" type="password">
+  <input id="su-username" placeholder="username">
+  <button onclick="signUp()">Sign Up + Create Profile</button>
+  <div class="result" id="r-signup"></div>
+</section>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>2. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="danger" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── SESSION ─────────────────────────────────────────────── -->
+<section>
+  <h2>3. Current Session</h2>
+  <button onclick="checkSession()">Check Session</button>
+  <div class="result" id="r-session"></div>
+</section>
+
+<!-- ─── PROFILES SELECT ─────────────────────────────────────── -->
+<section>
+  <h2>4. Read All Profiles (any authenticated user can read)</h2>
+  <button onclick="readProfiles()">Read Profiles</button>
+  <div class="result" id="r-profiles"></div>
+</section>
+
+<!-- ─── ERROR CASES ─────────────────────────────────────────── -->
+<section>
+  <h2>5. Error Cases (must be signed in)</h2>
+  <button onclick="testDuplicate()">Test: duplicate username</button>
+  <button onclick="testShortUsername()">Test: username too short</button>
+  <button onclick="testUpdateProfile()">Test: update username (should fail)</button>
+  <button onclick="testDeleteProfile()">Test: delete own profile row (should fail)</button>
+  <div class="result" id="r-errors"></div>
+</section>
+
+<!-- ─── RENAME + DELETE ACCOUNT ─────────────────────────── -->
+<section>
+  <h2>6. Rename Username (locked after June 11)</h2>
+  <input id="new-username" placeholder="new username">
+  <button onclick="renameUsername()">Rename Username</button>
+  <div class="result" id="r-rename"></div>
+</section>
+
+<section>
+  <h2>7. Delete Account</h2>
+  <p style="color:#fc8181;font-size:13px">Only works if you have NOT joined any group + before June 11. Cascades all data.</p>
+  <button class="danger" onclick="deleteAccount()">Delete My Account</button>
+  <div class="result" id="r-delete"></div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls='info') => {
+    $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+  }
+
+  async function signUp() {
+    const email    = $('su-email').value.trim()
+    const password = $('su-password').value.trim()
+    const username = $('su-username').value.trim()
+    if (!email || !password || !username) return show('r-signup', 'Fill all fields', 'err')
+
+    show('r-signup', 'Signing up...')
+    const { data, error } = await _supabase.auth.signUp({ email, password })
+    if (error) return show('r-signup', `signUp error: ${error.message}`, 'err')
+
+    const userId = data.user?.id
+    show('r-signup', `Auth user created: ${userId}\nCalling create_profile...`)
+
+    const { data: profile, error: pe } = await _supabase.rpc('create_profile', { p_username: username })
+    if (pe) return show('r-signup', `create_profile error: ${pe.message}\nCode: ${pe.code}`, 'err')
+
+    show('r-signup',
+      `✓ Signed up and profile created\n` +
+      `  User ID : ${userId}\n` +
+      `  Username: ${profile.username}`, 'ok')
+  }
+
+  async function signIn() {
+    const email    = $('si-email').value.trim()
+    const password = $('si-password').value.trim()
+    if (!email || !password) return show('r-signin', 'Fill email and password', 'err')
+
+    const { data, error } = await _supabase.auth.signInWithPassword({ email, password })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin',
+      `✓ Signed in\n  User ID : ${data.user.id}\n  Email   : ${data.user.email}`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function checkSession() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-session', 'No active session', 'err')
+    show('r-session',
+      `✓ Active session\n  User ID : ${session.user.id}\n  Email   : ${session.user.email}`, 'ok')
+  }
+
+  async function readProfiles() {
+    const { data, error } = await _supabase.from('profiles').select('id, username').order('username')
+    if (error) return show('r-profiles', `Error: ${error.message}\nCode: ${error.code}`, 'err')
+    if (!data.length) return show('r-profiles', 'No profiles found', 'err')
+    const rows = data.map(p => `  ${p.username.padEnd(20)} ${p.id}`).join('\n')
+    show('r-profiles', `✓ ${data.length} profiles:\n${rows}`, 'ok')
+  }
+
+  async function testDuplicate() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-errors', 'Sign in first', 'err')
+
+    const { error } = await _supabase.rpc('create_profile', { p_username: 'alice_wc' })
+    if (error?.message === 'username_taken')
+      show('r-errors', '✓ Duplicate correctly rejected: username_taken', 'ok')
+    else
+      show('r-errors', `Unexpected result: ${JSON.stringify(error)}`, 'err')
+  }
+
+  async function testShortUsername() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-errors', 'Sign in first', 'err')
+
+    const { error } = await _supabase.rpc('create_profile', { p_username: 'ab' })
+    if (error?.message === 'invalid_username')
+      show('r-errors', '✓ Short username correctly rejected: invalid_username', 'ok')
+    else
+      show('r-errors', `Unexpected result: ${JSON.stringify(error)}`, 'err')
+  }
+
+  async function testDeleteProfile() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-errors', 'Sign in first', 'err')
+    const { data, error } = await _supabase
+      .from('profiles')
+      .delete()
+      .eq('id', session.user.id)
+      .select()
+    if (error)
+      show('r-errors', `✓ DELETE blocked: ${error.message}`, 'ok')
+    else if (!data?.length)
+      show('r-errors', '✓ DELETE silently blocked (0 rows deleted — no DELETE policy)', 'ok')
+    else
+      show('r-errors', `⚠ DELETE should have been blocked but deleted: ${JSON.stringify(data)}`, 'err')
+  }
+
+  async function renameUsername() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-rename', 'Sign in first', 'err')
+    const newName = $('new-username').value.trim()
+    if (!newName) return show('r-rename', 'Enter a new username', 'err')
+    const { data, error } = await _supabase
+      .from('profiles')
+      .update({ username: newName })
+      .eq('id', session.user.id)
+      .select()
+    if (error) return show('r-rename', `Error: ${error.message} (${error.code})`, 'err')
+    if (!data?.length) return show('r-rename', 'UPDATE blocked — tournament already started or wrong user', 'err')
+    show('r-rename', `✓ Username renamed to: ${data[0].username}`, 'ok')
+  }
+
+  async function deleteAccount() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-delete', 'Sign in first', 'err')
+    const { error } = await _supabase.rpc('delete_account')
+    if (error) return show('r-delete', `Blocked: ${error.message}\n(${error.hint || error.code})`, error.message === 'account_locked' || error.message === 'cannot_delete_in_group' ? 'ok' : 'err')
+    show('r-delete', '✓ Account deleted — all data cascaded', 'ok')
+    await _supabase.auth.signOut()
+  }
+
+  async function testUpdateProfile() {
+    const { data, error } = await _supabase
+      .from('profiles')
+      .update({ username: 'hacked' })
+      .eq('username', 'alice_wc')
+      .select()
+    if (error)
+      show('r-errors', `✓ UPDATE blocked: ${error.message}`, 'ok')
+    else if (!data?.length)
+      show('r-errors', '✓ UPDATE silently blocked (0 rows updated — no UPDATE policy)', 'ok')
+    else
+      show('r-errors', `⚠ UPDATE should have been blocked but returned: ${JSON.stringify(data)}`, 'err')
+  }
+</script>
+</body>
+</html>

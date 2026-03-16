@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Leaderboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 960px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; width: 280px; border-radius: 4px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 28px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border: 1px solid #333; padding: 6px 12px; text-align: left; font-size: 13px; }
+    th { background: #1a1a1a; color: #aaa; }
+    tr.me { background: #1a2a1a; }
+    .gold { color: #f0b429; }
+    .silver { color: #a0aec0; }
+    .bronze { color: #c05621; }
+  </style>
+</head>
+<body>
+<h1>🏅 Test — Leaderboard (Feature 6)</h1>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── GLOBAL LEADERBOARD ───────────────────────────────────── -->
+<section>
+  <h2>1. Global Leaderboard</h2>
+  <button onclick="loadGlobal()">Load Global Leaderboard</button>
+  <div id="r-global">
+    <table id="global-table">
+      <thead><tr><th>Rank</th><th>Username</th><th>Champion Pick</th><th>Total Points</th><th>Exact Scores</th><th>You?</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─── GROUP LEADERBOARD ────────────────────────────────────── -->
+<section>
+  <h2>2. Group Leaderboard</h2>
+  <input id="group-id" placeholder="group_id (uuid)">
+  <button onclick="loadGroup()">Load Group Leaderboard</button>
+  <div id="r-group">
+    <table id="group-table">
+      <thead><tr><th>Group Rank</th><th>Global Rank</th><th>Username</th><th>Champion Pick</th><th>Total Points</th><th>Exact Scores</th><th>You?</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="result" id="r-group-err" style="display:none"></div>
+</section>
+
+<!-- ─── NON-MEMBER TEST ──────────────────────────────────────── -->
+<section>
+  <h2>3. Non-Member Access Test</h2>
+  <input id="blocked-group-id" placeholder="group_id you're NOT in">
+  <button onclick="testNonMember()">Test Non-Member Block</button>
+  <div class="result" id="r-nonmember"></div>
+</section>
+
+<!-- ─── SANITY CHECK ─────────────────────────────────────────── -->
+<section>
+  <h2>4. My Points Breakdown</h2>
+  <button onclick="loadMyBreakdown()">My Breakdown</button>
+  <div class="result" id="r-breakdown"></div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => { $(id).innerHTML = `<span class="${cls}">${msg}</span>`; $(id).style.display = '' }
+  let currentUserId = null
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    currentUserId = data.user.id
+    show('r-signin', `✓ Signed in as: ${data.user.email}  (${data.user.id})`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    currentUserId = null
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  function rankClass(r) {
+    return r === 1 ? 'gold' : r === 2 ? 'silver' : r === 3 ? 'bronze' : ''
+  }
+
+  async function loadGlobal() {
+    const { data, error } = await _supabase.rpc('get_leaderboard')
+    if (error) return show('r-global', `Error: ${error.message}`, 'err')
+
+    const tbody = document.querySelector('#global-table tbody')
+    tbody.innerHTML = data.map(r => {
+      const isMe = r.user_id === currentUserId
+      const rc   = rankClass(parseInt(r.rank))
+      return `<tr class="${isMe ? 'me' : ''}">
+        <td class="${rc}">${r.rank}</td>
+        <td>${r.username}${isMe ? ' 👤' : ''}</td>
+        <td>${r.champion_team ?? '—'}</td>
+        <td>${r.total_points}</td>
+        <td>${r.exact_scores}</td>
+        <td>${isMe ? '✓' : ''}</td>
+      </tr>`
+    }).join('')
+  }
+
+  async function loadGroup() {
+    const group_id = $('group-id').value.trim().split(/\s/)[0]
+    if (!group_id) { show('r-group-err', 'Enter group_id', 'err'); return }
+    $('r-group-err').style.display = 'none'
+
+    const { data, error } = await _supabase.rpc('get_group_leaderboard', { p_group_id: group_id })
+    if (error) {
+      $('r-group').style.display = 'none'
+      show('r-group-err',
+        error.message === 'not_a_member'
+          ? '✓ Correctly blocked: not_a_member'
+          : `Error: ${error.message}`,
+        error.message === 'not_a_member' ? 'ok' : 'err')
+      return
+    }
+
+    $('r-group').style.display = ''
+    const tbody = document.querySelector('#group-table tbody')
+    tbody.innerHTML = data.map(r => {
+      const isMe = r.user_id === currentUserId
+      const rc   = rankClass(parseInt(r.group_rank))
+      return `<tr class="${isMe ? 'me' : ''}">
+        <td class="${rc}">${r.group_rank}</td>
+        <td>${r.global_rank}</td>
+        <td>${r.username}${isMe ? ' 👤' : ''}</td>
+        <td>${r.champion_team ?? '—'}</td>
+        <td>${r.total_points}</td>
+        <td>${r.exact_scores}</td>
+        <td>${isMe ? '✓' : ''}</td>
+      </tr>`
+    }).join('')
+  }
+
+  async function testNonMember() {
+    const group_id = $('blocked-group-id').value.trim().split(/\s/)[0]
+    if (!group_id) return show('r-nonmember', 'Enter a group_id you are NOT in', 'err')
+
+    const { error } = await _supabase.rpc('get_group_leaderboard', { p_group_id: group_id })
+    if (error?.message === 'not_a_member')
+      show('r-nonmember', '✓ Correctly blocked: not_a_member', 'ok')
+    else if (!error)
+      show('r-nonmember', '⚠ You appear to be a member of this group — try a different group_id', 'info')
+    else
+      show('r-nonmember', `Unexpected error: ${error.message}`, 'err')
+  }
+
+  async function loadMyBreakdown() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-breakdown', 'Sign in first', 'err')
+
+    const uid = session.user.id
+    const [preds, champ, scorer, lb] = await Promise.all([
+      _supabase.from('predictions').select('points_earned').eq('user_id', uid),
+      _supabase.from('champion_pick').select('team, points_earned').eq('user_id', uid).maybeSingle(),
+      _supabase.from('top_scorer_pick').select('player_name, points_earned').eq('user_id', uid).maybeSingle(),
+      _supabase.rpc('get_leaderboard').then(r => r.data?.find(x => x.user_id === uid))
+    ])
+
+    const predTotal  = (preds.data ?? []).reduce((s, p) => s + p.points_earned, 0)
+    const champPts   = champ.data?.points_earned ?? 0
+    const scorerPts  = scorer.data?.points_earned ?? 0
+    const manualTotal = predTotal + champPts + scorerPts
+    const lbTotal    = lb?.total_points ?? '?'
+    const match      = manualTotal === Number(lbTotal)
+
+    show('r-breakdown',
+      `Points breakdown for ${session.user.email}:\n` +
+      `  Prediction points : ${predTotal}\n` +
+      `  Champion pick     : ${champPts} (${champ.data?.team ?? 'none'})\n` +
+      `  Top scorer pick   : ${scorerPts} (${scorer.data?.player_name ?? 'none'})\n` +
+      `  Manual total      : ${manualTotal}\n` +
+      `  Leaderboard total : ${lbTotal}\n` +
+      `  Match?            : ${match ? '✅ YES' : '❌ NO — mismatch!'}`,
+      match ? 'ok' : 'err')
+  }
+</script>
+</body>
+</html>

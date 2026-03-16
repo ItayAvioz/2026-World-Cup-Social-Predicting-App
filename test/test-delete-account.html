@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Delete Account</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 900px; }
+    h1 { color: #e53e3e; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; border-radius: 4px; width: 260px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    button.danger { background: #e53e3e; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 28px; }
+    .warn { background: #2a1a1a; border: 1px solid #e53e3e; padding: 10px; border-radius: 4px; color: #fc8181; font-size: 13px; }
+  </style>
+</head>
+<body>
+<h1>🗑️ Test — Delete Account (Migration 10)</h1>
+<p style="color:#888;font-size:13px">
+  Tests the <code>delete_account()</code> RPC guard logic.<br>
+  Rule: deletion is allowed only if the user is NOT in any group AND before 2026-06-11 19:00 UTC.<br>
+  ⚠️ Do NOT run the actual delete on test users alice/bob/carol/dave/eve — use a throwaway account.
+</p>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── CHECK GUARDS (non-destructive) ──────────────────────── -->
+<section>
+  <h2>1. Check Guard State (non-destructive)</h2>
+  <p style="color:#888;font-size:12px">Reads whether the current user is in any group + current date vs. June 11 cutoff.</p>
+  <button onclick="checkGuards()">Check Guards</button>
+  <div class="result" id="r-guards"></div>
+</section>
+
+<!-- ─── TEST: IN-GROUP BLOCK ─────────────────────────────────── -->
+<section>
+  <h2>2. Test: User in Group → Should Raise cannot_delete_in_group</h2>
+  <div class="warn">⚠️ This calls delete_account() on the SIGNED-IN user. Only use with a throwaway account that IS in a group.</div>
+  <button class="danger" onclick="testDeleteInGroup()">Call delete_account() (should fail)</button>
+  <div class="result" id="r-ingroup">
+    <span class="info">Expected error code: cannot_delete_in_group</span>
+  </div>
+</section>
+
+<!-- ─── TEST: DATE LOCK BLOCK ────────────────────────────────── -->
+<section>
+  <h2>3. Test: After June 11 → Should Raise account_locked</h2>
+  <p style="color:#888;font-size:12px">This test only passes after 2026-06-11 19:00 UTC. Before that date, it will fail differently (or succeed if not in a group).</p>
+  <div class="warn">⚠️ Only call with a throwaway account NOT in any group, after June 11 2026.</div>
+  <button class="danger" onclick="testDeleteAfterLock()">Call delete_account() post-June 11 (should fail)</button>
+  <div class="result" id="r-datelocked">
+    <span class="info">Expected error code: account_locked</span>
+  </div>
+</section>
+
+<!-- ─── SAFE DELETE (throwaway account) ─────────────────────── -->
+<section>
+  <h2>4. Safe Delete (throwaway account — not in group, before June 11)</h2>
+  <p style="color:#888;font-size:12px">Calls delete_account() on the signed-in user. Should succeed and cascade all data.<br>
+  Verify cascade: profiles row deleted, predictions deleted, picks deleted, group_members deleted, groups.created_by → NULL.</p>
+  <div class="warn">⚠️ This is irreversible. Only use a throwaway account created specifically for this test.</div>
+  <button class="danger" onclick="safeDelete()">Delete Account (irreversible)</button>
+  <div class="result" id="r-safe-delete">
+    <span class="info">Will call delete_account() RPC → expect success if not in group and before June 11</span>
+  </div>
+</section>
+
+<!-- ─── EXPECTED RPC BEHAVIOR ────────────────────────────────── -->
+<section>
+  <h2>5. Expected delete_account() Logic (migration 10)</h2>
+  <div class="result" style="color:#63b3ed">
+-- delete_account() RPC (SECURITY DEFINER)
+-- Raises 'account_locked'         if now() >= '2026-06-11T19:00:00Z'
+-- Raises 'cannot_delete_in_group' if user is in any group_members row
+-- On success:
+--   DELETE FROM auth.users WHERE id = auth.uid()
+--   → CASCADE: profiles, predictions, champion_pick, top_scorer_pick, group_members
+--   → groups.created_by SET NULL (group survives, captain role vacated)
+
+-- Verify cascade (run in SQL editor after delete):
+SELECT id FROM public.profiles WHERE id = '&lt;deleted_user_id&gt;';   -- expect 0 rows
+SELECT COUNT(*) FROM public.predictions WHERE user_id = '&lt;id&gt;'; -- expect 0
+SELECT COUNT(*) FROM public.group_members WHERE user_id = '&lt;id&gt;'; -- expect 0
+SELECT * FROM public.groups WHERE created_by = '&lt;id&gt;'; -- expect created_by = NULL
+  </div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin', `✓ Signed in as: ${data.user.email}  (${data.user.id})`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function checkGuards() {
+    const { data: { session } } = await _supabase.auth.getSession()
+    if (!session) return show('r-guards', 'Sign in first', 'err')
+
+    // Check group membership
+    const { data: members, error: e1 } = await _supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', session.user.id)
+
+    // Check date
+    const now = new Date()
+    const cutoff = new Date('2026-06-11T19:00:00Z')
+    const afterCutoff = now >= cutoff
+
+    if (e1) return show('r-guards', `Error checking groups: ${e1.message}`, 'err')
+
+    const inGroups = members?.length ?? 0
+    const groupList = inGroups ? members.map(m => `    • ${m.group_id}`).join('\n') : '    (none)'
+
+    const canDelete = !inGroups && !afterCutoff
+
+    show('r-guards',
+      `User: ${session.user.email}\n\n` +
+      `Groups (${inGroups}): ${inGroups ? '❌ IN GROUP' : '✅ No groups'}\n${groupList}\n\n` +
+      `Date check: now = ${now.toISOString().slice(0, 16)}\n` +
+      `            cutoff = 2026-06-11T19:00:00Z\n` +
+      `            after cutoff = ${afterCutoff ? '❌ YES — account_locked' : '✅ No'}\n\n` +
+      `→ delete_account() would: ${canDelete ? '✅ SUCCEED' : '❌ FAIL (' + (inGroups ? 'cannot_delete_in_group' : 'account_locked') + ')'}`,
+      canDelete ? 'ok' : 'err')
+  }
+
+  async function testDeleteInGroup() {
+    const { data, error } = await _supabase.rpc('delete_account')
+    if (error) {
+      const code = error.message?.includes('cannot_delete_in_group') ? 'cannot_delete_in_group' : error.message
+      if (error.message?.includes('cannot_delete_in_group'))
+        show('r-ingroup', `✅ Correctly blocked: ${code}\n(Full error: ${error.message})`, 'ok')
+      else
+        show('r-ingroup', `Unexpected error: ${error.message}\n(Expected cannot_delete_in_group)`, 'err')
+    } else {
+      show('r-ingroup', '⚠️ Delete SUCCEEDED — user was not in a group or guard is missing!', 'err')
+    }
+  }
+
+  async function testDeleteAfterLock() {
+    const { data, error } = await _supabase.rpc('delete_account')
+    if (error) {
+      if (error.message?.includes('account_locked'))
+        show('r-datelocked', `✅ Correctly blocked: account_locked\n(Full error: ${error.message})`, 'ok')
+      else if (error.message?.includes('cannot_delete_in_group'))
+        show('r-datelocked', `ℹ️ Blocked by group membership first (also correct):\n${error.message}`, 'info')
+      else
+        show('r-datelocked', `Unexpected error: ${error.message}`, 'err')
+    } else {
+      show('r-datelocked', '⚠️ Delete SUCCEEDED — date lock may not be enforced yet (before June 11)', 'info')
+    }
+  }
+
+  async function safeDelete() {
+    const confirmed = confirm(
+      'IRREVERSIBLE: This will permanently delete the signed-in account and all its data.\n\n' +
+      'Only proceed with a throwaway test account.\n\nContinue?'
+    )
+    if (!confirmed) return show('r-safe-delete', 'Cancelled', 'info')
+
+    const { data, error } = await _supabase.rpc('delete_account')
+    if (error) {
+      show('r-safe-delete',
+        `❌ Error: ${error.message}\n\nExpected for main test users (in group or after lock date)`, 'err')
+    } else {
+      show('r-safe-delete',
+        '✅ delete_account() succeeded.\nAccount and all cascade data deleted.\n\nVerify in SQL editor:\n' +
+        '  SELECT * FROM auth.users WHERE id = <deleted_id>; -- expect 0 rows\n' +
+        '  SELECT * FROM public.profiles WHERE id = <deleted_id>; -- expect 0 rows', 'ok')
+    }
+  }
+</script>
+</body>
+</html>

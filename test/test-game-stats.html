@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Game Stats (Feature 9)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 1300px; }
+    h1  { color: #f0b429; margin-bottom: 4px; }
+    h2  { color: #f0b429; border-bottom: 2px solid #333; padding-bottom: 6px; margin-top: 0; font-size: 15px; }
+    h3  { color: #aaa; margin: 14px 0 6px; font-size: 13px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; border-radius: 4px; }
+    button        { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 13px; }
+    button.sec    { background: #4a5568; color: #fff; }
+    button.red    { background: #c53030; color: #fff; }
+    button:disabled { opacity: 0.35; cursor: default; }
+    .result { background: #111; border: 1px solid #2a2a2a; padding: 10px 14px; margin: 6px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; }
+    .ok   { color: #48bb78; } .err { color: #fc8181; }
+    .info { color: #63b3ed; } .warn { color: #f6ad55; }
+    .note { background: #111a00; border: 1px solid #3a4a00; padding: 10px 14px; border-radius: 4px; margin: 8px 0; font-size: 12px; color: #c6f135; line-height: 1.7; }
+    .card { background: #0d0d0d; border: 1px solid #1e1e1e; border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; }
+    .phase-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .badge { background: #2d3748; color: #888; padding: 2px 10px; border-radius: 12px; font-size: 11px; }
+    .badge.ready  { background: #1a3a2a; color: #68d391; }
+    .badge.done   { background: #744210; color: #f6ad55; }
+    table { border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+    .tscroll { overflow-x: auto; margin-top: 8px; }
+    th, td { border: 1px solid #222; padding: 5px 9px; text-align: right; }
+    th { background: #141414; color: #666; font-size: 11px; text-align: center; }
+    td.L { text-align: left; }
+    td.team { font-weight: bold; color: #f0b429; min-width: 110px; }
+    td.pass { color: #48bb78; }
+    td.fail { color: #fc8181; font-weight: bold; }
+    td.exp  { color: #374151; }           /* dim expected col */
+    td.chg  { color: #f6ad55; }           /* changed from prev phase */
+    tr.mex  { background: #0a140a; }
+    tr.multi { background: #0a140a; }
+    .sum { padding: 8px 14px; border-radius: 4px; font-size: 13px; margin-top: 8px; }
+    .sum.ok  { background: #0a200f; border: 1px solid #276749; }
+    .sum.err { background: #200a0a; border: 1px solid #c53030; }
+    hr { border: none; border-top: 1px solid #1e1e1e; margin: 14px 0; }
+    .section-title { font-size: 18px; color: #63b3ed; margin: 28px 0 8px; border-left: 3px solid #63b3ed; padding-left: 10px; }
+  </style>
+</head>
+<body>
+<h1>📊 Game Stats — Full Verification (F9)</h1>
+<p style="color:#666;font-size:12px;margin-top:2px">Tests: team/player stats views (progressive) · ET &amp; penalty columns · odds table</p>
+
+<!-- ══ 0. KEY ═══════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>0 — Service Role Key</h2>
+  <input id="srk" type="password" placeholder="service_role key (eyJ...)" style="width:420px">
+  <button onclick="saveKey()">Save Key</button>
+  <div class="result" id="r-key">Enter key to enable seed + cleanup</div>
+</div>
+
+<!-- ══ PART A: PROGRESSIVE STATS ═══════════════════════════════════ -->
+<div class="section-title">Part A — Team &amp; Player Stats</div>
+
+<!-- BIG CHECK BUTTON — no key needed -->
+<div class="card" style="border-color:#276749">
+  <h2 style="color:#48bb78">✔ Check Full State — No Key Needed</h2>
+  <p style="color:#aaa;font-size:13px;margin:0 0 10px">All 3 games pre-seeded. Click to verify all team + player stats now.</p>
+  <button class="sec" style="font-size:15px;padding:12px 24px" onclick="checkOnly(3)">✔ Check All Stats (no key needed)</button>
+  <div id="out3" style="display:none">
+    <hr><h3>Team Stats — All 4 teams (Mexico: 3 games, others: 1 game)</h3>
+    <div class="tscroll"><table id="tt3"><thead></thead><tbody></tbody></table></div>
+    <h3>Player Stats — All 12 players (goals · assists · yellow · red cards)</h3>
+    <div class="tscroll"><table id="pt3"><thead></thead><tbody></tbody></table></div>
+    <div class="sum" id="s3"></div>
+  </div>
+</div>
+
+<p style="color:#555;font-size:12px;margin:4px 0 10px">Progressive seed (requires service_role key + cleanup first):</p>
+<div class="note" style="margin-bottom:10px">ℹ️ Progressive mode: cleanup → Seed Game 1 → check → Seed Game 2 → check → Seed Game 3 → check. Shows how Mexico's averages update after each game.</div>
+
+<!-- Phase 1 -->
+<div class="card">
+  <h2>Phase 1 — Game 1 only: Mexico 2–1 South Africa</h2>
+  <div class="phase-bar">
+    <span class="badge" id="b1">pending</span>
+    <button id="btn1" onclick="seedPhase(1)">▶ Seed Game 1 + Check</button>
+    <span style="color:#666;font-size:12px">Requires cleanup first — seeds only game 1, shows Mexico baseline (1 game)</span>
+  </div>
+  <div id="out1" style="display:none">
+    <hr><h3>Team Stats</h3>
+    <div class="tscroll"><table id="tt1"><thead></thead><tbody></tbody></table></div>
+    <h3>Player Stats (goals · assists · cards)</h3>
+    <div class="tscroll"><table id="pt1"><thead></thead><tbody></tbody></table></div>
+    <div class="sum" id="s1"></div>
+  </div>
+</div>
+
+<!-- Phase 2 -->
+<div class="card">
+  <h2>Phase 2 — Games 1+2: add Mexico 1–1 South Korea</h2>
+  <div class="phase-bar">
+    <span class="badge" id="b2">pending</span>
+    <button id="btn2" onclick="seedPhase(2)" disabled>▶ Seed Game 2 + Check</button>
+    <span style="color:#666;font-size:12px">Mexico updates to 2-game avg (poss=51.5, shots=10.5) · player 9001 aggregates across both</span>
+  </div>
+  <div id="out2" style="display:none">
+    <hr><h3>Team Stats <span style="color:#f6ad55;font-size:11px">🟡 = changed from Phase 1</span></h3>
+    <div class="tscroll"><table id="tt2"><thead></thead><tbody></tbody></table></div>
+    <h3>Player Stats</h3>
+    <div class="tscroll"><table id="pt2"><thead></thead><tbody></tbody></table></div>
+    <div class="sum" id="s2"></div>
+  </div>
+</div>
+
+<!-- Phase 3 progressive seed card (no duplicate out3/tt3/pt3 — those are in the check card above) -->
+<div class="card">
+  <h2>Phase 3 — Seed Game 3: Mexico 0–2 UEFA PO-D (requires service_role)</h2>
+  <div class="phase-bar">
+    <span class="badge" id="b3">pending</span>
+    <button id="btn3" onclick="seedPhase(3)" disabled>▶ Seed Game 3 + Check</button>
+    <span style="color:#666;font-size:12px">After this: Mexico final avg_poss=49.3 · GF=1.0 · GA=1.3 · W1/D1/L1</span>
+  </div>
+</div>
+
+<!-- ══ PART B: ET & PENALTIES ═══════════════════════════════════════ -->
+<div class="section-title">Part B — Extra Time &amp; Penalty Columns</div>
+<p style="color:#888;font-size:12px;margin:0 0 10px">Uses Mexico vs South Africa game (90-min score: 2–1). ET/penalty columns added on top: went_to_extra_time=true, et=2–1, pens=3–2, winner=Mexico. Verifies all 9 columns readable.</p>
+
+<div class="card">
+  <h2>ET &amp; Penalties Test — using Mexico vs South Africa game</h2>
+  <div class="phase-bar">
+    <span class="badge" id="b-et">pending</span>
+    <button class="sec" style="font-size:14px;padding:10px 20px" onclick="checkET()">✔ Check Columns (no key needed)</button>
+    <button id="btn-et" onclick="seedET()">▶ Seed ET (needs key)</button>
+  </div>
+  <div id="out-et" style="display:none">
+    <hr>
+    <div class="tscroll"><table id="t-et">
+      <thead><tr>
+        <th style="text-align:left">Column</th>
+        <th>Expected</th><th>Actual DB</th><th>Pass?</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="sum" id="s-et"></div>
+  </div>
+</div>
+
+<!-- ══ PART C: ODDS ══════════════════════════════════════════════════ -->
+<div class="section-title">Part C — Betting Odds (game_odds table)</div>
+<p style="color:#888;font-size:12px;margin:0 0 10px">Seeds pre-game odds for 2 games. Verifies public read, correct values, and draw=NULL for a knockout game.</p>
+
+<div class="card">
+  <h2>Odds Test — group game (with draw) + knockout game (no draw)</h2>
+  <div class="phase-bar">
+    <span class="badge" id="b-odds">pending</span>
+    <button class="sec" style="font-size:14px;padding:10px 20px" onclick="checkOddsOnly()">✔ Check Odds (no key needed)</button>
+    <button id="btn-odds" onclick="seedOdds()">▶ Seed Odds (needs key)</button>
+  </div>
+  <div id="out-odds" style="display:none">
+    <hr>
+    <div class="tscroll"><table id="t-odds">
+      <thead><tr>
+        <th style="text-align:left">Game</th>
+        <th>Type</th>
+        <th>Exp Home Win</th><th>Act</th>
+        <th>Exp Draw</th><th>Act</th>
+        <th>Exp Away Win</th><th>Act</th>
+        <th>Pass?</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="sum" id="s-odds"></div>
+  </div>
+</div>
+
+<!-- ══ CLEANUP ════════════════════════════════════════════════════════ -->
+<div class="card">
+  <h2>Cleanup — Reset All Test Data</h2>
+  <button class="red" onclick="cleanupAll()">🗑 Clean Up Everything</button>
+  <div class="result" id="r-cleanup">Resets scores to NULL · deletes test stats/odds · clears ET/penalty columns</div>
+</div>
+
+<script>
+const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+const _sup = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const $ = id => document.getElementById(id)
+
+// ── GAMES (Mexico's 3 group games) ────────────────────────────────────────
+const G = [
+  { id:'0baf470f-32f7-4481-8d86-cb40366ec70f', home:'Mexico',      away:'South Africa', sh:2, sa:1 },
+  { id:'35e48c75-fec6-4c02-99de-c830eeb152e8', home:'Mexico',      away:'South Korea',  sh:1, sa:1 },
+  { id:'d9fe9399-ac37-4f0e-ba42-0992b554168f', home:'Mexico',      away:'UEFA PO-D',    sh:0, sa:2 },
+]
+// Knockout game for ET/penalty test (r16 slot, TBD teams — just testing columns)
+const KO_ID = '85bf5d23-1dd8-4bc4-a1b9-d12a3fdac842'
+
+// ── TEAM STATS per game ───────────────────────────────────────────────────
+const TS = [
+  { g:0, s:'home', poss:55, shots:12, sot:5, corn:6, fouls:10, yc:2, rc:0, offs:3 },
+  { g:0, s:'away', poss:45, shots: 8, sot:3, corn:4, fouls:12, yc:1, rc:0, offs:2 },
+  { g:1, s:'home', poss:48, shots: 9, sot:3, corn:5, fouls: 8, yc:1, rc:0, offs:1 },
+  { g:1, s:'away', poss:52, shots:11, sot:4, corn:5, fouls: 9, yc:2, rc:0, offs:2 },
+  { g:2, s:'home', poss:45, shots: 7, sot:2, corn:4, fouls:12, yc:3, rc:1, offs:0 },
+  { g:2, s:'away', poss:55, shots:15, sot:7, corn:8, fouls: 6, yc:1, rc:0, offs:4 },
+]
+
+// ── PLAYER STATS per game ─────────────────────────────────────────────────
+// 9001 (MEX Striker) appears in games 0+1 → aggregation test
+const PS = [
+  // Game 1
+  { g:0, id:9001, nm:'MEX Striker',     s:'home', min:90, gl:1, as:1, yc:0, rc:0 },
+  { g:0, id:9002, nm:'MEX Midfielder',  s:'home', min:90, gl:1, as:0, yc:1, rc:0 },
+  { g:0, id:9003, nm:'MEX Defender',    s:'home', min:90, gl:0, as:0, yc:1, rc:0 },
+  { g:0, id:9010, nm:'SA Forward',      s:'away', min:90, gl:1, as:0, yc:0, rc:0 },
+  { g:0, id:9011, nm:'SA Defender',     s:'away', min:90, gl:0, as:0, yc:1, rc:1 },
+  // Game 2
+  { g:1, id:9001, nm:'MEX Striker',     s:'home', min:78, gl:1, as:0, yc:0, rc:0 },
+  { g:1, id:9004, nm:'MEX Sub',         s:'home', min:45, gl:0, as:0, yc:1, rc:0 },
+  { g:1, id:9020, nm:'SKR Winger',      s:'away', min:90, gl:1, as:1, yc:2, rc:0 },
+  { g:1, id:9021, nm:'SKR Midfielder',  s:'away', min:90, gl:0, as:1, yc:0, rc:0 },
+  // Game 3
+  { g:2, id:9005, nm:'MEX Captain',     s:'home', min:90, gl:0, as:0, yc:0, rc:1 },
+  { g:2, id:9006, nm:'MEX Winger',      s:'home', min:60, gl:0, as:0, yc:1, rc:0 },
+  { g:2, id:9030, nm:'UEFD Striker',    s:'away', min:90, gl:2, as:0, yc:1, rc:0 },
+  { g:2, id:9031, nm:'UEFD Midfielder', s:'away', min:90, gl:0, as:1, yc:0, rc:0 },
+]
+
+// ── KEY ───────────────────────────────────────────────────────────────────
+let srk = null
+function saveKey() {
+  const k = $('srk').value.trim()
+  if (!k) { show('r-key','No key','err'); return }
+  srk = window.supabase.createClient(SUPABASE_URL, k, { auth:{ persistSession:false }})
+  show('r-key','✓ Key saved — seed + cleanup enabled','ok')
+}
+function show(id, msg, cls='info') {
+  $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+}
+
+// ── SEED HELPERS ──────────────────────────────────────────────────────────
+function tRow(t) {
+  const g = G[t.g], team = t.s==='home' ? g.home : g.away
+  return { game_id:g.id, team, possession:t.poss, shots_total:t.shots,
+    shots_on_target:t.sot, corners:t.corn, fouls:t.fouls,
+    yellow_cards:t.yc, red_cards:t.rc, offsides:t.offs }
+}
+function pRow(p) {
+  const g = G[p.g], team = p.s==='home' ? g.home : g.away
+  return { game_id:g.id, api_player_id:p.id, player_name:p.nm, team,
+    minutes_played:p.min, goals:p.gl, assists:p.as, yellow_cards:p.yc, red_cards:p.rc }
+}
+
+// ── PHASE SEED ────────────────────────────────────────────────────────────
+async function seedPhase(n) {
+  if (!srk) { alert('Enter service_role key first'); return }
+  const btn = $(`btn${n}`); btn.disabled=true; btn.textContent='Seeding...'
+  const g = G[n-1]
+  const [a,b,c] = await Promise.all([
+    srk.from('games').update({score_home:g.sh,score_away:g.sa}).eq('id',g.id),
+    srk.from('game_team_stats').upsert(TS.filter(t=>t.g===n-1).map(tRow)),
+    srk.from('game_player_stats').upsert(PS.filter(p=>p.g===n-1).map(pRow)),
+  ])
+  const errs = [a,b,c].filter(r=>r.error)
+  if (errs.length) { alert(errs.map(r=>r.error.message).join('\n')); btn.disabled=false; return }
+  await renderPhase(n)
+  $(`b${n}`).textContent='done ✓'; $(`b${n}`).className='badge done'
+  btn.textContent='✓ Done'
+  if (n<3) { $(`btn${n+1}`).disabled=false; $(`b${n+1}`).className='badge ready'; $(`b${n+1}`).textContent='ready' }
+}
+
+// ── RENDER PHASE ──────────────────────────────────────────────────────────
+const TC = [ // [db_key, header, exp_key]
+  ['games_played','GP','gp'],['wins','W','w'],['draws','D','d'],['losses','L','l'],
+  ['avg_possession','Poss%','poss'],['avg_shots_total','Shots','shots'],
+  ['avg_shots_on_target','SoT','sot'],['avg_corners','Corn','corn'],
+  ['avg_fouls','Fouls','fouls'],['avg_yellow_cards','YC','yc'],
+  ['avg_red_cards','RC','rc'],['avg_goals_scored','GF','gscored'],
+  ['avg_goals_conceded','GA','gconceded'],
+]
+const PC = [
+  ['total_goals','Goals','gl'],['total_assists','Assists','as'],
+  ['total_yellow_cards','YC','yc'],['total_red_cards','RC','rc'],['games_played','Games','games'],
+]
+
+async function renderPhase(n) {
+  const teams = [...new Set(TS.filter(t=>t.g<n).map(t=>t.s==='home'?G[t.g].home:G[t.g].away))]
+  const pids  = [...new Set(PS.filter(p=>p.g<n).map(p=>p.id))]
+  const [tRes, pRes] = await Promise.all([
+    _sup.from('team_tournament_stats').select('*').in('team',teams),
+    _sup.from('player_tournament_stats').select('*').in('api_player_id',pids),
+  ])
+  const exp   = calcExpTeam(n),    expP   = calcExpPlayer(n)
+  const prev  = n>1?calcExpTeam(n-1):{}, prevP = n>1?calcExpPlayer(n-1):{}
+  const actT  = Object.fromEntries((tRes.data??[]).map(r=>[r.team,r]))
+  const actP  = Object.fromEntries((pRes.data??[]).map(r=>[r.api_player_id,r]))
+
+  let pass=0, fail=0
+  // Team table
+  const tHead = `<tr>${['Team',...TC.map(c=>c[1]),'✓'].map((h,i)=>`<th style="${i===0?'text-align:left':''}">${h}</th>`).join('')}</tr>`
+  const order = ['Mexico',...Object.keys(exp).filter(t=>t!=='Mexico')]
+  const tBody = order.map(team=>{
+    const e=exp[team]; if(!e) return ''
+    const a=actT[team], p=prev[team]
+    let ap=true
+    const cells = TC.map(([dk,,ek])=>{
+      const ev=e[ek], av=a?parseFloat(a[dk]):null
+      const ok=av!==null&&av===ev; ok?pass++:fail++; if(!ok)ap=false
+      const chg=p&&p[ek]!==undefined&&p[ek]!==ev
+      return `<td class="${!ok?'fail':chg?'chg':''}">${av!==null?av:'<span style="color:#fc8181">—</span>'}${chg?' 🟡':''}</td>`
+    }).join('')
+    return `<tr class="${team==='Mexico'?'mex':''}">${[`<td class="team">${team}</td>`, cells, `<td class="${ap?'pass':'fail'}">${ap?'✅':'❌'}</td>`].join('')}</tr>`
+  }).join('')
+  $(  `tt${n}`).querySelector('thead').innerHTML = tHead
+  $(`tt${n}`).querySelector('tbody').innerHTML  = tBody
+
+  // Player table
+  const pH = `<tr><th style="text-align:left">Player</th><th style="text-align:left">Team</th>${PC.map(c=>`<th style="color:#374151">Exp</th><th>${c[1]}</th>`).join('')}<th>✓</th></tr>`
+  const pSort = pids.slice().sort((a,b)=>(expP[b]?.gl??0)-(expP[a]?.gl??0))
+  const pBody = pSort.map(id=>{
+    const e=expP[id]; if(!e) return ''
+    const a=actP[id], multi=e.games>1
+    let ap=true
+    const cells = PC.map(([dk,,ek])=>{
+      const ev=e[ek], av=a?parseInt(a[dk]):null
+      const ok=av!==null&&av===ev; ok?pass++:fail++; if(!ok)ap=false
+      return `<td class="exp">${ev}</td><td class="${!ok?'fail':''}">${av!==null?av:'<span style="color:#fc8181">—</span>'}</td>`
+    }).join('')
+    return `<tr class="${multi?'multi':''}">${[`<td class="L">${e.nm}${multi?` <span style="color:#f0b429;font-size:10px">(${e.games}g)</span>`:''}</td>`,`<td class="L" style="color:#666">${e.team}</td>`,cells,`<td class="${ap?'pass':'fail'}">${ap?'✅':'❌'}</td>`].join('')}</tr>`
+  }).join('')
+  $(`pt${n}`).querySelector('thead').innerHTML = pH
+  $(`pt${n}`).querySelector('tbody').innerHTML  = pBody
+
+  $(`s${n}`).className=`sum ${fail===0?'ok':'err'}`
+  $(`s${n}`).innerHTML=fail===0
+    ?`<span class="ok">✅ Phase ${n}: all ${pass} checks passed</span>`
+    :`<span class="err">❌ Phase ${n}: ${fail}/${pass+fail} failed</span>`
+  $(`out${n}`).style.display=''
+}
+
+// ── EXPECTED CALCS ────────────────────────────────────────────────────────
+const avg = a => Math.round(a.reduce((s,v)=>s+v,0)/a.length*10)/10
+function calcExpTeam(n) {
+  const T={}
+  TS.filter(t=>t.g<n).forEach(t=>{
+    const g=G[t.g], nm=t.s==='home'?g.home:g.away
+    const gf=t.s==='home'?g.sh:g.sa, ga=t.s==='home'?g.sa:g.sh
+    if(!T[nm]) T[nm]={gp:0,w:0,d:0,l:0,poss:[],shots:[],sot:[],corn:[],fouls:[],yc:[],rc:[],gscored:[],gconceded:[]}
+    const x=T[nm]; x.gp++
+    if(gf>ga)x.w++; else if(gf===ga)x.d++; else x.l++
+    x.poss.push(t.poss);x.shots.push(t.shots);x.sot.push(t.sot)
+    x.corn.push(t.corn);x.fouls.push(t.fouls);x.yc.push(t.yc);x.rc.push(t.rc)
+    x.gscored.push(gf);x.gconceded.push(ga)
+  })
+  return Object.fromEntries(Object.entries(T).map(([nm,x])=>[nm,{
+    gp:x.gp,w:x.w,d:x.d,l:x.l,
+    poss:avg(x.poss),shots:avg(x.shots),sot:avg(x.sot),corn:avg(x.corn),
+    fouls:avg(x.fouls),yc:avg(x.yc),rc:avg(x.rc),
+    gscored:avg(x.gscored),gconceded:avg(x.gconceded),
+  }]))
+}
+function calcExpPlayer(n) {
+  const P={}
+  PS.filter(p=>p.g<n).forEach(p=>{
+    const g=G[p.g]
+    if(!P[p.id]) P[p.id]={nm:p.nm,team:p.s==='home'?g.home:g.away,gl:0,as:0,yc:0,rc:0,games:0}
+    P[p.id].gl+=p.gl;P[p.id].as+=p.as;P[p.id].yc+=p.yc;P[p.id].rc+=p.rc;P[p.id].games++
+  })
+  return P
+}
+
+// ── ET & PENALTY TEST ─────────────────────────────────────────────────────
+// Using Mexico vs South Africa game.
+// score_home/away = 2-1 (the 90-min score already seeded in Phase 1).
+// ET/penalty columns added on top — simulating what API sync would write for a knockout game.
+const ET_DATA = {
+  score_home: 2, score_away: 1,          // 90-min score (unchanged)
+  went_to_extra_time: true, et_score_home: 2, et_score_away: 1,
+  went_to_penalties: true, penalty_score_home: 3, penalty_score_away: 2,
+  knockout_winner: 'Mexico',
+}
+const ET_CHECKS = [
+  ['score_home',          2,         'int'],   // 90-min score
+  ['score_away',          1,         'int'],
+  ['went_to_extra_time',  true,      'bool'],
+  ['et_score_home',       2,         'int'],
+  ['et_score_away',       1,         'int'],
+  ['went_to_penalties',   true,      'bool'],
+  ['penalty_score_home',  3,         'int'],
+  ['penalty_score_away',  2,         'int'],
+  ['knockout_winner',     'Mexico',  'str'],
+]
+
+async function seedET() {
+  if (!srk) { alert('Enter service_role key first'); return }
+  $('btn-et').disabled=true; $('btn-et').textContent='Seeding...'
+  const { error } = await srk.from('games').update(ET_DATA).eq('id', G[0].id)
+  if (error) { alert(`ET seed error: ${error.message}`); $('btn-et').disabled=false; return }
+  $('b-et').textContent='seeded'; $('b-et').className='badge ready'
+  $('btn-et').textContent='✓ Done'
+  await checkET()
+}
+
+async function checkET() {
+  const { data, error } = await _sup.from('games')
+    .select('score_home,score_away,went_to_extra_time,et_score_home,et_score_away,went_to_penalties,penalty_score_home,penalty_score_away,knockout_winner')
+    .eq('id', G[0].id).single()
+  if (error) { show('s-et', `Error: ${error.message}`, 'err'); return }
+
+  let pass=0, fail=0
+  const rows = ET_CHECKS.map(([col, exp, type]) => {
+    let act = data[col]
+    let ok
+    if (type==='bool') ok = act === exp
+    else if (type==='int') ok = parseInt(act) === exp
+    else ok = act === exp
+    ok ? pass++ : fail++
+    return `<tr>
+      <td class="L" style="color:#aaa">${col}</td>
+      <td style="color:#63b3ed">${String(exp)}</td>
+      <td>${act !== null && act !== undefined ? String(act) : '<span style="color:#fc8181">NULL</span>'}</td>
+      <td class="${ok?'pass':'fail'}">${ok?'✅':'❌'}</td>
+    </tr>`
+  }).join('')
+
+  document.querySelector('#t-et tbody').innerHTML = rows
+  $('s-et').className=`sum ${fail===0?'ok':'err'}`
+  $('s-et').innerHTML=fail===0
+    ?`<span class="ok">✅ All ${pass} ET/penalty columns correct</span>`
+    :`<span class="err">❌ ${fail}/${pass+fail} failed — see above</span>`
+  $('out-et').style.display=''
+}
+
+// ── ODDS TEST ─────────────────────────────────────────────────────────────
+// Group game: Mexico vs SA (with draw)
+// Knockout game: r16 slot (no draw)
+const ODDS_SEED = [
+  { game_id: G[0].id,  source:'football-api', home_win:2.10, draw:3.40, away_win:3.20, label:'Mexico vs South Africa (group)' },
+  { game_id: KO_ID,    source:'football-api', home_win:1.85, draw:null, away_win:1.95, label:'R16 TBD vs TBD (knockout)' },
+]
+
+async function seedOdds() {
+  if (!srk) { alert('Enter service_role key first'); return }
+  $('btn-odds').disabled=true; $('btn-odds').textContent='Seeding...'
+  // Upsert odds rows (null draw handled by omitting the field for knockout)
+  for (const o of ODDS_SEED) {
+    const row = { game_id:o.game_id, source:o.source, home_win:o.home_win, away_win:o.away_win, updated_at: new Date().toISOString() }
+    if (o.draw !== null) row.draw = o.draw
+    const { error } = await srk.from('game_odds').upsert(row)
+    if (error) { alert(`Odds seed error: ${error.message}`); $('btn-odds').disabled=false; return }
+  }
+  $('b-odds').textContent='seeded'; $('b-odds').className='badge ready'
+  $('btn-odds').textContent='✓ Done'
+
+  // Read back (uses anon key — public read)
+  const { data, error } = await _sup.from('game_odds')
+    .select('game_id,home_win,draw,away_win').in('game_id', ODDS_SEED.map(o=>o.game_id))
+  if (error) { show('s-odds',`Read error: ${error.message}`,'err'); return }
+
+  const actMap = Object.fromEntries((data??[]).map(r=>[r.game_id,r]))
+  let pass=0, fail=0
+  const rows = ODDS_SEED.map(o=>{
+    const a = actMap[o.game_id]
+    const ok_h = a && parseFloat(a.home_win) === o.home_win
+    const ok_d = o.draw===null ? (a && (a.draw===null||a.draw===undefined)) : (a && parseFloat(a.draw)===o.draw)
+    const ok_a = a && parseFloat(a.away_win) === o.away_win
+    const ok   = ok_h && ok_d && ok_a
+    ok?pass++:fail++
+    const fmtDraw = o.draw===null ? '<span style="color:#555">NULL (knockout)</span>' : o.draw
+    const actDraw = a ? (a.draw===null||a.draw===undefined ? '<span style="color:#48bb78">NULL ✓</span>' : a.draw) : '—'
+    return `<tr>
+      <td class="L" style="color:#aaa">${o.label}</td>
+      <td class="L" style="color:#666">${o.game_id.slice(0,8)}…</td>
+      <td style="color:#63b3ed">${o.home_win}</td><td class="${ok_h?'pass':'fail'}">${a?parseFloat(a.home_win):'—'}</td>
+      <td style="color:#63b3ed">${fmtDraw}</td><td>${actDraw}</td>
+      <td style="color:#63b3ed">${o.away_win}</td><td class="${ok_a?'pass':'fail'}">${a?parseFloat(a.away_win):'—'}</td>
+      <td class="${ok?'pass':'fail'}">${ok?'✅':'❌'}</td>
+    </tr>`
+  }).join('')
+
+  document.querySelector('#t-odds tbody').innerHTML = rows
+  $('s-odds').className=`sum ${fail===0?'ok':'err'}`
+  $('s-odds').innerHTML=fail===0
+    ?`<span class="ok">✅ All ${pass} odds checks passed — public read works</span>`
+    :`<span class="err">❌ ${fail} failed</span>`
+  $('out-odds').style.display=''
+}
+
+// ── CHECK ONLY (no service_role needed — public read) ─────────────────────
+async function checkOnly(n) {
+  await renderPhase(n)
+  $(`b${n}`).textContent = 'checked ✓'
+  $(`b${n}`).className = 'badge done'
+}
+
+async function checkOddsOnly() {
+  const { data, error } = await _sup.from('game_odds')
+    .select('game_id,home_win,draw,away_win').in('game_id', ODDS_SEED.map(o => o.game_id))
+  if (error) { show('s-odds', `Read error: ${error.message}`, 'err'); return }
+
+  const actMap = Object.fromEntries((data ?? []).map(r => [r.game_id, r]))
+  let pass = 0, fail = 0
+  const rows = ODDS_SEED.map(o => {
+    const a = actMap[o.game_id]
+    const ok_h = a && parseFloat(a.home_win) === o.home_win
+    const ok_d = o.draw === null ? (a && (a.draw === null || a.draw === undefined)) : (a && parseFloat(a.draw) === o.draw)
+    const ok_a = a && parseFloat(a.away_win) === o.away_win
+    const ok = ok_h && ok_d && ok_a
+    ok ? pass++ : fail++
+    const fmtDraw = o.draw === null ? '<span style="color:#555">NULL (knockout)</span>' : o.draw
+    const actDraw = a ? (a.draw === null || a.draw === undefined ? '<span style="color:#48bb78">NULL ✓</span>' : a.draw) : '—'
+    return `<tr>
+      <td class="L" style="color:#aaa">${o.label}</td>
+      <td class="L" style="color:#666">${o.game_id.slice(0, 8)}…</td>
+      <td style="color:#63b3ed">${o.home_win}</td><td class="${ok_h ? 'pass' : 'fail'}">${a ? parseFloat(a.home_win) : '—'}</td>
+      <td style="color:#63b3ed">${fmtDraw}</td><td>${actDraw}</td>
+      <td style="color:#63b3ed">${o.away_win}</td><td class="${ok_a ? 'pass' : 'fail'}">${a ? parseFloat(a.away_win) : '—'}</td>
+      <td class="${ok ? 'pass' : 'fail'}">${ok ? '✅' : '❌'}</td>
+    </tr>`
+  }).join('')
+
+  document.querySelector('#t-odds tbody').innerHTML = rows
+  $('s-odds').className = `sum ${fail === 0 ? 'ok' : 'err'}`
+  $('s-odds').innerHTML = fail === 0
+    ? `<span class="ok">✅ All ${pass} odds checks passed — public read works</span>`
+    : `<span class="err">❌ ${fail} failed</span>`
+  $('b-odds').textContent = 'checked ✓'; $('b-odds').className = 'badge done'
+  $('out-odds').style.display = ''
+}
+
+// ── CLEANUP ───────────────────────────────────────────────────────────────
+async function cleanupAll() {
+  if (!srk) { alert('Enter service_role key first'); return }
+  show('r-cleanup','Cleaning up...','info')
+  const ids = G.map(g=>g.id)
+  const [a,b,c,d,e,f] = await Promise.all([
+    srk.from('games').update({score_home:null,score_away:null,went_to_extra_time:null,
+      et_score_home:null,et_score_away:null,went_to_penalties:null,
+      penalty_score_home:null,penalty_score_away:null,knockout_winner:null}).in('id',ids),
+    srk.from('game_team_stats').delete().in('game_id',ids),
+    srk.from('game_player_stats').delete().in('game_id',ids).gte('api_player_id',9000).lte('api_player_id',9999),
+    srk.from('game_odds').delete().in('game_id',ids),
+    srk.from('game_odds').delete().eq('game_id',KO_ID),
+    // Also reset the KO game score if we accidentally set it
+    srk.from('games').update({score_home:null,score_away:null,went_to_extra_time:null,
+      et_score_home:null,et_score_away:null,went_to_penalties:null,
+      penalty_score_home:null,penalty_score_away:null,knockout_winner:null}).eq('id',KO_ID),
+  ])
+  const errs = [a,b,c,d,e,f].filter(r=>r.error).map(r=>r.error.message)
+  if (errs.length) { show('r-cleanup',`Errors:\n${errs.join('\n')}`,'err'); return }
+  // Reset UI badges
+  ;[1,2,3].forEach(n=>{
+    $(`b${n}`).textContent='pending'; $(`b${n}`).className='badge'
+    $(`btn${n}`).textContent=`▶ Seed + Check`; $(`btn${n}`).disabled=n>1
+    $(`out${n}`).style.display='none'
+  })
+  ;['et','odds'].forEach(k=>{
+    $(`b-${k}`).textContent='pending'; $(`b-${k}`).className='badge'
+    $(`out-${k}`).style.display='none'
+    $(`btn-${k}`).disabled=false
+  })
+  $('btn-et').textContent='▶ Seed ET + Penalty Data'
+  $('btn-odds').textContent='▶ Seed Odds + Check'
+  show('r-cleanup','✓ Cleanup complete — all scores/stats/odds/ET columns reset','ok')
+}
+</script>
+</body>
+</html>

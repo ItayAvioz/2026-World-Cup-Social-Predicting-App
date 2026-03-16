@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — Groups</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 860px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; width: 200px; border-radius: 4px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    section { margin-bottom: 28px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #2d3748; margin-left: 8px; }
+  </style>
+</head>
+<body>
+<h1>👥 Test — Friend Groups (Feature 2)</h1>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── CREATE GROUP ────────────────────────────────────────── -->
+<section>
+  <h2>1. Create Group</h2>
+  <input id="group-name" placeholder="Group name (max 30 chars)">
+  <button onclick="createGroup()">Create Group</button>
+  <div class="result" id="r-create"></div>
+</section>
+
+<!-- ─── MY GROUPS ───────────────────────────────────────────── -->
+<section>
+  <h2>2. My Groups (RLS: only groups I'm in)</h2>
+  <button onclick="loadGroups()">Load My Groups</button>
+  <div class="result" id="r-groups"></div>
+</section>
+
+<!-- ─── GROUP MEMBERS ───────────────────────────────────────── -->
+<section>
+  <h2>3. Group Members</h2>
+  <input id="members-group-id" placeholder="group_id (uuid)">
+  <button onclick="loadMembers()">Load Members</button>
+  <div class="result" id="r-members"></div>
+</section>
+
+<!-- ─── JOIN GROUP ──────────────────────────────────────────── -->
+<section>
+  <h2>4. Join Group via Invite Code</h2>
+  <input id="invite-code" placeholder="6-char invite code (e.g. AB3X7K)">
+  <button onclick="joinGroup()">Join Group</button>
+  <div class="result" id="r-join"></div>
+</section>
+
+<!-- ─── ERROR CASES ─────────────────────────────────────────── -->
+<section>
+  <h2>5. Error Cases</h2>
+  <button onclick="testBadCode()">Test: invalid invite code</button>
+  <button onclick="testAlreadyMember()">Test: already a member</button>
+  <button onclick="testMaxGroups()">Test: create 4th group (should fail)</button>
+  <div class="result" id="r-errors"></div>
+</section>
+
+<!-- ─── CAPTAIN ACTIONS ─────────────────────────────────────── -->
+<section>
+  <h2>6. Captain — Flag Member as Inactive</h2>
+  <input id="inactive-group-id" placeholder="group_id">
+  <input id="inactive-user-id" placeholder="user_id to flag">
+  <button onclick="flagInactive()">Flag Inactive</button>
+  <button onclick="unflagInactive()">Unflag</button>
+  <div class="result" id="r-inactive"></div>
+</section>
+
+<!-- ─── RENAME GROUP ─────────────────────────────────────── -->
+<section>
+  <h2>7. Rename Group (captain only)</h2>
+  <input id="rename-group-id" placeholder="group_id">
+  <input id="rename-group-name" placeholder="new name">
+  <button onclick="renameGroup()">Rename Group</button>
+  <div class="result" id="r-rename"></div>
+</section>
+
+<!-- ─── DELETE TESTS ─────────────────────────────────────── -->
+<section>
+  <h2>8. Delete Tests (all should be blocked)</h2>
+  <p style="color:#fc8181;font-size:13px">Groups and memberships are permanent. All deletes must be blocked.</p>
+  <input id="del-group-id" placeholder="group_id">
+  <input id="del-user-id" placeholder="user_id (for member delete)">
+  <button onclick="tryDeleteGroup()">Try Delete Group</button>
+  <button onclick="tryDeleteMember()">Try Delete Member</button>
+  <div class="result" id="r-delete"></div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin', `✓ Signed in as: ${data.user.email}\nUID: ${data.user.id}`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function createGroup() {
+    const name = $('group-name').value.trim()
+    if (!name) return show('r-create', 'Enter a group name', 'err')
+
+    const { data, error } = await _supabase.rpc('create_group', { group_name: name })
+    if (error) return show('r-create', `Error: ${error.message}`, 'err')
+    show('r-create',
+      `✓ Group created\n  ID         : ${data.id}\n  Name       : ${data.name}\n  Invite Code: ${data.invite_code}\n  Created by : ${data.created_by}`, 'ok')
+  }
+
+  async function loadGroups() {
+    const { data, error } = await _supabase
+      .from('groups')
+      .select('id, name, invite_code, created_by, created_at')
+      .order('created_at')
+
+    if (error) return show('r-groups', `Error: ${error.message}`, 'err')
+    if (!data.length) return show('r-groups', 'No groups visible (RLS — not a member of any group)', 'info')
+
+    const rows = data.map(g =>
+      `  [${g.invite_code}]  ${g.name.padEnd(25)} id=${g.id}`
+    ).join('\n')
+    show('r-groups', `✓ ${data.length} group(s) visible:\n${rows}`, 'ok')
+  }
+
+  async function loadMembers() {
+    const groupId = $('members-group-id').value.trim()
+    if (!groupId) return show('r-members', 'Enter group_id', 'err')
+
+    const { data, error } = await _supabase
+      .from('group_members')
+      .select('user_id, joined_at, is_inactive, profiles(username)')
+      .eq('group_id', groupId)
+      .order('joined_at')
+
+    if (error) return show('r-members', `Error: ${error.message}`, 'err')
+    if (!data.length) return show('r-members', 'No members found (or RLS blocked)', 'err')
+
+    const rows = data.map(m =>
+      `  ${(m.profiles?.username ?? 'unknown').padEnd(20)} inactive=${m.is_inactive}  joined=${m.joined_at?.slice(0,10)}`
+    ).join('\n')
+    show('r-members', `✓ ${data.length} member(s):\n${rows}`, 'ok')
+  }
+
+  async function joinGroup() {
+    const code = $('invite-code').value.trim().toUpperCase()
+    if (!code) return show('r-join', 'Enter invite code', 'err')
+
+    const { data, error } = await _supabase.rpc('join_group', { p_invite_code: code })
+    if (error) return show('r-join', `Error: ${error.message}`, 'err')
+    show('r-join',
+      `✓ Joined group\n  Group ID: ${data.group_id}\n  User ID : ${data.user_id}\n  Joined  : ${data.joined_at}`, 'ok')
+  }
+
+  async function testBadCode() {
+    const { error } = await _supabase.rpc('join_group', { p_invite_code: 'ZZZZZZ' })
+    if (error?.message === 'invalid_invite_code')
+      show('r-errors', '✓ Invalid code correctly rejected: invalid_invite_code', 'ok')
+    else
+      show('r-errors', `Unexpected: ${JSON.stringify(error)}`, 'err')
+  }
+
+  async function testAlreadyMember() {
+    const { data: groups } = await _supabase.from('groups').select('invite_code').limit(1)
+    if (!groups?.length) return show('r-errors', 'No groups visible — sign in to a group captain first', 'err')
+
+    const { error } = await _supabase.rpc('join_group', { p_invite_code: groups[0].invite_code })
+    if (error?.message === 'already_member')
+      show('r-errors', '✓ Already member correctly rejected: already_member', 'ok')
+    else
+      show('r-errors', `Unexpected: ${JSON.stringify(error)}`, 'err')
+  }
+
+  async function testMaxGroups() {
+    const { error } = await _supabase.rpc('create_group', { group_name: 'Overflow Group' })
+    if (error?.message === 'max_groups_reached')
+      show('r-errors', '✓ Max groups correctly enforced: max_groups_reached', 'ok')
+    else if (!error)
+      show('r-errors', '⚠ Group was created — you had fewer than 3 groups. Create more then test again.', 'info')
+    else
+      show('r-errors', `Unexpected: ${error.message}`, 'err')
+  }
+
+  async function renameGroup() {
+    const groupId = $('rename-group-id').value.trim()
+    const name    = $('rename-group-name').value.trim()
+    if (!groupId || !name) return show('r-rename', 'Fill group_id and new name', 'err')
+    const { data, error } = await _supabase
+      .from('groups')
+      .update({ name })
+      .eq('id', groupId)
+      .select('id, name')
+    if (error) return show('r-rename', `Error: ${error.message}`, 'err')
+    if (!data?.length) return show('r-rename', '✓ UPDATE blocked — not the captain or group not found (0 rows)', 'ok')
+    show('r-rename', `✓ Group renamed to: ${data[0].name}`, 'ok')
+  }
+
+  async function tryDeleteGroup() {
+    const groupId = $('del-group-id').value.trim()
+    if (!groupId) return show('r-delete', 'Fill group_id', 'err')
+    const { data, error } = await _supabase
+      .from('groups')
+      .delete()
+      .eq('id', groupId)
+      .select()
+    if (error)
+      show('r-delete', `✓ DELETE group blocked: ${error.message}`, 'ok')
+    else if (!data?.length)
+      show('r-delete', '✓ DELETE group silently blocked (0 rows — no DELETE policy)', 'ok')
+    else
+      show('r-delete', `⚠ DELETE group should have been blocked but deleted: ${JSON.stringify(data)}`, 'err')
+  }
+
+  async function tryDeleteMember() {
+    const groupId = $('del-group-id').value.trim()
+    const userId  = $('del-user-id').value.trim()
+    if (!groupId || !userId) return show('r-delete', 'Fill group_id and user_id', 'err')
+    const { data, error } = await _supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .select()
+    if (error)
+      show('r-delete', `✓ DELETE member blocked: ${error.message}`, 'ok')
+    else if (!data?.length)
+      show('r-delete', '✓ DELETE member silently blocked (0 rows — no DELETE policy)', 'ok')
+    else
+      show('r-delete', `⚠ DELETE member should have been blocked but deleted: ${JSON.stringify(data)}`, 'err')
+  }
+
+  async function flagInactive() {
+    const groupId = $('inactive-group-id').value.trim()
+    const userId  = $('inactive-user-id').value.trim()
+    if (!groupId || !userId) return show('r-inactive', 'Fill group_id and user_id', 'err')
+
+    const { error } = await _supabase
+      .from('group_members')
+      .update({ is_inactive: true })
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+
+    if (error) return show('r-inactive', `Error: ${error.message}`, 'err')
+    show('r-inactive', `✓ Flagged ${userId} as inactive in group ${groupId}`, 'ok')
+  }
+
+  async function unflagInactive() {
+    const groupId = $('inactive-group-id').value.trim()
+    const userId  = $('inactive-user-id').value.trim()
+    if (!groupId || !userId) return show('r-inactive', 'Fill group_id and user_id', 'err')
+
+    const { error } = await _supabase
+      .from('group_members')
+      .update({ is_inactive: false })
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+
+    if (error) return show('r-inactive', `Error: ${error.message}`, 'err')
+    show('r-inactive', `✓ Unflagged ${userId} in group ${groupId}`, 'ok')
+  }
+</script>
+</body>
+</html>

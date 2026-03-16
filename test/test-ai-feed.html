@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Test — AI Summaries</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; max-width: 900px; }
+    h1 { color: #f0b429; } h2 { color: #aaa; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px; margin: 4px; width: 280px; border-radius: 4px; }
+    button { background: #f0b429; color: #000; border: none; padding: 8px 16px; margin: 4px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button.sec { background: #4a5568; color: #fff; }
+    button.go { background: #48bb78; color: #000; }
+    .result { background: #111; border: 1px solid #333; padding: 12px; margin: 8px 0; border-radius: 4px; white-space: pre-wrap; font-size: 13px; min-height: 40px; }
+    .ok { color: #48bb78; } .err { color: #fc8181; } .info { color: #63b3ed; }
+    .summary-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px; margin: 8px 0; }
+    .summary-meta { color: #666; font-size: 11px; margin-bottom: 8px; }
+    .summary-body { color: #e0e0e0; line-height: 1.6; white-space: pre-wrap; }
+    section { margin-bottom: 28px; }
+  </style>
+</head>
+<body>
+<h1>🤖 Test — AI Summaries (Feature 8)</h1>
+
+<!-- ─── SIGN IN ─────────────────────────────────────────────── -->
+<section>
+  <h2>0. Sign In</h2>
+  <input id="si-email" placeholder="email@test.com">
+  <input id="si-password" placeholder="password" type="password">
+  <button onclick="signIn()">Sign In</button>
+  <button class="sec" onclick="signOut()">Sign Out</button>
+  <div class="result" id="r-signin"></div>
+</section>
+
+<!-- ─── VERIFY DB READINESS ──────────────────────────────────── -->
+<section>
+  <h2>1. Verify DB Readiness</h2>
+  <input id="check-group-id" placeholder="group_id">
+  <input id="check-date" type="date" value="2026-06-11">
+  <button onclick="checkSummaryData()">Check get_group_summary_data()</button>
+  <div class="result" id="r-db-check"></div>
+</section>
+
+<!-- ─── TRIGGER EDGE FUNCTION MANUALLY ──────────────────────── -->
+<section>
+  <h2>2. Manually Trigger Edge Function (requires service role key)</h2>
+  <p style="color:#888;font-size:12px">⚠ Only use this with your service role key — never expose it in production</p>
+  <input id="service-key" placeholder="Paste service_role_key here" type="password">
+  <input id="trigger-date" type="date" value="2026-06-11">
+  <button class="go" onclick="triggerEdgeFunction()">🚀 Trigger nightly-summary</button>
+  <div class="result" id="r-trigger"></div>
+</section>
+
+<!-- ─── MY GROUP'S SUMMARIES ─────────────────────────────────── -->
+<section>
+  <h2>3. My Group's AI Summaries (RLS: members only)</h2>
+  <input id="summary-group-id" placeholder="group_id">
+  <button onclick="loadSummaries()">Load Summaries</button>
+  <div id="r-summaries"></div>
+</section>
+
+<!-- ─── RLS TEST ─────────────────────────────────────────────── -->
+<section>
+  <h2>4. RLS Test — Try Accessing Another Group's Summaries</h2>
+  <input id="blocked-group-id" placeholder="group_id you're NOT in">
+  <button onclick="testNonMemberAccess()">Test Non-Member Block</button>
+  <div class="result" id="r-rls"></div>
+</section>
+
+<!-- ─── ALL SUMMARIES (admin view) ──────────────────────────── -->
+<section>
+  <h2>5. All Summaries Visible to Me</h2>
+  <button onclick="loadAllSummaries()">Load All My Summaries</button>
+  <div id="r-all"></div>
+</section>
+
+<script>
+  const SUPABASE_URL      = 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+  const SUPABASE_ANON_KEY = 'sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9'
+  const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const $ = id => document.getElementById(id)
+  const show = (id, msg, cls = 'info') => $(id).innerHTML = `<span class="${cls}">${msg}</span>`
+
+  async function signIn() {
+    const { data, error } = await _supabase.auth.signInWithPassword({
+      email: $('si-email').value.trim(),
+      password: $('si-password').value.trim()
+    })
+    if (error) return show('r-signin', `Error: ${error.message}`, 'err')
+    show('r-signin', `✓ Signed in as: ${data.user.email}  (${data.user.id})`, 'ok')
+  }
+
+  async function signOut() {
+    await _supabase.auth.signOut()
+    show('r-signin', '✓ Signed out', 'ok')
+  }
+
+  async function checkSummaryData() {
+    const group_id = $('check-group-id').value.trim()
+    const date     = $('check-date').value
+    if (!group_id || !date) return show('r-db-check', 'Fill group_id and date', 'err')
+
+    const { data, error } = await _supabase
+      .rpc('get_group_summary_data', { p_group_id: group_id, p_date: date })
+
+    if (error) return show('r-db-check', `Error: ${error.message}`, 'err')
+
+    const gamesCount   = data?.games?.length ?? 0
+    const membersCount = data?.members?.length ?? 0
+    const lbCount      = data?.leaderboard?.length ?? 0
+
+    if (gamesCount === 0) {
+      show('r-db-check',
+        `⚠ No finished games found for ${date}\n  Make sure:\n  1. games table has games on that date\n  2. score_home is set (not NULL)\n  3. Scores were set in the DB before calling this`, 'info')
+      return
+    }
+
+    const gamesText = (data.games ?? []).map(g =>
+      `  ${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away}  [${g.phase}]`
+    ).join('\n')
+
+    const membersText = (data.members ?? []).map(m => {
+      const preds = (m.predictions ?? []).length
+      return `  ${m.username}: ${preds} prediction(s), streak=${m.current_streak}, exact=${m.total_exact_scores}`
+    }).join('\n')
+
+    show('r-db-check',
+      `✓ Summary data ready for group ${group_id} on ${date}\n` +
+      `  Games (${gamesCount}):\n${gamesText}\n\n` +
+      `  Members (${membersCount}):\n${membersText}\n\n` +
+      `  Leaderboard entries: ${lbCount}`, 'ok')
+  }
+
+  async function triggerEdgeFunction() {
+    const serviceKey = $('service-key').value.trim()
+    const date       = $('trigger-date').value
+    if (!serviceKey || !date) return show('r-trigger', 'Enter service key and date', 'err')
+
+    show('r-trigger', 'Calling edge function...', 'info')
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/nightly-summary`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ date })
+      })
+
+      const body = await res.json()
+
+      if (!res.ok) {
+        show('r-trigger', `Error ${res.status}: ${JSON.stringify(body)}`, 'err')
+        return
+      }
+
+      show('r-trigger',
+        `✓ Edge function completed\n  Processed: ${body.processed}\n  Skipped  : ${body.skipped}\n\n` +
+        (body.processed > 0
+          ? 'Check Section 3 or 5 below to see the generated summary.'
+          : '⚠ 0 groups processed — check:\n  1. Groups with ≥3 members exist\n  2. Games on this date have scores set'), 'ok')
+    } catch (e) {
+      show('r-trigger', `Fetch error: ${e.message}\n(Is the edge function deployed? Check Supabase dashboard → Edge Functions)`, 'err')
+    }
+  }
+
+  async function loadSummaries() {
+    const group_id = $('summary-group-id').value.trim()
+    if (!group_id) return ($('r-summaries').innerHTML = `<span class="err">Enter group_id</span>`)
+
+    const { data, error } = await _supabase
+      .from('ai_summaries')
+      .select('id, date, content, games_count, model, prompt_tokens, completion_tokens, generated_at')
+      .eq('group_id', group_id)
+      .order('date', { ascending: false })
+
+    if (error) {
+      $('r-summaries').innerHTML = `<span class="err">Error: ${error.message}</span>`
+      return
+    }
+
+    if (!data.length) {
+      $('r-summaries').innerHTML = `<span class="info">No summaries for this group yet. Trigger the edge function first.</span>`
+      return
+    }
+
+    $('r-summaries').innerHTML = data.map(s => `
+      <div class="summary-card">
+        <div class="summary-meta">
+          📅 ${s.date}  |  🎮 ${s.games_count} game(s)  |  🤖 ${s.model}
+          |  tokens: ${s.prompt_tokens ?? '?'} in / ${s.completion_tokens ?? '?'} out
+          |  generated: ${s.generated_at?.slice(0,16)}
+        </div>
+        <div class="summary-body">${s.content}</div>
+      </div>
+    `).join('')
+  }
+
+  async function testNonMemberAccess() {
+    const group_id = $('blocked-group-id').value.trim()
+    if (!group_id) return show('r-rls', 'Enter a group_id you are NOT in', 'err')
+
+    const { data, error } = await _supabase
+      .from('ai_summaries')
+      .select('id, date, content')
+      .eq('group_id', group_id)
+
+    if (error) return show('r-rls', `Error: ${error.message}`, 'err')
+
+    if (!data.length)
+      show('r-rls',
+        '✓ RLS working correctly — 0 summaries returned (not a member of this group, or no summaries exist)',
+        'ok')
+    else
+      show('r-rls',
+        `⚠ RLS LEAK — ${data.length} summary(ies) returned for a group you're not in!`,
+        'err')
+  }
+
+  async function loadAllSummaries() {
+    const { data, error } = await _supabase
+      .from('ai_summaries')
+      .select('id, group_id, date, content, games_count, model, generated_at')
+      .order('generated_at', { ascending: false })
+
+    if (error) {
+      $('r-all').innerHTML = `<span class="err">Error: ${error.message}</span>`
+      return
+    }
+
+    if (!data.length) {
+      $('r-all').innerHTML = `<span class="info">No summaries yet — trigger the edge function first.</span>`
+      return
+    }
+
+    $('r-all').innerHTML = data.map(s => `
+      <div class="summary-card">
+        <div class="summary-meta">
+          📅 ${s.date}  |  👥 group: ${s.group_id.slice(0,8)}...
+          |  🎮 ${s.games_count} game(s)  |  🤖 ${s.model}
+          |  generated: ${s.generated_at?.slice(0,16)}
+        </div>
+        <div class="summary-body">${s.content}</div>
+      </div>
+    `).join('')
+  }
+</script>
+</body>
+</html>
