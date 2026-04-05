@@ -6,17 +6,20 @@
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html { scroll-behavior:smooth; overflow-x:hidden; background:var(--bg); overscroll-behavior-x:none; }
 body { background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; overflow-x:hidden; overscroll-behavior-x:none; }
-a { text-decoration:none; color:inherit; }
+a { text-decoration:none; color:inherit; -webkit-tap-highlight-color:transparent; outline:0; }
+a:focus, a:focus-visible { outline:none; background:none; }
 img { display:block; }
 
 /* BUTTONS */
-.btn { padding:.6rem 1.4rem; border-radius:7px; font-family:'Inter',sans-serif; font-size:.88rem; font-weight:500; cursor:pointer; border:none; transition:all .18s; }
-.btn-outline { background:transparent; border:1px solid var(--accent); color:var(--accent); }
-.btn-outline:hover { background:var(--accent); color:#000; }
+.btn { padding:.6rem 1.4rem; border-radius:7px; font-family:'Inter',sans-serif; font-size:.88rem; font-weight:500; cursor:pointer; border:none; transition:all .18s; -webkit-tap-highlight-color:transparent; outline:0; touch-action:manipulation; user-select:none; }
+.btn:focus, .btn:focus-visible { outline:none !important; box-shadow:none !important; }
+.btn-outline { background:none; border:1px solid rgba(245,197,24,.35); color:var(--accent); font-weight:500; }
+.btn-outline:active, .btn-outline:focus { background:none !important; border-color:rgba(245,197,24,.35) !important; color:var(--accent) !important; outline:none !important; box-shadow:none !important; }
 .btn-gold { background:var(--accent); color:#000; font-weight:600; }
-.btn-gold:hover { background:#ffd700; transform:translateY(-1px); }
-.btn-outline { background:none; border-color:rgba(245,197,24,.35); color:var(--accent); font-weight:500; }
-.btn-outline:hover { border-color:var(--accent); background:rgba(245,197,24,.08); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-outline:hover { background:var(--accent); color:#000; border-color:var(--accent); }
+  .btn-gold:hover { background:#ffd700; transform:translateY(-1px); }
+}
 .btn-lg { padding:.95rem 2.5rem; font-size:1rem; border-radius:9px; }
 .btn-full { width:100%; padding:.95rem; font-size:1rem; }
 
@@ -51,7 +54,7 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .kb-detail { font-size:.76rem; color:var(--muted); margin-top:.2rem; letter-spacing:.3px; }
 .hero-cta { display:flex; gap:1rem; justify-content:center; }
 .hero-cta > a { display:flex; }
-.hero-cta > a .btn { width:13rem; }
+.hero-cta > a .btn, .hero-cta > .btn { width:13rem; }
 .scroll-hint { position:absolute; bottom:2rem; left:50%; transform:translateX(-50%); color:var(--muted); font-size:1.4rem; animation:bob 2.2s ease-in-out infinite; }
 @keyframes bob { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(8px)} }
 

@@ -12,7 +12,7 @@
   <style>
     /* ── INLINE CRITICAL MOBILE FIXES (always fresh, no cache) ── */
     html { overflow-x:hidden !important; background:#0a0a0a !important; overscroll-behavior-x:none !important; }
-    body { overflow-x:hidden !important; overscroll-behavior-x:none !important; width:100% !important; }
+body { overflow-x:hidden !important; overscroll-behavior-x:none !important; width:100% !important; }
     #hero { padding-top: 5rem !important; }
     @media(min-width:769px) { #hero { padding-top: 7rem !important; } }
     @media(max-width:768px) {
@@ -58,7 +58,7 @@
   </div>
   <div class="hero-cta">
     <a href="#register-section"><button class="btn btn-gold btn-lg">Join the Game</button></a>
-    <a href="#about"><button class="btn btn-outline btn-lg">Learn More</button></a>
+    <button class="btn btn-outline btn-lg" onclick="document.getElementById('about').scrollIntoView({behavior:'smooth'})">Learn More</button>
   </div>
 
   <div class="hero-hosts">
