@@ -313,7 +313,7 @@ export default function Game() {
             {finished && (game.went_to_extra_time || game.went_to_penalties) && (
               <div className="gm-header-extra">
                 {game.went_to_extra_time && game.et_score_home !== null && (
-                  <span>AET {game.et_score_home}–{game.et_score_away}</span>
+                  <span>E.T. {game.et_score_home}–{game.et_score_away}</span>
                 )}
                 {game.went_to_penalties && game.penalty_score_home !== null && (
                   <span>Pens {game.penalty_score_home}–{game.penalty_score_away}</span>

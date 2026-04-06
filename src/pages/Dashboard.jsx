@@ -244,7 +244,7 @@ export default function Dashboard() {
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
     supabase.from('games')
-      .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase')
+      .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
       .gte('kick_off_time', todayStr + 'T00:00:00Z')
       .order('kick_off_time')
       .limit(50)
@@ -523,7 +523,15 @@ export default function Dashboard() {
                             <span className="tg-name">{game.team_home}</span>
                           </div>
                           {finished ? (
-                            <div className="tg-score">{game.score_home}–{game.score_away}</div>
+                            <div className="tg-score-col">
+                              <div className="tg-score">{game.score_home}–{game.score_away}</div>
+                              {game.went_to_extra_time && (
+                                <div className="tg-score-extra">
+                                  {game.et_score_home !== null && `E.T. ${game.et_score_home}–${game.et_score_away}`}
+                                  {game.went_to_penalties && game.penalty_score_home !== null && `  Pens ${game.penalty_score_home}–${game.penalty_score_away}`}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <div className="tg-vs-col">
                               <div className="tg-kickoff">{fmtTime(game.kick_off_time)}</div>

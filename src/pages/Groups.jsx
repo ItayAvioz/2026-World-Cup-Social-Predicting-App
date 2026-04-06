@@ -133,7 +133,7 @@ export default function Groups() {
     if (!user) return
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
     supabase.from('games')
-      .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase')
+      .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
       .gte('kick_off_time', twoHoursAgo)
       .order('kick_off_time')
       .limit(1)
@@ -663,7 +663,15 @@ export default function Groups() {
                             </div>
                             <div className="grp-ng-center">
                               {focusGame.score_home !== null
-                                ? <span className="grp-ng-score">{focusGame.score_home}–{focusGame.score_away}</span>
+                                ? <>
+                                    <span className="grp-ng-score">{focusGame.score_home}–{focusGame.score_away}</span>
+                                    {focusGame.went_to_extra_time && (
+                                      <span className="grp-ng-extra">
+                                        {focusGame.et_score_home !== null && `E.T. ${focusGame.et_score_home}–${focusGame.et_score_away}`}
+                                        {focusGame.went_to_penalties && focusGame.penalty_score_home !== null && `  Pens ${focusGame.penalty_score_home}–${focusGame.penalty_score_away}`}
+                                      </span>
+                                    )}
+                                  </>
                                 : <span className="grp-ng-vs">vs</span>
                               }
                               <span className="grp-ng-time">{fmtKickoff(focusGame.kick_off_time)}</span>
