@@ -122,9 +122,10 @@ function buildGroupPayload(opts: {
   champPicks: ChampPick[]
   tsrPicks: TsrPick[]
   statsReady: boolean
+  globalSortedUsers: Array<{ uid: string; user: string; pts: number; all_auto: boolean }>
 }) {
   const { groupName, date, groupData, finishedGames, globalDistMap,
-          goalScorerMap, champPicks, tsrPicks, statsReady } = opts
+          goalScorerMap, champPicks, tsrPicks, statsReady, globalSortedUsers } = opts
 
   // Map game by "TeamA|TeamB" → game object (for matching groupData.games)
   const gameByKey: Record<string, Game> = {}
@@ -162,12 +163,12 @@ function buildGroupPayload(opts: {
   }
 
   // Group-level prediction distribution per game
-  const grpDistByGameId: Record<string, { home: number; draw: number; away: number; n: number }> = {}
+  const grpDistByGameId: Record<string, { home: number; draw: number; away: number; n: number; scores: Record<string, number> }> = {}
   // deno-lint-ignore no-explicit-any
   for (const game of (groupData.games ?? []) as any[]) {
     const fg = gameByKey[`${game.team_home}|${game.team_away}`]
     if (!fg) continue
-    const dist = { home: 0, draw: 0, away: 0, n: 0 }
+    const dist: { home: number; draw: number; away: number; n: number; scores: Record<string, number> } = { home: 0, draw: 0, away: 0, n: 0, scores: {} }
     // deno-lint-ignore no-explicit-any
     for (const m of (groupData.members ?? []) as any[]) {
       // deno-lint-ignore no-explicit-any
@@ -177,9 +178,15 @@ function buildGroupPayload(opts: {
       if      (pred.pred_home > pred.pred_away) dist.home++
       else if (pred.pred_home === pred.pred_away) dist.draw++
       else    dist.away++
+      const sk = `${pred.pred_home}-${pred.pred_away}`
+      dist.scores[sk] = (dist.scores[sk] ?? 0) + 1
     }
     grpDistByGameId[fg.id] = dist
   }
+
+  // Group member IDs (for in_group flag in today block)
+  // deno-lint-ignore no-explicit-any
+  const groupMemberSet = new Set<string>((groupData.members ?? [] as any[]).map((m: any) => m.user_id as string))
 
   // ── Leaderboard ──
   // deno-lint-ignore no-explicit-any
@@ -195,24 +202,6 @@ function buildGroupPayload(opts: {
       streak:    member?.current_streak ?? 0,
     }
   })
-
-  // ── Today summary ──
-  let topScorer: { user: string; pts: number } | null = null
-  const zeroPts: { user: string; all_auto: boolean }[] = []
-
-  for (const row of leaderboard) {
-    if (topScorer === null || row.today_pts > topScorer.pts) {
-      topScorer = { user: row.user, pts: row.today_pts }
-    }
-    if (row.today_pts === 0) {
-      // deno-lint-ignore no-explicit-any
-      const member = (groupData.members ?? []).find((m: any) => m.username === row.user)
-      // deno-lint-ignore no-explicit-any
-      const allAuto = (member?.predictions ?? []).length > 0
-        && (member.predictions as any[]).every((p: any) => p.is_auto === true)
-      zeroPts.push({ user: row.user, all_auto: allAuto })
-    }
-  }
 
   // ── Games ──
   // deno-lint-ignore no-explicit-any
@@ -246,12 +235,18 @@ function buildGroupPayload(opts: {
       match:  `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away}`,
       phase:  game.phase,
       scorers: statsReady ? scorers : null,
-      dist_group: grpN > 0 ? {
-        home_pct: Math.round((grp!.home / grpN) * 100),
-        draw_pct: Math.round((grp!.draw / grpN) * 100),
-        away_pct: Math.round((grp!.away / grpN) * 100),
-        n: grpN,
-      } : null,
+      dist_group: grpN > 0 ? (() => {
+        const sc = grp!.scores
+        const topScoreKey = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0] ?? null
+        return {
+          home_pct:    Math.round((grp!.home / grpN) * 100),
+          draw_pct:    Math.round((grp!.draw / grpN) * 100),
+          away_pct:    Math.round((grp!.away / grpN) * 100),
+          n:           grpN,
+          top_score:   topScoreKey,
+          top_score_n: topScoreKey ? sc[topScoreKey] : null,
+        }
+      })() : null,
       dist_global: gdTotal > 0 ? {
         home_pct:    Math.round((gd.home_win / gdTotal) * 100),
         draw_pct:    Math.round((gd.draw     / gdTotal) * 100),
@@ -304,7 +299,15 @@ function buildGroupPayload(opts: {
     group: groupName,
     date,
     leaderboard,
-    today: { top_scorer: topScorer, zero_pts: zeroPts },
+    today: {
+      global_top: globalSortedUsers
+        .filter(u => u.pts > 0)
+        .slice(0, 3)
+        .map(u => ({ user: u.user, pts: u.pts, in_group: groupMemberSet.has(u.uid) })),
+      global_zero: globalSortedUsers
+        .filter(u => u.pts === 0)
+        .map(u => ({ user: u.user, all_auto: u.all_auto, in_group: groupMemberSet.has(u.uid) })),
+    },
     games,
     predictions,
     picks,
@@ -436,6 +439,50 @@ serve(async (req) => {
     if (dist) globalDistMap[game.id] = dist
   }
 
+  // 7c. Global today's points per user (aggregated across all groups for ranking)
+  // Two queries: predictions first, then resolve usernames (avoids FK join issues)
+  const { data: globalPreds } = await supabase
+    .from('predictions')
+    .select('user_id, game_id, points_earned, is_auto')
+    .in('game_id', gameIds)
+
+  // deno-lint-ignore no-explicit-any
+  const globalUserAgg: Record<string, { uid: string; gamesPts: Record<string, number>; predCount: number; autoCount: number }> = {}
+  // deno-lint-ignore no-explicit-any
+  for (const p of (globalPreds ?? []) as any[]) {
+    const uid = p.user_id as string
+    const gid = p.game_id as string
+    if (!globalUserAgg[uid]) {
+      globalUserAgg[uid] = { uid, gamesPts: {}, predCount: 0, autoCount: 0 }
+    }
+    // Take max pts per game per user (handles users in multiple groups)
+    globalUserAgg[uid].gamesPts[gid] = Math.max(globalUserAgg[uid].gamesPts[gid] ?? 0, p.points_earned ?? 0)
+    globalUserAgg[uid].predCount++
+    if (p.is_auto) globalUserAgg[uid].autoCount++
+  }
+
+  // Resolve usernames with a separate profiles query
+  const globalUids = Object.keys(globalUserAgg)
+  const usernameMap: Record<string, string> = {}
+  if (globalUids.length > 0) {
+    const { data: profileRows } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .in('id', globalUids)
+    for (const pr of (profileRows ?? []) as { id: string; username: string }[]) {
+      usernameMap[pr.id] = pr.username
+    }
+  }
+
+  const globalSortedUsers = Object.values(globalUserAgg)
+    .map(u => ({
+      uid:      u.uid,
+      user:     usernameMap[u.uid] ?? u.uid,
+      pts:      Object.values(u.gamesPts).reduce((s, v) => s + v, 0),
+      all_auto: u.predCount > 0 && u.autoCount === u.predCount,
+    }))
+    .sort((a, b) => b.pts - a.pts)
+
   // 8. Process each group sequentially
   let processed = 0
   let skipped   = 0
@@ -476,15 +523,16 @@ serve(async (req) => {
 
       // 8c. Build compact JSON payload
       const payload = buildGroupPayload({
-        groupName:    group.name,
+        groupName:         group.name,
         date,
         groupData,
         finishedGames,
         globalDistMap,
         goalScorerMap,
-        champPicks:   (champPicks ?? []) as ChampPick[],
-        tsrPicks:     (tsrPicks  ?? []) as TsrPick[],
+        champPicks:        (champPicks ?? []) as ChampPick[],
+        tsrPicks:          (tsrPicks  ?? []) as TsrPick[],
         statsReady,
+        globalSortedUsers,
       })
 
       // 8d. Render user message
