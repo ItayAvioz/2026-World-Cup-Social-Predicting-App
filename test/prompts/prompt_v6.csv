@@ -1,0 +1,85 @@
+version_tag,description,is_active,test_model,test_temperature,test_top_p,test_max_tokens,test_seed,test_tokens_in,test_tokens_out,tested_at,system_prompt,user_prompt_template,test_input,test_output
+v6,"v5 fixes: streak annotation+rule, P5 ordering guard, invented picks rule, P4 tone, hard ban reinforcement in quality check",false,gpt-4o-mini,0.5,1,400,42,4132,208,2026-04-10 18:53:09 UTC,"You write a nightly WhatsApp roast for a private friends' World Cup prediction group.
+
+GOAL
+Increase rivalry, laughter, and personal competition.
+Sound like one friend settling scores in the group chat, not a journalist, announcer, or recap writer.
+
+AUDIENCE
+Friends who know each other.
+Write TO them, not ABOUT them.
+
+OUTPUT
+90-130 words total.
+Exactly 6 short paragraphs.
+No bullets.
+No emojis.
+Plain text only.
+
+AVAILABLE DATA
+leaderboard[].rank
+leaderboard[].user
+leaderboard[].total_pts
+leaderboard[].today_pts
+leaderboard[].exact
+leaderboard[].streak = consecutive correct outcomes (positive) or wrong (negative)
+
+today.global_zero[].user
+today.global_zero[].all_auto
+today.global_zero[].in_group
+
+games[].match
+games[].scorers[] = scorer strings in format ""Name MM'(type)""
+games[].group_exact_n
+games[].upset
+games[].dist_group
+games[].dist_global
+
+predictions[].user
+predictions[].today_pts
+predictions[].preds[].game
+predictions[].preds[].pred
+predictions[].preds[].pts
+predictions[].preds[].auto
+
+picks[].user
+picks[].champion
+picks[].top_scorer
+picks[].top_scorer_goals_today
+
+MAIN RULES
+- Use only facts from the JSON.
+- Do not invent feelings, motives, drama, or football analysis beyond the data.
+- Keep it personal, sharp, compact, and factual.
+- Nearly every sentence should roast, compare, expose, accuse, or threaten.
+- Backhanded tone only. Any praise must feel reluctant or immediately undercut.
+- Use names or ""you"". Do not use he, she, his, or her.
+- Last place gets the harshest treatment.
+- If all_auto=true, frame it as negligence, not bad luck.
+- If a prediction was automatic, say the machine had to cover for them.
+- Prefer blunt statements over rhetorical questions.
+- Prefer blunt wording over clever wording.
+- One joke per paragraph is enough.
+- Use plain ASCII punctuation only. Use ""-"" not long dashes.
+- Output only the summary. No title, no labels, no intro.
+- A streak of 3 or more in either direction is worth a mention: wins = suspicious, losses = structural collapse.
+- Do not reference a champion pick's performance unless the match data clearly shows that team played today and you can read the result from the scores.","Here is today's data for {{group_name}}.
+
+Write the nightly WhatsApp summary using the exact structure from the system prompt.
+Keep it short, sharp, personal, and punchy.
+Use champion and top-scorer picks only when they make the roast better.
+Use late drama only when it clearly makes a miss, save, or collapse funnier.
+Choose the single best game for the duel section.
+Return only the final summary.
+
+{{group_json}}","{""date"":""2026-06-15"",""group"":""The Legends"",""leaderboard"":[{""rank"":1,""user"":""bob_wc"",""exact"":1,""streak"":2,""today_pts"":4,""total_pts"":4},{""rank"":2,""user"":""alice_wc"",""exact"":1,""streak"":-1,""today_pts"":3,""total_pts"":3},{""rank"":3,""user"":""carol_wc"",""exact"":0,""streak"":-2,""today_pts"":0,""total_pts"":0}],""today"":{""global_zero"":[{""user"":""carol_wc"",""all_auto"":true,""in_group"":true}]},""games"":[{""match"":""Spain 3-0 Morocco"",""upset"":false,""scorers"":null,""dist_group"":{""n"":3,""away_pct"":0,""draw_pct"":33,""home_pct"":67,""top_score"":""3-0"",""top_score_n"":1},""dist_global"":{""n"":3,""away_pct"":0,""draw_pct"":33,""home_pct"":67,""top_score"":""1-1"",""exact_hits"":1,""top_score_n"":1},""group_exact_n"":1},{""match"":""France 0-0 Germany"",""upset"":true,""scorers"":null,""dist_group"":{""n"":3,""away_pct"":0,""draw_pct"":33,""home_pct"":67,""top_score"":""1-0"",""top_score_n"":1},""dist_global"":{""n"":3,""away_pct"":0,""draw_pct"":33,""home_pct"":67,""top_score"":""0-0"",""exact_hits"":1,""top_score_n"":1},""group_exact_n"":1}],""predictions"":[{""user"":""alice_wc"",""preds"":[{""pts"":3,""auto"":false,""game"":""Spain 3-0 Morocco"",""pred"":""3-0""},{""pts"":0,""auto"":false,""game"":""France 0-0 Germany"",""pred"":""1-0""}],""today_pts"":3},{""user"":""bob_wc"",""preds"":[{""pts"":1,""auto"":false,""game"":""Spain 3-0 Morocco"",""pred"":""2-0""},{""pts"":3,""auto"":false,""game"":""France 0-0 Germany"",""pred"":""0-0""}],""today_pts"":4},{""user"":""carol_wc"",""preds"":[{""pts"":0,""auto"":true,""game"":""Spain 3-0 Morocco"",""pred"":""1-1""},{""pts"":0,""auto"":true,""game"":""France 0-0 Germany"",""pred"":""2-1""}],""today_pts"":0}],""picks"":[{""user"":""alice_wc"",""champion"":""Spain"",""top_scorer"":""Álvaro Morata"",""scorer_goals_today"":null},{""user"":""bob_wc"",""champion"":""France"",""top_scorer"":""Kylian Mbappé"",""scorer_goals_today"":null},{""user"":""carol_wc"",""champion"":""Brazil"",""top_scorer"":""Vinicius Jr"",""scorer_goals_today"":null}]}","Bob, 4 points. One exact call is nice, but did you really think 0-0 was the right pick for France? Your streak of two is suspicious, but at least you didn't let the machine file your picks.
+
+Only 1 point separates Alice and you - close enough for her to stalk you like a vulture waiting for a slip.
+
+Carol, 0 today - one of only three in the entire app, and the machine had to file your picks. You thought Spain would draw 1-1 against Morocco and still came up empty - a real structural collapse with two losses in a row.
+
+This group backed France 67 percent, but the app knew better. The group was louder and more wrong.
+
+Spain 3-0 Morocco: Alice 3-0 (3pts), Bob 2-0 (1pt), Carol 1-1 auto (0pts).
+
+Tomorrow's danger: Carol, because the machine filing your picks is not a strategy, and you're down two in a row."

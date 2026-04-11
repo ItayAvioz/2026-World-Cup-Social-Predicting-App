@@ -5,3 +5,11 @@ CLAUDE_CODE_TIPS.md
 FUTURE_FEATURES.md
 dist/
 node_modules/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+.playwright-session.json
+.playwright-storage.json
+
+# Vite cache
+.vite/

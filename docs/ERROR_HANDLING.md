@@ -2,6 +2,66 @@
 
 ---
 
+## football-api-sync — Implementation Status (audited 2026-04-11)
+
+> Legend: ✅ implemented · ❌ not implemented · ⚠️ partial
+
+| # | Error | Status | Notes |
+|---|---|---|---|
+| 1 | API returns different KO time | ✅ | `handleVerify`: updates DB + re-schedules cron when diff > 5min |
+| 2 | API down at verify → retry KO-20/KO-10 | ❌ | Throws → outer catch → 500; no retry RPC called |
+| 3.1 | Daily fixture ID validation | ❌ | No `morning_check` mode exists — entire concept absent |
+| 3.2 | Fixture 404 at 30min check → retry | ❌ | Returns 404 JSON immediately; no retry scheduled |
+| 4 | Network/timeout in sync → retry every +5min | ⚠️ | Rate limit (429) → retry +10min ✅; general network error → throws → 500, no retry RPC |
+| 5 | Rate limit (429) in score fetch | ✅ | Caught in `handleSync`, calls `fn_schedule_retry_sync` +10min |
+| 5 (stats) | Rate limit (429) in `writeStats` | ❌ | `writeStats` try/catch swallows all errors including RATE_LIMIT silently |
+| 6 | Invalid API key (401/403) | ⚠️ | Thrown + labelled `AUTH_FAILED`; no special handling in sync mode, just 500 |
+| 7 | Game still in play at KO+120min | ✅ | Retry +5min via `fn_schedule_retry_sync` |
+| 8 | Status FT but score null | ✅ | Retry +5min via `fn_schedule_retry_sync` |
+| 9 | Score > 5 goals | ❌ | Not validated — writes immediately |
+| 10 | Status PST/CANC in sync | ❌ | Falls through to generic retry +5min; no self-unschedule, no alert |
+| 11 | ET/PEN already complete at KO+120 | ✅ | Writes 90-min + ET + pens all at once |
+| 12 | ET in progress at KO+120 | ✅ | Writes 90-min + `went_to_extra_time=true` + schedules `et_followup` +40min |
+| 13 | Stats endpoint down after score written | ❌ | `writeStats` try/catch logs to console only; no retry chain scheduled |
+| 14 | Stats not yet available (API lag) | ❌ | Same as #13 — swallowed silently |
+| 15 | Partial stats (some fields null) | ✅ | Writes what is available; nulls for missing columns |
+| 16 | Player row missing player ID | ✅ | `if (!p || !s) continue` skips gracefully (no explicit alert) |
+| 17 | Duplicate write | ✅ | All writes use upsert `ON CONFLICT DO UPDATE` |
+| 18 | `games` UPDATE fails (score write) | ⚠️ | 3 immediate retries ✅; after 3 failures → throws → 500 (no 30min retry RPC called) |
+| 19 | `fn_calculate_points` trigger fails | ❌ | Not checked anywhere in EF before or after score write |
+| 20 | `game_team_stats` INSERT fails | ❌ | `writeStats` try/catch — logged only, no retry scheduling |
+| 21 | `game_player_stats` INSERT fails | ❌ | Same as #20 |
+| 22 | Nightly summary trigger on last game of day | ⚠️ | Handled by `fn_schedule_ai_summaries`; no EF-side check |
+| 23/24 | Odds API down / game not covered | ⚠️ | Per-game try/catch collects errors[]; writes what succeeds; no retry-at-1h, no alert |
+| 25 | Odds suspended near KO | ✅ | `is('score_home', null)` filter stops updating finished games |
+| 26 | Odds API 401/403 | ⚠️ | Throws → outer catch → 500; no alerting |
+| 27 | Partial odds response | ✅ | Per-game catch; errors[] returned in response; writes what succeeds |
+| 28 | `game_odds` upsert fails | ✅ | Throws → per-game catch → added to errors[] |
+| 29 | EF times out mid-run (score ok, stats not) | ❌ | Score safe ✅; no morning check mode to detect missing stats |
+| 30 | Cron job never fired | ❌ | No morning check mode; no cron registration verification |
+| 31 | Wrong game synced (bad api_fixture_id) | ⚠️ | `handleSetup` validates team names ✅; `handleSync` trusts api_fixture_id without re-validating |
+| 32 | "Last game of day" detection wrong | ❌ | No morning check mode to verify all KOs/crons registered |
+| Admin alerting | All groups | ❌ | Console.log/error only — no email/webhook/DB alert mechanism |
+
+### Recommended fixes — priority order
+
+**Before launch (blocking):**
+1. `writeStats` fail → schedule `sync_stats` retry cron (+30min) instead of swallowing — one `catch` block change
+2. Trigger health check in `handleSync` before score write — one DB query addition
+3. Rate limit in `writeStats` — propagate RATE_LIMIT throw, schedule `sync_stats` retry cron
+4. `mode=morning_check` — new EF mode (build ~May 2026): fixture IDs, KO times, cron registrations, trigger health, missing stats detection
+
+**Medium (before launch):**
+5. Admin alert mechanism — `admin_alerts` DB table `(created_at, severity, message)`; write on every critical error; query manually each morning
+6. Score > 5 goals validation — confirm before writing, alert admin
+7. PST/CANC detection in `handleSync` — call `fn_unschedule_game_sync` + alert instead of retrying forever
+
+**Low / defer:**
+8. Team name re-validation in `handleSync` (Error 31) — low risk given `handleSetup` already validated
+9. Retry-every-30min for DB score update after 3x — already 3 retries; extend only if needed
+
+---
+
 ## Group 1 — Pre-Game KO Verification (30min before each game)
 
 | # | Error | Solution |
@@ -133,6 +193,21 @@ Every morning during tournament:
 ---
 
 ## F8 — Nightly Summary Edge Function
+
+> **Implementation status** (verified 2026-04-11, nightly-summary v13):
+> ✅ A1 — no finished games today → exit `no_games_today`
+> ✅ A3 — not all games finished → exit `games_not_finished`
+> ✅ C1 — Claude/OpenAI timeout → retry once after 5s + fallback message
+> ✅ C2 — empty/malformed response (<50 chars) → retry once + fallback
+> ✅ D1 — `ai_summaries` INSERT fails → retry once → save to `failed_summaries`
+> ✅ D2 — EF crashes midway → already-saved groups safe (upsert)
+> ❌ A2 — no `fn_calculate_points` trigger health check before LLM call (medium — implement before launch)
+> ⚠️ B2 — group RPC returns empty data → group skipped silently, no fallback written to `ai_summaries`
+> ⚠️ B3 — group RPC fails → skipped immediately, no single retry attempt
+> ❌ C3 — no hallucination check (response must reference member name/point value) (low priority)
+> ❌ Admin alerting — console.log only, no email/webhook/DB alert (medium — implement before launch)
+>
+> **Recommended fix order:** A2 → admin alerting → B2/B3 → C3
 
 ### Group A — Trigger / Entry
 

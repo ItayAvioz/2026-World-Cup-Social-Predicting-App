@@ -1,0 +1,9 @@
+fixture_id,game,score,ko_time,snap_label,pulled_at,team,role,shots_on_target,shots_total,shots_insidebox,corners,fouls,yellow_cards,red_cards,offsides,possession,passes_total,passes_accuracy,xg,gk_saves
+1391112,Getafe vs Athletic Club,2-0,2026-04-05T12:00:00Z,KO+1356min,2026-04-06T10:35:46Z,Getafe,home,6,10,8,4,11,3,0,3,32,233,61,2.15,0
+1391112,Getafe vs Athletic Club,2-0,2026-04-05T12:00:00Z,KO+1356min,2026-04-06T10:35:46Z,Athletic Club,away,0,5,4,3,11,1,0,1,68,528,81,0.49,3
+1391118,Valencia vs Celta Vigo,2-3,2026-04-05T14:15:00Z,KO+1221min,2026-04-06T10:35:46Z,Valencia,home,4,13,7,6,14,1,0,0,42,351,81,0.81,2
+1391118,Valencia vs Celta Vigo,2-3,2026-04-05T14:15:00Z,KO+1221min,2026-04-06T10:35:46Z,Celta Vigo,away,5,9,6,0,21,3,0,2,58,504,87,1.04,2
+1391117,Oviedo vs Sevilla,1-0,2026-04-05T16:30:00Z,KO+1086min,2026-04-06T10:35:46Z,Oviedo,home,4,7,3,5,11,5,0,2,70,508,83,0.61,0
+1391117,Oviedo vs Sevilla,1-0,2026-04-05T16:30:00Z,KO+1086min,2026-04-06T10:35:46Z,Sevilla,away,0,9,7,9,12,3,1,1,30,209,60,0.65,3
+1391109,Alaves vs Osasuna,2-2,2026-04-05T19:00:00Z,KO+936min,2026-04-06T10:35:46Z,Alaves,home,6,18,13,7,7,2,0,1,48,372,81,2.04,3
+1391109,Alaves vs Osasuna,2-2,2026-04-05T19:00:00Z,KO+936min,2026-04-06T10:35:46Z,Osasuna,away,5,8,5,1,17,5,1,3,52,422,82,1.30,5
