@@ -192,7 +192,7 @@ export default function Dashboard() {
       supabase.from('champion_pick').select('team, group_id, is_auto').eq('user_id', user.id),
       supabase.from('top_scorer_pick').select('player_name, group_id, is_auto').eq('user_id', user.id),
       supabase.from('predictions').select('game_id, group_id, pred_home, pred_away, points_earned, is_auto').eq('user_id', user.id),
-      supabase.from('games').select('id, score_home, score_away').not('score_home', 'is', null).order('kick_off_time', { ascending: false }).limit(150),
+      supabase.from('games').select('id, score_home, score_away, kick_off_time').not('score_home', 'is', null).gte('kick_off_time', '2026-04-11').order('kick_off_time', { ascending: false }).limit(150),
     ]).then(([{ data: cpRows }, { data: tsRows }, { data: preds }, { data: finGames }]) => {
       const cpMap = {}
       cpRows?.forEach(r => { cpMap[r.group_id] = r })
@@ -203,7 +203,7 @@ export default function Dashboard() {
       setCompletedGames(finGames?.length ?? 0)
       if (preds && finGames) {
         const outcome = (h, a) => h > a ? 'H' : h < a ? 'A' : 'D'
-        // Group predictions by group_id, compute stats per group
+        const finishedGameIds = new Set(finGames.map(g => g.id))
         const byGroup = {}
         preds.forEach(p => {
           if (!byGroup[p.group_id]) byGroup[p.group_id] = []
@@ -211,15 +211,16 @@ export default function Dashboard() {
         })
         const statsMap = {}
         Object.entries(byGroup).forEach(([gid, gPreds]) => {
-          const total   = gPreds.length
-          const correct = gPreds.filter(p => p.points_earned >= 1).length
-          const exact   = gPreds.filter(p => p.points_earned === 3).length
+          const finishedPreds = gPreds.filter(p => finishedGameIds.has(p.game_id))
+          const total   = finishedPreds.length
+          const correct = finishedPreds.filter(p => p.points_earned >= 1).length
+          const exact   = finishedPreds.filter(p => p.points_earned === 3).length
           const predMap = {}
           gPreds.forEach(p => { predMap[p.game_id] = p })
           let streak = 0
           for (const g of finGames) {
             const p = predMap[g.id]
-            if (!p) break
+            if (!p) continue
             const isCorrect = outcome(p.pred_home, p.pred_away) === outcome(g.score_home, g.score_away)
             if (streak === 0) {
               streak = isCorrect ? 1 : -1
