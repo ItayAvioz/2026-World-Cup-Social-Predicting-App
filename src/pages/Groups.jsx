@@ -134,7 +134,7 @@ export default function Groups() {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
     supabase.from('games')
       .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
-      .gte('kick_off_time', twoHoursAgo)
+      .or(`score_home.is.null,kick_off_time.gte.${twoHoursAgo}`)
       .order('kick_off_time')
       .limit(2)
       .then(({ data }) => {

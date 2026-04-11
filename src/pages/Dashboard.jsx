@@ -192,7 +192,7 @@ export default function Dashboard() {
       supabase.from('champion_pick').select('team, group_id, is_auto').eq('user_id', user.id),
       supabase.from('top_scorer_pick').select('player_name, group_id, is_auto').eq('user_id', user.id),
       supabase.from('predictions').select('game_id, group_id, pred_home, pred_away, points_earned, is_auto').eq('user_id', user.id),
-      supabase.from('games').select('id, score_home, score_away, kick_off_time').not('score_home', 'is', null).gte('kick_off_time', '2026-04-11').order('kick_off_time', { ascending: false }).limit(150),
+      supabase.from('games').select('id, score_home, score_away, kick_off_time').not('score_home', 'is', null).gte('kick_off_time', '2026-04-11').order('kick_off_time', { ascending: true }).order('id', { ascending: false }).limit(150),
     ]).then(([{ data: cpRows }, { data: tsRows }, { data: preds }, { data: finGames }]) => {
       const cpMap = {}
       cpRows?.forEach(r => { cpMap[r.group_id] = r })
@@ -222,12 +222,10 @@ export default function Dashboard() {
             const p = predMap[g.id]
             if (!p) continue
             const isCorrect = outcome(p.pred_home, p.pred_away) === outcome(g.score_home, g.score_away)
-            if (streak === 0) {
-              streak = isCorrect ? 1 : -1
-            } else if (isCorrect ? streak > 0 : streak < 0) {
+            if (streak === 0 || (isCorrect ? streak > 0 : streak < 0)) {
               streak += isCorrect ? 1 : -1
             } else {
-              break
+              streak = isCorrect ? 1 : -1
             }
           }
           statsMap[gid] = {
