@@ -78,13 +78,13 @@ export default function Groups() {
   const [lbErrors,     setLbErrors]     = useState({})
   const [lbLoading,    setLbLoading]    = useState(false)
 
-  // Focus game + all predictions for it
-  const [focusGame,     setFocusGame]     = useState(null)
-  const [focusLoading,  setFocusLoading]  = useState(true)
-  const [myFocusPredMap, setMyFocusPredMap] = useState({})  // { [group_id]: { pred_home, pred_away, is_auto } }
-  const [allGamePreds,   setAllGamePreds]  = useState([])
+  // Focus games + all predictions for them
+  const [focusGames,      setFocusGames]      = useState([])
+  const [focusLoading,    setFocusLoading]    = useState(true)
+  const [myFocusPredMaps, setMyFocusPredMaps] = useState({})  // { [game_id]: { [group_id]: pred } }
+  const [allGamePreds,    setAllGamePreds]     = useState({})  // { [game_id]: pred[] }
   const [predsLoading,  setPredsLoading]  = useState(false)
-  const [globalPredStats, setGlobalPredStats] = useState(null)  // from get_global_prediction_stats RPC
+  const [globalPredStats, setGlobalPredStats] = useState({})  // { [game_id]: stats }
 
   // ── Load groups + members ──────────────────────────────────────────────
   const loadGroups = useCallback(async () => {
@@ -128,7 +128,7 @@ export default function Groups() {
     })
   }, [groups])
 
-  // ── Focus game (next upcoming or just kicked off) ──────────────────────
+  // ── Focus games (next upcoming or just kicked off — up to 2 parallel) ───
   useEffect(() => {
     if (!user) return
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
@@ -136,43 +136,56 @@ export default function Groups() {
       .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
       .gte('kick_off_time', twoHoursAgo)
       .order('kick_off_time')
-      .limit(1)
+      .limit(2)
       .then(({ data }) => {
-        const game = data?.[0] ?? null
-        setFocusGame(game)
+        if (!data?.length) { setFocusGames([]); setFocusLoading(false); return }
+        const firstKO = data[0].kick_off_time
+        const games = data.filter(g => g.kick_off_time === firstKO)
+        setFocusGames(games)
         setFocusLoading(false)
-        if (game) {
-          // Load per-group predictions for this user for the focus game
-          supabase.from('predictions')
-            .select('pred_home, pred_away, is_auto, group_id')
-            .eq('game_id', game.id)
-            .eq('user_id', user.id)
-            .then(({ data: preds }) => {
-              const map = {}
-              preds?.forEach(p => { map[p.group_id] = p })
-              setMyFocusPredMap(map)
+        supabase.from('predictions')
+          .select('pred_home, pred_away, is_auto, group_id, game_id')
+          .in('game_id', games.map(g => g.id))
+          .eq('user_id', user.id)
+          .then(({ data: preds }) => {
+            const maps = {}
+            preds?.forEach(p => {
+              if (!maps[p.game_id]) maps[p.game_id] = {}
+              maps[p.game_id][p.group_id] = p
             })
-        }
+            setMyFocusPredMaps(maps)
+          })
       })
   }, [user])
 
-  // ── Load predictions for focus game (after KO — RLS reveals them) ──────
+  // ── Load predictions for all focus games (after KO — RLS reveals them) ──
   useEffect(() => {
-    if (!focusGame) return
-    if (new Date() <= new Date(focusGame.kick_off_time)) return
+    if (!focusGames.length) return
+    if (new Date() <= new Date(focusGames[0].kick_off_time)) return
     setPredsLoading(true)
-    setGlobalPredStats(null)
+    setGlobalPredStats({})
+    const gameIds = focusGames.map(g => g.id)
     Promise.all([
       supabase.from('predictions')
-        .select('user_id, group_id, pred_home, pred_away, is_auto, profiles(username)')
-        .eq('game_id', focusGame.id),
-      supabase.rpc('get_global_prediction_stats', { p_game_id: focusGame.id }),
-    ]).then(([{ data: preds }, { data: gStats }]) => {
-      setAllGamePreds(preds ?? [])
-      setGlobalPredStats(gStats?.[0] ?? null)
+        .select('user_id, group_id, game_id, pred_home, pred_away, is_auto, profiles(username)')
+        .in('game_id', gameIds),
+      ...focusGames.map(g =>
+        supabase.rpc('get_global_prediction_stats', { p_game_id: g.id })
+          .then(r => ({ gameId: g.id, stats: r.data?.[0] ?? null }))
+      ),
+    ]).then(([{ data: preds }, ...statsResults]) => {
+      const predsByGame = {}
+      preds?.forEach(p => {
+        if (!predsByGame[p.game_id]) predsByGame[p.game_id] = []
+        predsByGame[p.game_id].push(p)
+      })
+      setAllGamePreds(predsByGame)
+      const statsMap = {}
+      statsResults.forEach(r => { statsMap[r.gameId] = r.stats })
+      setGlobalPredStats(statsMap)
       setPredsLoading(false)
     })
-  }, [focusGame])
+  }, [focusGames])
 
   // ── Pre-fill join from URL or localStorage ─────────────────────────────
   useEffect(() => {
@@ -281,7 +294,7 @@ export default function Groups() {
   const canRename     = new Date() < RENAME_DEADLINE
   const myGroupCount  = groups.length
   const canCreateMore = myGroupCount < 3
-  const focusPastKO   = focusGame ? new Date() > new Date(focusGame.kick_off_time) : false
+  const focusPastKO   = focusGames.length > 0 ? new Date() > new Date(focusGames[0].kick_off_time) : false
 
   return (
     <Layout title="Groups" leftSlot={<div className="nav-spacer" />}>
@@ -402,10 +415,10 @@ export default function Groups() {
                 {/* Predict button */}
                 <button
                   className="btn btn-gold btn-full grp-predict-btn"
-                  disabled={!focusGame}
-                  onClick={() => focusGame && navigate(`/game/${focusGame.id}`)}
+                  disabled={focusGames.length === 0}
+                  onClick={() => focusGames[0] && navigate(`/game/${focusGames[0].id}`)}
                 >⚽ Enter My Prediction →</button>
-                {focusGame && <p className="grp-predict-note">Preview · Join a group to predict with friends</p>}
+                {focusGames[0] && <p className="grp-predict-note">Preview · Join a group to predict with friends</p>}
 
                 {/* After K.O. section label */}
                 <div className="grp-section-label" style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: '.75rem' }}>
@@ -486,8 +499,6 @@ export default function Groups() {
               const lbRowsRaw    = leaderboards[group.id] ?? []
               const lbError      = lbErrors[group.id] ?? null
               const memberIds    = new Set(members.map(m => m.user_id))
-              const myFocusPred  = myFocusPredMap[group.id] ?? null
-              const groupPreds   = allGamePreds.filter(p => memberIds.has(p.user_id) && p.group_id === group.id)
               const isManageOpen = manage === group.id
 
               // If leaderboard RPC returned rows, use them.
@@ -617,13 +628,13 @@ export default function Groups() {
                     )}
                   </div>
 
-                  {/* ── Next game / group predictions — always visible ── */}
+                  {/* ── Next game(s) / group predictions — always visible ── */}
                   <div className="grp-section grp-game-section">
                     <div className="grp-section-label">Game Prediction · Up Next</div>
 
                     {focusLoading ? (
                       <div className="dash-skeleton grp-section-skeleton" />
-                    ) : !focusGame ? (
+                    ) : focusGames.length === 0 ? (
                       /* No game yet — template layout */
                       <>
                         <div className="grp-ng-game">
@@ -643,174 +654,173 @@ export default function Groups() {
                             </div>
                           </div>
                         </div>
-                        <button
-                          className="btn btn-gold btn-full grp-predict-btn"
-                          disabled={!focusGame}
-                          onClick={() => focusGame && navigate(`/game/${focusGame.id}?group=${group.id}`)}
-                        >⚽ Enter My Prediction →</button>
-                        {focusGame && <p className="grp-predict-note">Preview · Game data loading — stats available soon</p>}
+                        <button className="btn btn-gold btn-full grp-predict-btn" disabled>⚽ Enter My Prediction →</button>
                       </>
                     ) : (
-                      /* Real game data */
-                      <>
-                        <div className="grp-ng-game">
-                          <div className="grp-ng-teams">
-                            <div className="grp-ng-team">
-                              {TEAM_CODE[focusGame.team_home] && (
-                                <img className="grp-ng-flag" src={`https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/${TEAM_CODE[focusGame.team_home]}.svg`} alt={`${focusGame.team_home} flag`} />
-                              )}
-                              <span className="grp-ng-name">{focusGame.team_home}</span>
-                            </div>
-                            <div className="grp-ng-center">
-                              {focusGame.score_home !== null
-                                ? <>
-                                    <span className="grp-ng-score">{focusGame.score_home}–{focusGame.score_away}</span>
-                                    {focusGame.went_to_extra_time && (
-                                      <span className="grp-ng-extra">
-                                        {focusGame.et_score_home !== null && `E.T. ${focusGame.et_score_home}–${focusGame.et_score_away}`}
-                                        {focusGame.went_to_penalties && focusGame.penalty_score_home !== null && `  Pens ${focusGame.penalty_score_home}–${focusGame.penalty_score_away}`}
-                                      </span>
-                                    )}
-                                  </>
-                                : <span className="grp-ng-vs">vs</span>
-                              }
-                              <span className="grp-ng-time">{fmtKickoff(focusGame.kick_off_time)}</span>
-                              {(() => { const v = getVenue(focusGame.team_home, focusGame.team_away); return v ? <span className="grp-ng-venue">{v.venue} · {v.city}</span> : null })()}
-                            </div>
-                            <div className="grp-ng-team grp-ng-team--right">
-                              <span className="grp-ng-name">{focusGame.team_away}</span>
-                              {TEAM_CODE[focusGame.team_away] && (
-                                <img className="grp-ng-flag" src={`https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/${TEAM_CODE[focusGame.team_away]}.svg`} alt={`${focusGame.team_away} flag`} />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        {myFocusPred && !focusPastKO ? (
-                          <>
-                            <div className="gm-predict-row">
-                              <span className="gm-predict-team">{focusGame.team_home}</span>
-                              <div className="gm-predict-inputs">
-                                <div className="gm-pick-box">{myFocusPred.pred_home}</div>
-                                <span className="gm-input-sep">–</span>
-                                <div className="gm-pick-box">{myFocusPred.pred_away}</div>
+                      focusGames.map((game, idx) => {
+                        const myPred = myFocusPredMaps[game.id]?.[group.id] ?? null
+                        return (
+                          <div key={game.id}>
+                            {idx > 0 && <div style={{ borderTop: '1px solid rgba(255,255,255,.06)', margin: '.75rem 0' }} />}
+                            <div className="grp-ng-game">
+                              <div className="grp-ng-teams">
+                                <div className="grp-ng-team">
+                                  {TEAM_CODE[game.team_home] && (
+                                    <img className="grp-ng-flag" src={`https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/${TEAM_CODE[game.team_home]}.svg`} alt={`${game.team_home} flag`} />
+                                  )}
+                                  <span className="grp-ng-name">{game.team_home}</span>
+                                </div>
+                                <div className="grp-ng-center">
+                                  {game.score_home !== null
+                                    ? <>
+                                        <span className="grp-ng-score">{game.score_home}–{game.score_away}</span>
+                                        {game.went_to_extra_time && (
+                                          <span className="grp-ng-extra">
+                                            {game.et_score_home !== null && `E.T. ${game.et_score_home}–${game.et_score_away}`}
+                                            {game.went_to_penalties && game.penalty_score_home !== null && `  Pens ${game.penalty_score_home}–${game.penalty_score_away}`}
+                                          </span>
+                                        )}
+                                      </>
+                                    : <span className="grp-ng-vs">vs</span>
+                                  }
+                                  <span className="grp-ng-time">{fmtKickoff(game.kick_off_time)}</span>
+                                  {(() => { const v = getVenue(game.team_home, game.team_away); return v ? <span className="grp-ng-venue">{v.venue} · {v.city}</span> : null })()}
+                                </div>
+                                <div className="grp-ng-team grp-ng-team--right">
+                                  <span className="grp-ng-name">{game.team_away}</span>
+                                  {TEAM_CODE[game.team_away] && (
+                                    <img className="grp-ng-flag" src={`https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/${TEAM_CODE[game.team_away]}.svg`} alt={`${game.team_away} flag`} />
+                                  )}
+                                </div>
                               </div>
-                              <span className="gm-predict-team">{focusGame.team_away}</span>
                             </div>
-                            {myFocusPred.is_auto && (
-                              <div style={{ textAlign:'center', margin:'.25rem 0' }}>
-                                <span className="grp-auto-badge">⚡ Auto</span>
-                              </div>
+                            {myPred && !focusPastKO ? (
+                              <>
+                                <div className="gm-predict-row">
+                                  <span className="gm-predict-team">{game.team_home}</span>
+                                  <div className="gm-predict-inputs">
+                                    <div className="gm-pick-box">{myPred.pred_home}</div>
+                                    <span className="gm-input-sep">–</span>
+                                    <div className="gm-pick-box">{myPred.pred_away}</div>
+                                  </div>
+                                  <span className="gm-predict-team">{game.team_away}</span>
+                                </div>
+                                {myPred.is_auto && (
+                                  <div style={{ textAlign:'center', margin:'.25rem 0' }}>
+                                    <span className="grp-auto-badge">⚡ Auto</span>
+                                  </div>
+                                )}
+                                <button
+                                  className="btn btn-outline btn-full"
+                                  style={{ minHeight:'48px' }}
+                                  onClick={() => navigate(`/game/${game.id}?group=${group.id}`)}
+                                >✏️ Edit Prediction</button>
+                              </>
+                            ) : (
+                              <button
+                                className="btn btn-gold btn-full grp-predict-btn"
+                                onClick={() => navigate(`/game/${game.id}?group=${group.id}`)}
+                                disabled={focusPastKO}
+                              >
+                                {focusPastKO ? '🔒 Predictions Locked' : '⚽ Enter My Prediction →'}
+                              </button>
                             )}
-                            <button
-                              className="btn btn-outline btn-full"
-                              style={{ minHeight:'48px' }}
-                              onClick={() => navigate(`/game/${focusGame.id}?group=${group.id}`)}
-                            >✏️ Edit Prediction</button>
-                          </>
-                        ) : (
-                          <button
-                            className="btn btn-gold btn-full grp-predict-btn"
-                            onClick={() => navigate(`/game/${focusGame.id}?group=${group.id}`)}
-                            disabled={focusPastKO}
-                          >
-                            {focusPastKO ? '🔒 Predictions Locked' : '⚽ Enter My Prediction →'}
-                          </button>
-                        )}
-                      </>
+
+                            {/* ── Results for this game ── */}
+                            {(() => {
+                              const gameAllPreds = allGamePreds[game.id] ?? []
+                              const gameGroupPreds = gameAllPreds.filter(p => memberIds.has(p.user_id) && p.group_id === group.id)
+                              const gameGlobalStats = globalPredStats[game.id] ?? null
+                              const gDist = focusPastKO ? computeDist(gameGroupPreds) : null
+                              const tDist = (() => {
+                                if (!focusPastKO || !gameGlobalStats) return null
+                                const s = gameGlobalStats
+                                const tot = Number(s.total)
+                                if (!tot) return null
+                                const hw = Number(s.home_wins), dr = Number(s.draws), aw = Number(s.away_wins)
+                                const g01 = Number(s.g01), g23 = Number(s.g23), g4p = Number(s.g4p)
+                                return {
+                                  total: tot, homeWins: hw, draws: dr, awayWins: aw, g01, g23, g4p,
+                                  homePct: Math.round((hw  / tot) * 100),
+                                  drawPct: Math.round((dr  / tot) * 100),
+                                  awayPct: Math.round((aw  / tot) * 100),
+                                  g01Pct:  Math.round((g01 / tot) * 100),
+                                  g23Pct:  Math.round((g23 / tot) * 100),
+                                  g4pPct:  Math.round((g4p / tot) * 100),
+                                }
+                              })()
+                              const renderDistBlock = (label, dist) => (
+                                <div key={label} className="grp-stats-block">
+                                  <div className="grp-stats-title">{label}</div>
+                                  <div className="grp-dist">
+                                    <div className="grp-dist-bar">
+                                      <div className="grp-dist-home" style={{ width: dist ? `${dist.homePct}%` : '50%' }} />
+                                      <div className="grp-dist-draw" style={{ width: dist ? `${dist.drawPct}%` : '30%' }} />
+                                      <div className="grp-dist-away" style={{ width: dist ? `${dist.awayPct}%` : '20%' }} />
+                                    </div>
+                                    <div className="grp-dist-labels">
+                                      <span className="grp-dist-label grp-dist-label--home">🏠 {dist ? `${dist.homeWins} (${dist.homePct}%)` : '—%'}</span>
+                                      <span className="grp-dist-label grp-dist-label--draw">⚖️ {dist ? `${dist.draws} (${dist.drawPct}%)` : '—%'}</span>
+                                      <span className="grp-dist-label grp-dist-label--away">✈️ {dist ? `${dist.awayWins} (${dist.awayPct}%)` : '—%'}</span>
+                                    </div>
+                                    <div className="grp-dist-bar grp-dist-bar--goals" style={{ marginTop: '.5rem' }}>
+                                      <div className="grp-dist-g01" style={{ width: dist ? `${dist.g01Pct}%` : '35%' }} />
+                                      <div className="grp-dist-g23" style={{ width: dist ? `${dist.g23Pct}%` : '45%' }} />
+                                      <div className="grp-dist-g4p" style={{ width: dist ? `${dist.g4pPct}%` : '20%' }} />
+                                    </div>
+                                    <div className="grp-dist-labels">
+                                      <span className="grp-dist-label grp-dist-label--g01">⚽ 0–1: {dist ? `${dist.g01Pct}%` : '—%'}</span>
+                                      <span className="grp-dist-label grp-dist-label--g23">⚽ 2–3: {dist ? `${dist.g23Pct}%` : '—%'}</span>
+                                      <span className="grp-dist-label grp-dist-label--g4p">⚽ 4+: {dist ? `${dist.g4pPct}%` : '—%'}</span>
+                                    </div>
+                                    <div className="grp-dist-stats">
+                                      <span className="grp-dist-total">{dist ? `${dist.total} predictions` : '— predictions'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                              return (
+                                <div className="grp-section" style={{ marginTop: '.5rem' }}>
+                                  <div className="grp-section-label" style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: '.75rem' }}>
+                                    Game Prediction · Results
+                                  </div>
+                                  {!focusPastKO ? (
+                                    <div className="grp-preds-list">
+                                      {[1, 2, 3].map(i => (
+                                        <div key={i} className="grp-pred-row">
+                                          <span className="grp-pred-user grp-skeleton-text" style={{ width: '5rem' }}>&nbsp;</span>
+                                          {i === 2 && <span className="grp-auto-badge">⚡ Auto</span>}
+                                          <span className="grp-pred-score grp-skeleton-text" style={{ width: '2.5rem' }}>&nbsp;</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : predsLoading ? (
+                                    <div className="dash-skeleton grp-section-skeleton" />
+                                  ) : gameGroupPreds.length === 0 ? (
+                                    <p className="grp-section-empty">No predictions submitted for this group.</p>
+                                  ) : (
+                                    <div className="grp-preds-list">
+                                      {gameGroupPreds.map(p => (
+                                        <div key={p.user_id} className="grp-pred-row">
+                                          <span className="grp-pred-user">{p.profiles?.username ?? '—'}</span>
+                                          {p.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
+                                          <span className="grp-pred-score">{p.pred_home}–{p.pred_away}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="grp-stats-dual">
+                                    {renderDistBlock('Group', gDist)}
+                                    {renderDistBlock('Global', tDist)}
+                                  </div>
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        )
+                      })
                     )}
                   </div>
-
-                  {/* ── Results — always visible (template when no data) ── */}
-                  {(() => {
-                    const gDist = focusPastKO ? computeDist(groupPreds) : null
-                    const tDist = (() => {
-                      if (!focusPastKO || !globalPredStats) return null
-                      const s = globalPredStats
-                      const tot = Number(s.total)
-                      if (!tot) return null
-                      const hw = Number(s.home_wins), dr = Number(s.draws), aw = Number(s.away_wins)
-                      const g01 = Number(s.g01), g23 = Number(s.g23), g4p = Number(s.g4p)
-                      return {
-                        total: tot, homeWins: hw, draws: dr, awayWins: aw, g01, g23, g4p,
-                        homePct: Math.round((hw  / tot) * 100),
-                        drawPct: Math.round((dr  / tot) * 100),
-                        awayPct: Math.round((aw  / tot) * 100),
-                        g01Pct:  Math.round((g01 / tot) * 100),
-                        g23Pct:  Math.round((g23 / tot) * 100),
-                        g4pPct:  Math.round((g4p / tot) * 100),
-                      }
-                    })()
-                    const renderDistBlock = (label, dist) => (
-                      <div key={label} className="grp-stats-block">
-                        <div className="grp-stats-title">{label}</div>
-                        <div className="grp-dist">
-                          <div className="grp-dist-bar">
-                            <div className="grp-dist-home" style={{ width: dist ? `${dist.homePct}%` : '50%' }} />
-                            <div className="grp-dist-draw" style={{ width: dist ? `${dist.drawPct}%` : '30%' }} />
-                            <div className="grp-dist-away" style={{ width: dist ? `${dist.awayPct}%` : '20%' }} />
-                          </div>
-                          <div className="grp-dist-labels">
-                            <span className="grp-dist-label grp-dist-label--home">🏠 {dist ? `${dist.homeWins} (${dist.homePct}%)` : '—%'}</span>
-                            <span className="grp-dist-label grp-dist-label--draw">⚖️ {dist ? `${dist.draws} (${dist.drawPct}%)` : '—%'}</span>
-                            <span className="grp-dist-label grp-dist-label--away">✈️ {dist ? `${dist.awayWins} (${dist.awayPct}%)` : '—%'}</span>
-                          </div>
-                          <div className="grp-dist-bar grp-dist-bar--goals" style={{ marginTop: '.5rem' }}>
-                            <div className="grp-dist-g01" style={{ width: dist ? `${dist.g01Pct}%` : '35%' }} />
-                            <div className="grp-dist-g23" style={{ width: dist ? `${dist.g23Pct}%` : '45%' }} />
-                            <div className="grp-dist-g4p" style={{ width: dist ? `${dist.g4pPct}%` : '20%' }} />
-                          </div>
-                          <div className="grp-dist-labels">
-                            <span className="grp-dist-label grp-dist-label--g01">⚽ 0–1: {dist ? `${dist.g01Pct}%` : '—%'}</span>
-                            <span className="grp-dist-label grp-dist-label--g23">⚽ 2–3: {dist ? `${dist.g23Pct}%` : '—%'}</span>
-                            <span className="grp-dist-label grp-dist-label--g4p">⚽ 4+: {dist ? `${dist.g4pPct}%` : '—%'}</span>
-                          </div>
-                          <div className="grp-dist-stats">
-                            <span className="grp-dist-total">{dist ? `${dist.total} predictions` : '— predictions'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                    return (
-                      <div className="grp-section">
-                        <div className="grp-section-label" style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: '.75rem' }}>
-                          Game Prediction · Results
-                        </div>
-
-                        {/* Predictions list — skeleton template pre-KO, real data post-KO */}
-                        {!focusPastKO ? (
-                          <div className="grp-preds-list">
-                            {[1, 2, 3].map(i => (
-                              <div key={i} className="grp-pred-row">
-                                <span className="grp-pred-user grp-skeleton-text" style={{ width: '5rem' }}>&nbsp;</span>
-                                {i === 2 && <span className="grp-auto-badge">⚡ Auto</span>}
-                                <span className="grp-pred-score grp-skeleton-text" style={{ width: '2.5rem' }}>&nbsp;</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : predsLoading ? (
-                          <div className="dash-skeleton grp-section-skeleton" />
-                        ) : groupPreds.length === 0 ? (
-                          <p className="grp-section-empty">No predictions submitted for this group.</p>
-                        ) : (
-                          <div className="grp-preds-list">
-                            {groupPreds.map(p => (
-                              <div key={p.user_id} className="grp-pred-row">
-                                <span className="grp-pred-user">{p.profiles?.username ?? '—'}</span>
-                                {p.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
-                                <span className="grp-pred-score">{p.pred_home}–{p.pred_away}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Dual stats */}
-                        <div className="grp-stats-dual">
-                          {renderDistBlock('Group', gDist)}
-                          {renderDistBlock('Global', tDist)}
-                        </div>
-                      </div>
-                    )
-                  })()}
 
                   {/* ── Manage members (collapsible) ── */}
                   {isManageOpen && (
