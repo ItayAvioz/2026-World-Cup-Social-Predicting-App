@@ -128,35 +128,51 @@ export default function Groups() {
     })
   }, [groups])
 
-  // ── Focus games (next upcoming or just kicked off — up to 2 parallel) ───
-  useEffect(() => {
+  // ── Focus games (next upcoming or in-progress — up to 2 parallel) ──────
+  // Logic: show unscored games only (score_home IS NULL).
+  // - Upcoming: shown as "next game" (no preds/stats until KO)
+  // - In-progress: shown with preds/stats once KO passes
+  // - 1 of 2 parallel finishes → dropped immediately, only remaining shown
+  // - Both finish → immediately shows next upcoming game
+  // Polls every 60s for automatic transitions.
+  // TODO: consider showing finished game for ~15 min after score is set so
+  // users have time to view group predictions before next game appears.
+  // Requires finished_at timestamp or kick_off_time + phase duration estimate.
+  const fetchFocusGames = useCallback(async () => {
     if (!user) return
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-    supabase.from('games')
+    // TODO: remove threeHoursAgo filter after test data cleanup.
+    // In production, API sync writes scores to all finished games so
+    // score_home IS NULL alone is sufficient. The time filter only exists
+    // to exclude old seeded WC games (Mar 2026) that have no score.
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    const { data } = await supabase.from('games')
       .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
-      .or(`score_home.is.null,kick_off_time.gte.${twoHoursAgo}`)
+      .is('score_home', null)
+      .gte('kick_off_time', threeHoursAgo)
       .order('kick_off_time')
-      .limit(2)
-      .then(({ data }) => {
-        if (!data?.length) { setFocusGames([]); setFocusLoading(false); return }
-        const firstKO = data[0].kick_off_time
-        const games = data.filter(g => g.kick_off_time === firstKO)
-        setFocusGames(games)
-        setFocusLoading(false)
-        supabase.from('predictions')
-          .select('pred_home, pred_away, is_auto, group_id, game_id')
-          .in('game_id', games.map(g => g.id))
-          .eq('user_id', user.id)
-          .then(({ data: preds }) => {
-            const maps = {}
-            preds?.forEach(p => {
-              if (!maps[p.game_id]) maps[p.game_id] = {}
-              maps[p.game_id][p.group_id] = p
-            })
-            setMyFocusPredMaps(maps)
-          })
-      })
+      .limit(3)
+    if (!data?.length) { setFocusGames([]); setFocusLoading(false); return }
+    const firstKO = data[0].kick_off_time
+    const games = data.filter(g => g.kick_off_time === firstKO)
+    setFocusGames(games)
+    setFocusLoading(false)
+    const { data: preds } = await supabase.from('predictions')
+      .select('pred_home, pred_away, is_auto, group_id, game_id')
+      .in('game_id', games.map(g => g.id))
+      .eq('user_id', user.id)
+    const maps = {}
+    preds?.forEach(p => {
+      if (!maps[p.game_id]) maps[p.game_id] = {}
+      maps[p.game_id][p.group_id] = p
+    })
+    setMyFocusPredMaps(maps)
   }, [user])
+
+  useEffect(() => {
+    fetchFocusGames()
+    const interval = setInterval(fetchFocusGames, 60_000)
+    return () => clearInterval(interval)
+  }, [fetchFocusGames])
 
   // ── Load predictions for all focus games (after KO — RLS reveals them) ──
   useEffect(() => {
