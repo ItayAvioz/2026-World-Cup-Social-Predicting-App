@@ -128,16 +128,13 @@ export default function Groups() {
     })
   }, [groups])
 
-  // ── Focus games (next upcoming or in-progress — up to 2 parallel) ──────
+  // ── Focus games (next upcoming or in-progress) ──────────────────────────
   // Logic: show unscored games only (score_home IS NULL).
-  // - Upcoming: shown as "next game" (no preds/stats until KO)
-  // - In-progress: shown with preds/stats once KO passes
-  // - 1 of 2 parallel finishes → dropped immediately, only remaining shown
-  // - Both finish → immediately shows next upcoming game
+  // - Live (past KO, no score): show ALL currently live games regardless of KO time
+  // - No live games: show next upcoming game(s) at the earliest future KO time
+  // - A live game finishes → score written → drops from query automatically
+  // - All live games finish → shows next upcoming game
   // Polls every 60s for automatic transitions.
-  // TODO: consider showing finished game for ~15 min after score is set so
-  // users have time to view group predictions before next game appears.
-  // Requires finished_at timestamp or kick_off_time + phase duration estimate.
   const fetchFocusGames = useCallback(async () => {
     if (!user) return
     // TODO: remove threeHoursAgo filter after test data cleanup.
@@ -150,10 +147,13 @@ export default function Groups() {
       .is('score_home', null)
       .gte('kick_off_time', threeHoursAgo)
       .order('kick_off_time')
-      .limit(3)
+      .limit(5)
     if (!data?.length) { setFocusGames([]); setFocusLoading(false); return }
-    const firstKO = data[0].kick_off_time
-    const games = data.filter(g => g.kick_off_time === firstKO)
+    const now = new Date()
+    const liveGames = data.filter(g => new Date(g.kick_off_time) <= now)
+    const games = liveGames.length > 0
+      ? liveGames
+      : data.filter(g => g.kick_off_time === data[0].kick_off_time)
     setFocusGames(games)
     setFocusLoading(false)
     const { data: preds } = await supabase.from('predictions')
