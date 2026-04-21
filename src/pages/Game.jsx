@@ -601,7 +601,7 @@ export default function Game() {
         {!pastKO && (
           <div className="gm-section">
             <div className="gm-section-head">
-              <span className="gm-section-label">Tournament Stats</span>
+              <span className="gm-section-label">Tournament Avg</span>
             </div>
             <div className="gm-section-body" style={{ paddingBottom:'.75rem' }}>
               <div className="gm-gstat-head">
