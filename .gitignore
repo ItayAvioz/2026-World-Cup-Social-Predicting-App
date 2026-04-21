@@ -1,8 +1,4 @@
-.claude/
 *.docx
-CLAUDE.md
-CLAUDE_CODE_TIPS.md
-FUTURE_FEATURES.md
 dist/
 node_modules/
 
