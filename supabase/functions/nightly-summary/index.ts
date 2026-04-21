@@ -1,4 +1,4 @@
-// nightly-summary v5
+// nightly-summary v14
 // Generates AI-powered nightly summaries per qualifying group using OpenAI gpt-4o-mini.
 // Triggered by pg_cron 150min after last kickoff of the day.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
@@ -523,6 +523,26 @@ serve(async (req) => {
     }))
     .sort((a, b) => b.pts - a.pts)
 
+  // 7d. All-time cumulative global rank per user (deduped by game — for display_data only, never sent to LLM)
+  const { data: allTimePreds } = await supabase
+    .from('predictions')
+    .select('user_id, game_id, points_earned')
+    .not('points_earned', 'is', null)
+
+  const allTimeUserGame: Record<string, Record<string, number>> = {}
+  // deno-lint-ignore no-explicit-any
+  for (const p of (allTimePreds ?? []) as any[]) {
+    const uid = p.user_id as string
+    const gid = p.game_id as string
+    if (!allTimeUserGame[uid]) allTimeUserGame[uid] = {}
+    allTimeUserGame[uid][gid] = Math.max(allTimeUserGame[uid][gid] ?? 0, p.points_earned ?? 0)
+  }
+  const allTimeSorted = Object.entries(allTimeUserGame)
+    .map(([uid, games]) => ({ uid, pts: Object.values(games).reduce((s, v) => s + v, 0) }))
+    .sort((a, b) => b.pts - a.pts)
+  const globalRankByUid: Record<string, number> = {}
+  allTimeSorted.forEach((u, i) => { globalRankByUid[u.uid] = i + 1 })
+
   // 8. Process each group sequentially
   let processed = 0
   let skipped   = 0
@@ -631,7 +651,20 @@ serve(async (req) => {
         continue
       }
 
-      // 8g. Test mode: write results back to prompt_versions row
+      // 8g. Write display_data — global ranks per member (UI-only, never part of LLM payload)
+      const globalRanks: Record<string, number> = {}
+      // deno-lint-ignore no-explicit-any
+      for (const m of (groupData.members ?? []) as any[]) {
+        const rank = globalRankByUid[m.user_id as string]
+        if (rank != null) globalRanks[m.username as string] = rank
+      }
+      await supabase
+        .from('ai_summaries')
+        .update({ display_data: { global_ranks: globalRanks } })
+        .eq('group_id', group.id)
+        .eq('date', date)
+
+      // 8h. Test mode: write results back to prompt_versions row
       if (testMode) {
         await supabase
           .from('prompt_versions')

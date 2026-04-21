@@ -58,6 +58,7 @@ export default function AiFeed() {
   const [nextGame,       setNextGame]       = useState(undefined) // undefined=loading, null=none
   const [dailyOpen,      setDailyOpen]      = useState({})     // { [summaryId]: bool }
   const [dailyData,      setDailyData]      = useState({})     // { [summaryId]: { loading, rows, error } }
+  const [totalOpen,      setTotalOpen]      = useState({})     // { [summaryId]: bool }
 
   useEffect(() => {
     loadGroups()
@@ -94,7 +95,7 @@ export default function AiFeed() {
     setSummariesError(null)
     const { data, error } = await supabase
       .from('ai_summaries')
-      .select('id, date, content, games_count, generated_at')
+      .select('id, date, content, games_count, generated_at, input_json, display_data')
       .eq('group_id', groupId)
       .order('date', { ascending: false })
       .limit(30)
@@ -167,6 +168,10 @@ export default function AiFeed() {
     }
     const rows = Object.values(byUser).sort((a, b) => b.pts - a.pts)
     setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows, error: null } }))
+  }
+
+  function toggleTotal(summaryId) {
+    setTotalOpen(prev => ({ ...prev, [summaryId]: !prev[summaryId] }))
   }
 
   function setReaction(summaryId, emoji) {
@@ -347,13 +352,21 @@ export default function AiFeed() {
                     </button>
                   )}
 
-                  {/* Daily standings toggle */}
-                  <button
-                    className="af-daily-toggle"
-                    onClick={() => toggleDaily(s.id, selectedId, s.date)}
-                  >
-                    {dailyOpen[s.id] ? '▲ Hide standings' : '📊 Day standings'}
-                  </button>
+                  {/* Daily + Total standings toggles */}
+                  <div className="af-standings-row">
+                    <button
+                      className="af-daily-toggle"
+                      onClick={() => toggleDaily(s.id, selectedId, s.date)}
+                    >
+                      {dailyOpen[s.id] ? '▲ Hide day' : '📊 Day standings'}
+                    </button>
+                    <button
+                      className="af-daily-toggle"
+                      onClick={() => toggleTotal(s.id)}
+                    >
+                      {totalOpen[s.id] ? '▲ Hide total' : '🏆 Total standings'}
+                    </button>
+                  </div>
 
                   {dailyOpen[s.id] && (
                     <div className="af-daily-table">
@@ -381,6 +394,43 @@ export default function AiFeed() {
                       )}
                     </div>
                   )}
+
+                  {totalOpen[s.id] && (() => {
+                    const lb = s.input_json?.leaderboard ?? []
+                    const globalRanks = s.display_data?.global_ranks ?? null
+                    return (
+                      <div className="af-daily-table">
+                        {lb.length === 0 ? (
+                          <div className="af-daily-loading">No data for this summary</div>
+                        ) : (
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Grp</th>
+                                <th>Player</th>
+                                <th>Total pts</th>
+                                {globalRanks && <th>Global</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lb.map((row, i) => (
+                                <tr key={row.user} className={i === 0 ? 'af-daily-top' : ''}>
+                                  <td>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}</td>
+                                  <td>{row.user}</td>
+                                  <td className="af-daily-pts">{row.total_pts}</td>
+                                  {globalRanks && (
+                                    <td style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>
+                                      {globalRanks[row.user] != null ? `#${globalRanks[row.user]}` : '—'}
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Footer: timestamp + share + reactions */}
                   <div className="af-card-footer">

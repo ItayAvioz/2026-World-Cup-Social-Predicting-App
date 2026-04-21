@@ -1216,7 +1216,8 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .af-reaction-btn.selected { background:rgba(245,197,24,.12); border-color:var(--accent); }
 .af-next-hint { text-align:center; padding:.85rem 1rem; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem; color:var(--muted); }
 .af-page { padding:1.25rem 1rem 5rem; max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:1rem; overflow-x:hidden; width:100%; box-sizing:border-box; }
-.af-daily-toggle { display:block; width:100%; background:none; border:none; border-top:1px solid var(--border); color:var(--muted); font-size:.75rem; font-family:'Inter',sans-serif; padding:.55rem 0 0; margin-top:.75rem; cursor:pointer; text-align:left; transition:color .15s; }
+.af-standings-row { display:flex; gap:.5rem; border-top:1px solid var(--border); margin-top:.75rem; padding-top:.55rem; }
+.af-daily-toggle { flex:1; background:none; border:none; color:var(--muted); font-size:.75rem; font-family:'Inter',sans-serif; padding:0; cursor:pointer; text-align:left; transition:color .15s; }
 .af-daily-toggle:hover { color:var(--text); }
 .af-daily-table { margin-top:.6rem; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
 .af-daily-table table { width:100%; border-collapse:collapse; font-size:.78rem; }
