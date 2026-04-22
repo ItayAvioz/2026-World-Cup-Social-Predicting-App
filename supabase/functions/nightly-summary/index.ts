@@ -1,4 +1,4 @@
-// nightly-summary v14
+// nightly-summary v16
 // Generates AI-powered nightly summaries per qualifying group using OpenAI gpt-4o-mini.
 // Triggered by pg_cron 150min after last kickoff of the day.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
@@ -534,26 +534,36 @@ serve(async (req) => {
   ])
 
   const userGroupPts: Record<string, Record<string, number>> = {}
+  const userGroupExact: Record<string, Record<string, number>> = {}
   // deno-lint-ignore no-explicit-any
   function addUGPts(uid: string, gid: string, pts: number) {
     if (!userGroupPts[uid]) userGroupPts[uid] = {}
     userGroupPts[uid][gid] = (userGroupPts[uid][gid] ?? 0) + pts
   }
   // deno-lint-ignore no-explicit-any
-  for (const p of (predTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
+  for (const p of (predTotals ?? []) as any[]) {
+    addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
+    if ((p.points_earned ?? 0) === 3) {
+      if (!userGroupExact[p.user_id]) userGroupExact[p.user_id] = {}
+      userGroupExact[p.user_id][p.group_id] = (userGroupExact[p.user_id][p.group_id] ?? 0) + 1
+    }
+  }
   // deno-lint-ignore no-explicit-any
   for (const p of (champTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
   // deno-lint-ignore no-explicit-any
   for (const p of (tsrTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
 
   const allUGPairs = Object.entries(userGroupPts).flatMap(([uid, groups]) =>
-    Object.entries(groups).map(([gid, pts]) => ({ uid, gid, pts }))
-  ).sort((a, b) => b.pts - a.pts)
+    Object.entries(groups).map(([gid, pts]) => ({
+      uid, gid, pts,
+      exact: userGroupExact[uid]?.[gid] ?? 0,
+    }))
+  ).sort((a, b) => b.pts - a.pts || b.exact - a.exact)
 
   const globalRankByUserGroup: Record<string, Record<string, number>> = {}
   let ugRank = 1
   for (let ri = 0; ri < allUGPairs.length; ri++) {
-    if (ri > 0 && allUGPairs[ri].pts < allUGPairs[ri - 1].pts) ugRank = ri + 1
+    if (ri > 0 && (allUGPairs[ri].pts !== allUGPairs[ri - 1].pts || allUGPairs[ri].exact !== allUGPairs[ri - 1].exact)) ugRank = ri + 1
     const { uid, gid } = allUGPairs[ri]
     if (!globalRankByUserGroup[uid]) globalRankByUserGroup[uid] = {}
     globalRankByUserGroup[uid][gid] = ugRank
