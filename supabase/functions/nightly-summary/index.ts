@@ -523,25 +523,41 @@ serve(async (req) => {
     }))
     .sort((a, b) => b.pts - a.pts)
 
-  // 7d. All-time cumulative global rank per user (deduped by game — for display_data only, never sent to LLM)
-  const { data: allTimePreds } = await supabase
-    .from('predictions')
-    .select('user_id, game_id, points_earned')
-    .not('points_earned', 'is', null)
+  // 7d. Global rank per (user × group) — same basis as global leaderboard (for display_data only, never sent to LLM)
+  const [{ data: predTotals }, { data: champTotals }, { data: tsrTotals }] = await Promise.all([
+    supabase.from('predictions').select('user_id, group_id, points_earned')
+      .not('points_earned', 'is', null).not('group_id', 'is', null),
+    supabase.from('champion_pick').select('user_id, group_id, points_earned')
+      .not('points_earned', 'is', null),
+    supabase.from('top_scorer_pick').select('user_id, group_id, points_earned')
+      .not('points_earned', 'is', null),
+  ])
 
-  const allTimeUserGame: Record<string, Record<string, number>> = {}
+  const userGroupPts: Record<string, Record<string, number>> = {}
   // deno-lint-ignore no-explicit-any
-  for (const p of (allTimePreds ?? []) as any[]) {
-    const uid = p.user_id as string
-    const gid = p.game_id as string
-    if (!allTimeUserGame[uid]) allTimeUserGame[uid] = {}
-    allTimeUserGame[uid][gid] = Math.max(allTimeUserGame[uid][gid] ?? 0, p.points_earned ?? 0)
+  function addUGPts(uid: string, gid: string, pts: number) {
+    if (!userGroupPts[uid]) userGroupPts[uid] = {}
+    userGroupPts[uid][gid] = (userGroupPts[uid][gid] ?? 0) + pts
   }
-  const allTimeSorted = Object.entries(allTimeUserGame)
-    .map(([uid, games]) => ({ uid, pts: Object.values(games).reduce((s, v) => s + v, 0) }))
-    .sort((a, b) => b.pts - a.pts)
-  const globalRankByUid: Record<string, number> = {}
-  allTimeSorted.forEach((u, i) => { globalRankByUid[u.uid] = i + 1 })
+  // deno-lint-ignore no-explicit-any
+  for (const p of (predTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
+  // deno-lint-ignore no-explicit-any
+  for (const p of (champTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
+  // deno-lint-ignore no-explicit-any
+  for (const p of (tsrTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
+
+  const allUGPairs = Object.entries(userGroupPts).flatMap(([uid, groups]) =>
+    Object.entries(groups).map(([gid, pts]) => ({ uid, gid, pts }))
+  ).sort((a, b) => b.pts - a.pts)
+
+  const globalRankByUserGroup: Record<string, Record<string, number>> = {}
+  let ugRank = 1
+  for (let ri = 0; ri < allUGPairs.length; ri++) {
+    if (ri > 0 && allUGPairs[ri].pts < allUGPairs[ri - 1].pts) ugRank = ri + 1
+    const { uid, gid } = allUGPairs[ri]
+    if (!globalRankByUserGroup[uid]) globalRankByUserGroup[uid] = {}
+    globalRankByUserGroup[uid][gid] = ugRank
+  }
 
   // 8. Process each group sequentially
   let processed = 0
@@ -651,11 +667,11 @@ serve(async (req) => {
         continue
       }
 
-      // 8g. Write display_data — global ranks per member (UI-only, never part of LLM payload)
+      // 8g. Write display_data — global ranks per member for this group (UI-only, never part of LLM payload)
       const globalRanks: Record<string, number> = {}
       // deno-lint-ignore no-explicit-any
       for (const m of (groupData.members ?? []) as any[]) {
-        const rank = globalRankByUid[m.user_id as string]
+        const rank = globalRankByUserGroup[m.user_id as string]?.[group.id]
         if (rank != null) globalRanks[m.username as string] = rank
       }
       await supabase

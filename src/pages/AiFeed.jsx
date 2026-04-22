@@ -137,36 +137,48 @@ export default function AiFeed() {
     nextDate.setDate(nextDate.getDate() + 1)
     const nextDateStr = nextDate.toISOString().slice(0, 10)
 
-    const { data: games, error: gErr } = await supabase
-      .from('games')
-      .select('id')
-      .gte('kick_off_time', `${date}T00:00:00Z`)
-      .lt('kick_off_time', `${nextDateStr}T00:00:00Z`)
+    const [{ data: members, error: mErr }, { data: games, error: gErr }] = await Promise.all([
+      supabase.from('group_members').select('user_id, profiles(username)').eq('group_id', groupId),
+      supabase.from('games').select('id')
+        .gte('kick_off_time', `${date}T00:00:00Z`)
+        .lt('kick_off_time', `${nextDateStr}T00:00:00Z`),
+    ])
+
+    if (mErr) {
+      setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows: [], error: mErr.message } }))
+      return
+    }
+
+    const allMembers = (members || []).map(m => ({
+      uid: m.user_id,
+      username: m.profiles?.username ?? '?',
+    }))
 
     if (gErr || !games?.length) {
-      setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows: [], error: null } }))
+      const rows = allMembers.map(m => ({ username: m.username, pts: 0 }))
+      setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows, error: null } }))
       return
     }
 
     const { data: preds, error: pErr } = await supabase
       .from('predictions')
-      .select('user_id, points_earned, profiles(username)')
+      .select('user_id, points_earned')
       .eq('group_id', groupId)
       .in('game_id', games.map(g => g.id))
-      .not('points_earned', 'is', null)
 
     if (pErr) {
       setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows: [], error: pErr.message } }))
       return
     }
 
-    const byUser = {}
+    const ptsByUser = {}
     for (const p of preds || []) {
-      const uid = p.user_id
-      if (!byUser[uid]) byUser[uid] = { username: p.profiles?.username ?? '?', pts: 0 }
-      byUser[uid].pts += p.points_earned ?? 0
+      ptsByUser[p.user_id] = (ptsByUser[p.user_id] ?? 0) + (p.points_earned ?? 0)
     }
-    const rows = Object.values(byUser).sort((a, b) => b.pts - a.pts)
+
+    const rows = allMembers
+      .map(m => ({ username: m.username, pts: ptsByUser[m.uid] ?? 0 }))
+      .sort((a, b) => b.pts - a.pts || a.username.localeCompare(b.username))
     setDailyData(prev => ({ ...prev, [summaryId]: { loading: false, rows, error: null } }))
   }
 
