@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09 — Game Page · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,.15); --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-landing: #1e3a5f; --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b; --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); } .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .step-item:hover { background: rgba(255,255,255,.04); } .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; } .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-landing { background: var(--layer-landing-text); } .dot-react { background: var(--layer-react-text); } .dot-supabase { background: var(--layer-supabase-text); } .dot-db { background: var(--layer-db-text); }
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; } .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; } .fm-box:hover { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); } .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high   { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low    { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done   { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+  .what-card { width: 100%; } .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; } .code-kw { color: #93c5fd; } .code-fn { color: #86efac; } .code-str { color: #fde68a; } .code-const { color: #f9a8d4; }
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in { color: #93c5fd; } .example-label.out { color: #86efac; } .example-label.err { color: #fca5a5; } .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 140px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); } .state-val.set { color: #86efac; } .state-val.warn { color: var(--gold); }
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); } .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">09 — Game Page</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-react">React App</span>
+    <span class="badge badge-supabase">Supabase</span>
+    <span class="badge badge-db">Database</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('pre')">Pre-Kickoff</button>
+  <button class="tab-btn" onclick="switchPath('reveal')">Post-Kickoff Reveal</button>
+  <button class="tab-btn" onclick="switchPath('stats')">Stats Blocks</button>
+  <button class="tab-btn" onclick="switchPath('knockout')">Knockout Display</button>
+  <button class="tab-btn" onclick="switchPath('rules')">&#128203; Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">&#9888; Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-react-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-react-text)">React App</div>
+          <div class="legend-desc">Game.jsx is a single page for one game. Reads game ID from URL params, resolves group context, fetches team stats, odds, and predictions. Handles predict widget, reveal, stat blocks, and knockout display.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-supabase-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-supabase-text)">Supabase / RLS</div>
+          <div class="legend-desc">RLS on predictions enforces the kickoff reveal: <code>kick_off_time &lt;= now()</code> must be true AND the viewer must share a group with the prediction owner. Server-side NOW() used — no client clock trust.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-db-text)">Database</div>
+          <div class="legend-desc">Tables: <code>games</code>, <code>team_tournament_stats</code>, <code>predictions</code>. Prediction upsert uses UNIQUE(user_id, game_id, group_id). Knockout fields: went_to_extra_time, et_score_home/away, went_to_penalties, penalty_score_home/away.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">&#8592; Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next &#8594;</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+
+  pre: {
+    label: 'Pre-Kickoff',
+    steps: [
+      {
+        num: 1,
+        label: 'Group resolution — URL or fallback',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'Game.jsx reads the game ID from the URL path (/game/:id) and the group context from ?group= query param. If no group param is present, it falls back to the user\'s first group.\n\nThe group context determines which group\'s predictions to show, which predict button to display, and how to scope the prediction upsert.',
+        code: `<span class="code-comment">// Game.jsx — resolve group context</span>
+<span class="code-kw">const</span> { id: gameId } = useParams()
+<span class="code-kw">const</span> [searchParams] = useSearchParams()
+
+<span class="code-kw">const</span> groupId =
+  searchParams.<span class="code-fn">get</span>(<span class="code-str">'group'</span>)   <span class="code-comment">// from URL param</span>
+  ?? user.groups?.[0]?.id      <span class="code-comment">// fallback: first group</span>
+  ?? <span class="code-kw">null</span>                    <span class="code-comment">// final fallback: no group</span>`,
+        db: [],
+        example: [
+          { label: 'URL with group', type: 'in',  val: '#/game/UUID?group=GROUP_UUID → groupId = GROUP_UUID' },
+          { label: 'No param', type: 'note', val: '#/game/UUID → groupId = user.groups[0].id (first group)' },
+          { label: 'No groups', type: 'err', val: 'groupId = null → predict widget hidden, join group prompt shown' },
+        ],
+        state: {
+          'group_from': 'URL param',
+          'fallback': 'first group',
+          'final': 'GROUP_UUID',
+        }
+      },
+      {
+        num: 2,
+        label: 'Team stats load — tournament accumulated',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'Before kickoff, Game.jsx shows tournament statistics for each team — results (W/D/L), goals scored/conceded, cards, corners. These accumulate across all games the team has played in this tournament.\n\nThe data comes from the team_tournament_stats table, synced by the football-api-sync Edge Function. If no stats exist yet (early tournament), the section shows a placeholder.',
+        code: `<span class="code-comment">// Game.jsx — fetch team tournament stats</span>
+<span class="code-kw">const</span> { data: teamStats } = <span class="code-kw">await</span> supabase
+  .<span class="code-fn">from</span>(<span class="code-str">'team_tournament_stats'</span>)
+  .<span class="code-fn">select</span>(<span class="code-str">'*'</span>)
+  .<span class="code-fn">in</span>(<span class="code-str">'team_code'</span>, [game.home_team, game.away_team])
+
+<span class="code-comment">// Fields: wins, draws, losses,</span>
+<span class="code-comment">//   goals_scored, goals_conceded,</span>
+<span class="code-comment">//   yellow_cards, red_cards, corners</span>`,
+        db: [
+          { table: 'team_tournament_stats', action: 'SELECT WHERE team_code IN [home_team, away_team]' }
+        ],
+        example: [
+          { label: 'Query', type: 'in',  val: 'team_codes: ["BRA", "ARG"]' },
+          { label: 'Result', type: 'out', val: '[ { team_code: "BRA", wins: 2, draws: 1, losses: 0, goals_scored: 5 }, { team_code: "ARG", ... } ]' },
+          { label: 'No data', type: 'note', val: 'teamStats = [] → show "No data yet" placeholder' },
+        ],
+        state: {
+          'home_stats': 'loaded',
+          'away_stats': 'loaded',
+        }
+      },
+      {
+        num: 3,
+        label: 'Odds display — Bet365 via API Football',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'Game.jsx reads odds directly from the games table — odds_home, odds_draw, odds_away are synced from Bet365 via the football-api-sync Edge Function. If odds are NULL (before sync), the UI shows "—" instead.\n\nOdds are displayed as decimal odds (e.g., 2.10). No external API call is made at render time — odds are pre-loaded into the DB by the EF.',
+        code: `<span class="code-comment">// Game.jsx — odds from games table (pre-synced)</span>
+<span class="code-kw">const</span> { data: game } = <span class="code-kw">await</span> supabase
+  .<span class="code-fn">from</span>(<span class="code-str">'games'</span>)
+  .<span class="code-fn">select</span>(<span class="code-str">'*, odds_home, odds_draw, odds_away'</span>)
+  .<span class="code-fn">eq</span>(<span class="code-str">'id'</span>, gameId)
+  .<span class="code-fn">single</span>()
+
+<span class="code-comment">// Render: odds_home ?? '—'</span>`,
+        db: [
+          { table: 'games', action: 'SELECT — includes odds_home, odds_draw, odds_away' }
+        ],
+        example: [
+          { label: 'With odds', type: 'out', val: '{ odds_home: 2.1, odds_draw: 3.4, odds_away: 3.8 }' },
+          { label: 'No odds', type: 'note', val: '{ odds_home: null } → shows "—" in UI' },
+        ],
+        state: {
+          'odds_home': '2.1',
+          'odds_draw': '3.4',
+          'odds_away': '3.8',
+        }
+      },
+      {
+        num: 4,
+        label: 'Predict widget — upsert with group scope',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'The predict widget shows two number inputs (home goals, away goals) and a Submit button. Submitting calls an upsert on the predictions table scoped to (user_id, game_id, group_id).\n\nThe UNIQUE constraint on (user_id, game_id, group_id) means the same user can submit a separate prediction per group for the same game — each group\'s prediction is independent.\n\nThe widget locks at kick_off_time — both client-side (new Date() >= kickoff) and enforced by RLS (INSERT/UPDATE blocked after kickoff).',
+        code: `<span class="code-comment">// Game.jsx — prediction upsert</span>
+<span class="code-kw">const</span> { error } = <span class="code-kw">await</span> supabase
+  .<span class="code-fn">from</span>(<span class="code-str">'predictions'</span>)
+  .<span class="code-fn">upsert</span>({
+    user_id:        user.id,
+    game_id:        gameId,
+    group_id:       groupId,
+    predicted_home: homeGoals,
+    predicted_away: awayGoals,
+  }, {
+    onConflict: <span class="code-str">'user_id,game_id,group_id'</span>
+  })`,
+        db: [
+          { table: 'predictions', action: 'UPSERT — insert or update on UNIQUE(user_id, game_id, group_id)' }
+        ],
+        example: [
+          { label: 'Submit', type: 'in',  val: '{ user_id: "abc", game_id: "g1", group_id: "gA", predicted_home: 2, predicted_away: 1 }' },
+          { label: 'Success', type: 'out', val: 'predictions row upserted. locked_at = kick_off_time.' },
+          { label: 'After KO', type: 'err', val: 'RLS blocks INSERT/UPDATE → error returned → toast shown' },
+        ],
+        state: {
+          'submitted': 'true',
+          'locked_at': 'kick_off_time',
+        }
+      }
+    ]
+  },
+
+  reveal: {
+    label: 'Post-Kickoff Reveal',
+    steps: [
+      {
+        num: 1,
+        label: 'RLS switches at kickoff — server-side now()',
+        layer: 'supabase',
+        file: 'predictions RLS policy',
+        what: 'The predictions table has a SELECT RLS policy that gates visibility on two conditions: (1) the game\'s kick_off_time must be in the past (using server-side NOW(), not client time), and (2) the viewer must share at least one group with the prediction owner (share_a_group() helper function).\n\nThis means predictions are private before kickoff — not even group members can see each other\'s picks until the game starts. After kickoff, group members can see all predictions for that game.',
+        code: `<span class="code-comment">-- predictions SELECT RLS policy</span>
+<span class="code-kw">CREATE POLICY</span> predictions_select_policy <span class="code-kw">ON</span> predictions
+  <span class="code-kw">FOR SELECT USING</span> (
+    user_id = auth.<span class="code-fn">uid</span>()               <span class="code-comment">← own prediction always visible</span>
+    <span class="code-kw">OR</span> (
+      kick_off_time <= <span class="code-fn">now</span>()            <span class="code-comment">← server-side NOW()</span>
+      <span class="code-kw">AND</span> <span class="code-fn">share_a_group</span>(user_id, auth.<span class="code-fn">uid</span>()) <span class="code-comment">← group check</span>
+    )
+  )`,
+        db: [
+          { table: 'predictions', action: 'SELECT — RLS enforces kickoff reveal + group membership' }
+        ],
+        example: [
+          { label: 'Before KO', type: 'err', val: 'Alice cannot see Bob\'s prediction (Bob is in same group). RLS blocks.' },
+          { label: 'After KO', type: 'out', val: 'Alice can see Bob\'s prediction. kick_off_time <= now() AND share_a_group() → true.' },
+        ],
+        state: {
+          'visible_to': 'group members only after kickoff',
+        }
+      },
+      {
+        num: 2,
+        label: 'Per-group predictions list display',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'After kickoff, Game.jsx fetches all visible predictions for this game and displays them grouped by group. If the user is in 2 groups, two separate sections appear — each labeled with the group name.\n\nEach section shows member rows: username, predicted scoreline, points earned (if game finished), and an AUTO badge if the prediction was auto-generated.',
+        code: `<span class="code-comment">// Game.jsx — group predictions list (post-kickoff)</span>
+{userGroups.<span class="code-fn">map</span>(group => (
+  <span class="code-const">&lt;section</span> key={group.id}<span class="code-const">&gt;</span>
+    <span class="code-const">&lt;h3&gt;</span>{group.name}<span class="code-const">&lt;/h3&gt;</span>
+    {predictions
+      .<span class="code-fn">filter</span>(p => p.group_id === group.id)
+      .<span class="code-fn">map</span>(p => (
+        <span class="code-const">&lt;PredRow</span> key={p.id} pred={p}
+          isMe={p.user_id === user.id}
+        <span class="code-const">/&gt;</span>
+      ))}
+  <span class="code-const">&lt;/section&gt;</span>
+))}`,
+        db: [],
+        example: [
+          { label: 'Friends group', type: 'out', val: 'Alice: 2-1  Bob: 1-0  Carol: AUTO 3-2' },
+          { label: 'Work group', type: 'out', val: 'Alice: 2-1  Dave: 0-0  Eve: 1-1' },
+        ],
+        state: {
+          'groups': '2',
+          'each_with_own_predictions': 'true',
+        }
+      },
+      {
+        num: 3,
+        label: 'AUTO badge — is_auto field display',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'Predictions generated by the auto-predict pg_cron job have is_auto = true. Game.jsx shows an "AUTO" badge next to these predictions so group members know the person didn\'t manually predict.\n\nAuto predictions earn points the same as manual ones — is_auto is purely a display flag. The badge helps explain why someone\'s prediction looks random.',
+        code: `<span class="code-comment">// Game.jsx — AUTO badge</span>
+<span class="code-const">&lt;div</span> className="pred-row"<span class="code-const">&gt;</span>
+  <span class="code-const">&lt;span&gt;</span>{pred.username}<span class="code-const">&lt;/span&gt;</span>
+  <span class="code-const">&lt;span&gt;</span>{pred.predicted_home}-{pred.predicted_away}<span class="code-const">&lt;/span&gt;</span>
+  {pred.is_auto && (
+    <span class="code-const">&lt;span</span> className="badge-auto"<span class="code-const">&gt;</span>AUTO<span class="code-const">&lt;/span&gt;</span>
+  )}
+<span class="code-const">&lt;/div&gt;</span>`,
+        db: [],
+        example: [
+          { label: 'Manual pred', type: 'out', val: 'Bob: 1-0  (no badge)' },
+          { label: 'Auto pred', type: 'out', val: 'Carol: 3-2  AUTO  (badge shown)' },
+        ],
+        state: {
+          'auto_preds': '2',
+          'manual_preds': '6',
+        }
+      }
+    ]
+  },
+
+  stats: {
+    label: 'Stats Blocks',
+    steps: [
+      {
+        num: 1,
+        label: 'Prediction distribution — group + global',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'After kickoff, Game.jsx shows two stat blocks side by side: group stats (predictions from the current group) and global stats (all predictions across all groups).\n\nEach block shows: outcome split (home win / draw / away win as count and %), average predicted goals, most popular scoreline, and surprise pickers (users who went against the majority outcome).',
+        code: `<span class="code-comment">// Game.jsx — two stat blocks side by side</span>
+<span class="code-comment">// After kickoff: group stats + global stats</span>
+
+<span class="code-const">&lt;div</span> className="stats-row"<span class="code-const">&gt;</span>
+  <span class="code-const">&lt;StatBlock</span>
+    title="Your Group"
+    preds={groupPredictions}   <span class="code-comment">← filtered by group_id</span>
+  <span class="code-const">/&gt;</span>
+  <span class="code-const">&lt;StatBlock</span>
+    title="Global"
+    preds={allPredictions}     <span class="code-comment">← all visible predictions</span>
+  <span class="code-const">/&gt;</span>
+<span class="code-const">&lt;/div&gt;</span>`,
+        db: [],
+        example: [
+          { label: 'Group', type: 'out', val: '{ home_win: "60%", draw: "20%", away_win: "20%", avg_goals: 2.4 }' },
+          { label: 'Global', type: 'out', val: '{ home_win: "55%", draw: "25%", away_win: "20%", avg_goals: 2.1 }' },
+        ],
+        state: {
+          'group_home_win': '60%',
+          'global_home_win': '55%',
+        }
+      },
+      {
+        num: 2,
+        label: 'Outcome split — computed client-side',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'The outcome split (home win / draw / away win percentages) is computed client-side from the fetched predictions array. Game.jsx counts how many predictions fall into each outcome bucket and divides by total.\n\nThis avoids a separate DB query for stats — the predictions are already fetched for the list view, so the stats are derived from the same data.',
+        code: `<span class="code-comment">// Game.jsx — stat calculation from fetched preds</span>
+<span class="code-kw">const</span> homeWins = preds.<span class="code-fn">filter</span>(p =>
+  p.predicted_home > p.predicted_away
+).length
+
+<span class="code-kw">const</span> draws = preds.<span class="code-fn">filter</span>(p =>
+  p.predicted_home === p.predicted_away
+).length
+
+<span class="code-kw">const</span> awayWins = preds.length - homeWins - draws
+
+<span class="code-kw">const</span> pct = (n) => <span class="code-fn">Math.round</span>(n / preds.length * 100) + <span class="code-str">'%'</span>`,
+        db: [],
+        example: [
+          { label: 'Input', type: 'in',  val: '10 predictions total: 6 home wins, 2 draws, 2 away wins' },
+          { label: 'Output', type: 'out', val: '60% / 20% / 20%' },
+        ],
+        state: {
+          'outcome_split': 'counted client-side from fetched predictions',
+        }
+      },
+      {
+        num: 3,
+        label: 'Most popular scoreline',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'The most popular scoreline is found by grouping predictions by (predicted_home + "-" + predicted_away) and finding the group with the highest count.\n\nThis is a client-side reduce over the already-fetched predictions array.',
+        code: `<span class="code-comment">// Game.jsx — most popular scoreline</span>
+<span class="code-kw">const</span> counts = preds.<span class="code-fn">reduce</span>((acc, p) => {
+  <span class="code-kw">const</span> key = p.predicted_home + <span class="code-str">'-'</span> + p.predicted_away
+  acc[key] = (acc[key] || 0) + 1
+  <span class="code-kw">return</span> acc
+}, {})
+
+<span class="code-kw">const</span> topScore = <span class="code-fn">Object.entries</span>(counts)
+  .<span class="code-fn">sort</span>(([,a], [,b]) => b - a)[0]`,
+        db: [],
+        example: [
+          { label: 'Counts', type: 'in',  val: '{ "1-0": 4, "2-0": 2, "2-1": 3, "0-0": 1 }' },
+          { label: 'Winner', type: 'out', val: 'most_popular: "1-0"  count: 4  pct: "40%"' },
+        ],
+        state: {
+          'most_popular': '1-0',
+          'count': '4',
+          'pct': '40%',
+        }
+      }
+    ]
+  },
+
+  knockout: {
+    label: 'Knockout Display',
+    steps: [
+      {
+        num: 1,
+        label: 'ET detection — went_to_extra_time flag',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'For knockout games that went to extra time, Game.jsx checks went_to_extra_time boolean. If true, it displays the et_score_home and et_score_away alongside the base 90-min score.\n\nThe base score (score_home/away) is always 90-min only and never changes. The ET score (et_score_home/away) shows the score after extra time (which includes the 90-min goals). Both are displayed.',
+        code: `<span class="code-comment">// Game.jsx — ET display</span>
+<span class="code-kw">if</span> (game.went_to_extra_time) {
+  <span class="code-comment">// Show ET score below the 90-min score</span>
+  <span class="code-comment">// e.g. "1-1 (90') | 2-1 (AET)"</span>
+  <span class="code-kw">return</span> (
+    <span class="code-const">&lt;div&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>{game.score_home}-{game.score_away} (90&apos;)<span class="code-const">&lt;/span&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>{game.et_score_home}-{game.et_score_away} (AET)<span class="code-const">&lt;/span&gt;</span>
+    <span class="code-const">&lt;/div&gt;</span>
+  )
+}`,
+        db: [],
+        example: [
+          { label: 'ET game', type: 'in',  val: '{ score_home: 1, score_away: 1, went_to_extra_time: true, et_score_home: 2, et_score_away: 1 }' },
+          { label: 'Display', type: 'out', val: '"1-1 (90\') | 2-1 (AET)"' },
+        ],
+        state: {
+          'et_score': '1-1 (AET)',
+          'base_score': '1-1',
+        }
+      },
+      {
+        num: 2,
+        label: 'Penalties display — went_to_penalties flag',
+        layer: 'react',
+        file: 'src/pages/Game.jsx',
+        what: 'If a game went to penalties, Game.jsx shows the penalty shootout score additionally. The display stacks: 90-min score → ET score (if applicable) → penalty shootout score.\n\nThe knockout_winner field shows who ultimately won. This is what champion_pick points are based on (not the ET or pen score).',
+        code: `<span class="code-comment">// Game.jsx — penalties display</span>
+<span class="code-kw">if</span> (game.went_to_penalties) {
+  <span class="code-comment">// e.g. "1-1 (90') | 1-1 (AET) | Pens: 4-3"</span>
+  <span class="code-kw">return</span> (
+    <span class="code-const">&lt;div&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>{game.score_home}-{game.score_away} (90&apos;)<span class="code-const">&lt;/span&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>{game.et_score_home}-{game.et_score_away} (AET)<span class="code-const">&lt;/span&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>Pens: {game.penalty_score_home}-{game.penalty_score_away}<span class="code-const">&lt;/span&gt;</span>
+      <span class="code-const">&lt;span&gt;</span>Winner: {game.knockout_winner}<span class="code-const">&lt;/span&gt;</span>
+    <span class="code-const">&lt;/div&gt;</span>
+  )
+}`,
+        db: [],
+        example: [
+          { label: 'Pens game', type: 'in',  val: '{ score: 1-1, went_to_penalties: true, penalty_home: 4, penalty_away: 3, knockout_winner: "BRA" }' },
+          { label: 'Display', type: 'out', val: '"1-1 (90\') | 1-1 (AET) | Pens: 4-3 | Winner: BRA"' },
+        ],
+        state: {
+          'pens': '4-3',
+          'winner': 'home via pens',
+        }
+      },
+      {
+        num: 3,
+        label: 'Prediction scoring uses 90-min only',
+        layer: 'db',
+        file: 'fn_update_points / schema',
+        what: 'Prediction points are always computed from score_home and score_away (90-min score only). Extra time and penalty scores are completely ignored by the scoring function.\n\nThis means a prediction of 1-1 earns 3pt for a game that ended 1-1 after 90 minutes and then went to penalties (home team wins 4-3). The 90-min score is what matters for prediction scoring.\n\nThis is intentional: predictions are about the 90-min result, not the overall match winner.',
+        code: `<span class="code-comment">-- fn_update_points: only uses score_home/away (90-min)</span>
+<span class="code-kw">IF</span> predicted_home = score_home <span class="code-kw">AND</span> predicted_away = score_away
+<span class="code-kw">THEN</span>
+  points := 3   <span class="code-comment">← 90-min exact score</span>
+<span class="code-comment">-- et_score_home/away, penalty_score_home/away</span>
+<span class="code-comment">-- are NEVER consulted in scoring logic</span>`,
+        db: [],
+        example: [
+          { label: 'Predicted', type: 'in',  val: '1-1 (draw)' },
+          { label: '90-min', type: 'in',  val: 'score: 1-1 (goes to AET, pens)' },
+          { label: 'Points', type: 'out', val: '3pt (exact 90-min score — pens result ignored)' },
+        ],
+        state: {
+          'predicted': '1-1',
+          'score_90': '1-1',
+          'points': '3',
+          'et_score': 'ignored for points',
+        }
+      }
+    ]
+  }
+}
+
+const ERROR_ROWS = [
+  { section: 'Pre-Kickoff — Group Resolution' },
+  { location: 'group resolution:null', name: 'No group → predictions not scoped', when: 'User not in any group views game page', status: 'partial', priority: 'medium', handling: 'groupId = null → upsert would fail (group_id NOT NULL constraint). Predict widget should be hidden but may show without group context.', fix: 'When groupId is null, hide predict widget and show "Join a group to predict this game" prompt.' },
+
+  { section: 'Pre-Kickoff — Team Stats & Odds' },
+  { location: 'team_stats:missing', name: 'Team has no stats row yet', when: 'Early tournament — no games played yet', status: 'partial', priority: 'medium', handling: 'teamStats = [] → component may crash or show empty. No explicit empty state handling confirmed.', fix: 'Show "No tournament data yet" gracefully when teamStats array is empty for either team.' },
+  { location: 'odds:missing', name: 'game.odds_home is null — before sync', when: 'Odds not yet synced for this game', status: 'ok', priority: 'done', handling: 'UI renders odds_home ?? "—" . Shows dash instead of null/undefined. No error.', fix: null },
+
+  { section: 'Post-Kickoff — RLS Reveal' },
+  { location: 'RLS reveal:early', name: 'Member sees prediction before kickoff', when: 'Client clock ahead of server clock', status: 'ok', priority: 'done', handling: 'RLS uses server-side NOW() — client clock drift cannot bypass this. Supabase server time is authoritative.', fix: null },
+  { location: 'upsert:conflict', name: 'Prediction upsert fails — onConflict wrong', when: 'onConflict string does not match UNIQUE constraint name', status: 'ok', priority: 'done', handling: 'onConflict: "user_id,game_id,group_id" matches the UNIQUE constraint exactly. Upsert works correctly.', fix: null },
+  { location: 'auto_badge:missing', name: 'Auto prediction not showing AUTO badge', when: 'is_auto field not included in SELECT', status: 'partial', priority: 'low', handling: 'If predictions SELECT does not include is_auto column, pred.is_auto will be undefined and badge will not render.', fix: 'Ensure is_auto is explicitly included in the predictions SELECT query.' },
+
+  { section: 'Stats Blocks' },
+  { location: 'stats:global_scope', name: 'Global stats include non-member predictions', when: 'By design — global block shows all users', status: 'ok', priority: 'done', handling: 'Global stats are shown separately from group stats. The global block reads all predictions visible after kickoff (any user who shares a group with the viewer, via RLS).', fix: null },
+
+  { section: 'Knockout Display' },
+  { location: 'knockout:et_score', name: 'Showing et_score_home as main score', when: 'Wrong display logic — ET score used as primary', status: 'ok', priority: 'done', handling: 'Game.jsx checks went_to_extra_time before showing ET score. score_home/away is always displayed first as the 90-min result.', fix: null },
+  { location: 'ET scoring:confusion', name: 'User thinks ET score is what points compare against', when: 'UX confusion on penalty-decided games', status: 'partial', priority: 'low', handling: 'No tooltip explaining the scoring basis. Users may be confused why a 1-1 prediction earned 3pt on a game their team "lost".', fix: 'Add a tooltip or inline note: "Points based on 90-min score only" visible on knockout games.' },
+
+  { section: 'Navigation' },
+  { location: 'navigation:group_url', name: 'Game opened without ?group= param', when: 'Direct link shared without group context', status: 'partial', priority: 'medium', handling: 'Defaults to user.groups[0].id. If that is the wrong group, the user sees the wrong group\'s predictions.', fix: 'Show a group selector dropdown at the top of Game.jsx so user can switch group context without navigating away.' },
+]
+
+const state = { path: 'pre', stepIndex: 0 }
+function currentSteps() { return PATHS[state.path].steps }
+function currentStep() { return currentSteps()[state.stepIndex] }
+
+function renderSidebar() {
+  const steps = currentSteps()
+  document.getElementById('step-list').innerHTML = steps.map((s, i) => {
+    const active = i === state.stepIndex ? ' active' : ''
+    return `<div class="step-item${active}" onclick="selectStep(${i})">
+      <div class="step-layer-dot dot-${s.layer}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`
+  }).join('')
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function renderDetail() {
+  const s = currentStep()
+  const steps = currentSteps()
+  const content = document.getElementById('detail-content')
+
+  const stateRows = Object.entries(s.state).map(([k, v]) => {
+    let cls = 'state-val'
+    if (v === 'null' || v === 'false' || v === 'ignored for points') cls += ' null'
+    else if (String(v).includes('true') || String(v).includes('loaded') || String(v).includes('✓')) cls += ' set'
+    return `<div class="state-row"><span class="state-key">${escHtml(k)}</span><span class="${cls}">${escHtml(v)}</span></div>`
+  }).join('')
+
+  const dbContent = s.db.length === 0
+    ? `<div class="db-none">No direct DB operation at this step</div>`
+    : s.db.map(op => `<div class="db-row"><span class="db-table">${op.table}</span><span class="db-action">${escHtml(op.action)}</span></div>`).join('')
+
+  const layerLabels = { landing: 'Landing (Vanilla JS)', react: 'React App', supabase: 'Supabase / RLS', db: 'Database' }
+  const layerBadge = `<span class="badge badge-${s.layer}" style="margin-left:.5rem">${layerLabels[s.layer]}</span>`
+
+  const flowNodes = steps.map((st, i) => {
+    const isCurrent = i === state.stepIndex
+    const shortLabel = st.label.length > 18 ? st.label.slice(0, 16) + '…' : st.label
+    const arrow = i < steps.length - 1 ? `<div class="fm-arrow">→</div>` : ''
+    return `<div class="fm-node" onclick="selectStep(${i})" title="${st.label}">
+      <div class="fm-box ${st.layer}${isCurrent ? ' current' : ''}">${shortLabel}</div>
+      <div class="fm-num">${st.num}</div>
+    </div>${arrow}`
+  }).join('')
+
+  content.innerHTML = `
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow map — click any step</div>
+      <div class="flowmap">${flowNodes}</div>
+    </div>
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label} ${layerBadge}</div>
+        <div class="step-header-file">${s.file}</div>
+      </div>
+    </div>
+    <div class="card what-card">
+      <div class="card-title">What happens</div>
+      <div class="what-text">${s.what.replace(/\n/g, '<br>')}</div>
+    </div>
+    <div class="card code-card">
+      <div class="card-title">Key code</div>
+      <div class="code-block">${s.code}</div>
+    </div>
+    <div class="card example-card">
+      <div class="card-title">Example</div>
+      ${(s.example || []).map(ex => `<div class="example-row"><span class="example-label ${ex.type}">${ex.label}</span><div class="example-val">${escHtml(ex.val)}</div></div>`).join('')}
+    </div>
+    <div class="card db-card">
+      <div class="card-title">Database operation</div>
+      <div class="db-op">${dbContent}</div>
+    </div>
+    <div class="card state-card">
+      <div class="card-title">State inspector — at this step</div>
+      <div class="state-grid">${stateRows}</div>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = `Step ${state.stepIndex + 1} of ${steps.length}`
+  document.getElementById('prev-btn').disabled = state.stepIndex === 0
+  document.getElementById('next-btn').disabled = state.stepIndex === steps.length - 1
+  updatePrompt()
+}
+
+function updatePrompt() {
+  const s = currentStep()
+  document.getElementById('prompt-text').textContent =
+    `Game page — ${PATHS[state.path].label} — Step ${s.num}: "${s.label}" (${s.file}). Layer: ${s.layer}.`
+}
+
+function renderAll() { renderSidebar(); renderDetail() }
+
+function renderRules() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">Business rules, sync rules, RLS policies, and SDK patterns for the Game page.</div>
+    </div>`
+  document.getElementById('detail-content').innerHTML = `
+    <div id="tab-rules" style="padding:24px; overflow-y:auto; width:100%;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px;">
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128208; Business Logic</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li>Group resolved from: URL <code>?group=UUID</code> param → first of user's groups → null (ungrouped)</li>
+            <li><code>score_home/away</code> = 90-min score ONLY — never ET or penalties. Displayed as the base score.</li>
+            <li>ET score shown as "AET: X–Y" if <code>went_to_extra_time = true</code>; penalty score shown as "Pens: A–B" if <code>went_to_penalties = true</code></li>
+            <li><code>knockout_winner</code> = actual winner (after ET/pens) — NOT used for prediction scoring, only for champion/top-scorer trigger</li>
+            <li>Pre-kickoff: shows team tournament stats + odds + predict widget</li>
+            <li>Post-kickoff: RLS opens group members' predictions; stats blocks (group + global) appear</li>
+            <li>Member predictions shown per-group — each group section shows its own members' picks</li>
+            <li><code>is_auto</code> badge: shown on predictions auto-generated at kickoff by pg_cron</li>
+          </ul>
+        </div>
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128260; Sync Rules</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li>Game data fetched on mount (no polling — score updated by EF, not real-time)</li>
+            <li>Team stats fetched on mount via <code>team_tournament_stats</code> table</li>
+            <li>Predictions re-fetched after user submits (to refresh the group view)</li>
+            <li>Odds: read from <code>games.odds_home/draw/away</code> — updated by football-api-sync EF pre-kickoff</li>
+            <li>Post-kickoff predictions: React re-fetches when <code>now() &gt; kick_off_time</code> (RLS allows it at that point)</li>
+          </ul>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128274; RLS Policies</h3>
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="border-bottom:1px solid #333;">
+              <th style="text-align:left; padding:6px 8px; color:#888;">Table</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">Op</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">USING / WITH CHECK</th>
+            </tr></thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>predictions</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">INSERT</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>auth.uid() = user_id AND kick_off_time &gt; now()</code></td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>predictions</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">UPDATE</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>auth.uid() = user_id AND kick_off_time &gt; now()</code></td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>predictions</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT (own)</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>auth.uid() = user_id</code></td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>predictions</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT (group reveal)</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>kick_off_time &lt;= now() AND share_a_group(user_id, auth.uid())</code></td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>team_tournament_stats</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">public</td></tr>
+              <tr><td style="padding:6px 8px;"><code>games</code></td><td style="padding:6px 8px;">SELECT</td><td style="padding:6px 8px;">public</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128295; SDK Calls</h3>
+          <pre style="margin:0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:4px; padding:16px; overflow-x:auto; font-size:12px; line-height:1.6; color:#e2e8f0;">// Fetch game + scores
+const { data: game } = await supabase.from('games').select('*').eq('id', gameId).single()
+
+// Fetch team tournament stats
+const { data: stats } = await supabase.from('team_tournament_stats')
+  .select('*').in('team_code', [game.home_team, game.away_team])
+
+// Upsert prediction
+await supabase.from('predictions').upsert(
+  { user_id: user.id, game_id: gameId, group_id: groupId, predicted_home, predicted_away },
+  { onConflict: 'user_id,game_id,group_id' }
+)
+
+// Fetch group predictions (post-kickoff)
+const { data: groupPreds } = await supabase
+  .from('predictions')
+  .select('user_id, predicted_home, predicted_away, points_earned, is_auto, profiles(username)')
+  .eq('game_id', gameId).eq('group_id', groupId)
+
+// Fetch global predictions (for stat blocks)
+const { data: globalPreds } = await supabase
+  .from('predictions')
+  .select('predicted_home, predicted_away')
+  .eq('game_id', gameId)</pre>
+        </div>
+      </div>
+    </div>`
+  document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'Game page — Rules & SDK reference: business logic, sync rules, RLS policies, and SDK call patterns.'
+}
+
+function switchPath(path) {
+  state.path = path; state.stepIndex = 0
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    const paths = ['pre', 'reveal', 'stats', 'knockout', 'rules', 'errors']
+    btn.classList.toggle('active', paths[i] === path)
+  })
+  if (path === 'errors') renderErrors()
+  else if (path === 'rules') renderRules()
+  else renderAll()
+}
+
+function selectStep(i) { state.stepIndex = i; renderAll() }
+function nextStep() { if (state.stepIndex < currentSteps().length - 1) { state.stepIndex++; renderAll() } }
+function prevStep() { if (state.stepIndex > 0) { state.stepIndex--; renderAll() } }
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(() => {
+    const btn = document.querySelector('.copy-btn'); const orig = btn.textContent
+    btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = orig, 1500)
+  })
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextStep()
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevStep()
+})
+
+function renderErrors() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">All error points in Game page — pre-kickoff, reveal, stats, knockout.</div>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Status</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-ok">Handled</span><span style="font-size:.7rem;color:var(--muted)">works correctly</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-partial">Partial</span><span style="font-size:.7rem;color:var(--muted)">incomplete handling</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-missing">Missing</span><span style="font-size:.7rem;color:var(--muted)">no handling</span></div>
+        <div style="margin-top:.75rem;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Priority</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-high">High</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-medium">Medium</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-low">Low</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-done">Done ✓</span></div>
+      </div>
+    </div>`
+
+  const rows = ERROR_ROWS.map(row => {
+    if (row.section) return `<tr class="eh-section-row"><td colspan="5">${row.section}</td></tr>`
+    const statusPill = row.status === 'ok' ? `<span class="eh-pill pill-ok">Handled</span>` : row.status === 'partial' ? `<span class="eh-pill pill-partial">Partial</span>` : `<span class="eh-pill pill-missing">Missing</span>`
+    const prioPill = row.priority === 'done' ? `<span class="eh-pill prio-done">Done ✓</span>` : row.priority === 'high' ? `<span class="eh-pill prio-high">High</span>` : row.priority === 'medium' ? `<span class="eh-pill prio-medium">Medium</span>` : `<span class="eh-pill prio-low">Low</span>`
+    const fixCell = row.fix ? `<span class="eh-fix">${escHtml(row.fix)}</span>` : `<span style="color:var(--faint);font-size:.7rem;font-style:italic">—</span>`
+    return `<tr>
+      <td><span class="eh-location">${row.location}</span></td>
+      <td><div class="eh-error-name">${row.name}</div><div class="eh-error-desc">${escHtml(row.when)}</div></td>
+      <td>${statusPill}</td>
+      <td style="max-width:260px"><div class="eh-error-desc">${escHtml(row.handling)}</div></td>
+      <td>${prioPill}<div style="margin-top:.35rem">${fixCell}</div></td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="eh-page"><table class="eh-table">
+      <thead><tr>
+        <th style="min-width:140px">Location</th>
+        <th style="min-width:180px">Error / Scenario</th>
+        <th style="min-width:90px">Status</th>
+        <th style="min-width:220px">Current Handling</th>
+        <th style="min-width:200px">Priority &amp; Fix</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`
+
+  document.getElementById('nav-counter').textContent = `${ERROR_ROWS.filter(r => !r.section).length} error points`
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent =
+    'Game page error audit — ' +
+    ERROR_ROWS.filter(r => r.status === 'ok').length + ' handled, ' +
+    ERROR_ROWS.filter(r => r.status === 'partial').length + ' partial, ' +
+    ERROR_ROWS.filter(r => r.status === 'missing').length + ' missing.'
+}
+
+renderAll()
+</script>
+</body>
+</html>

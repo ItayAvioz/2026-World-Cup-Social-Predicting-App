@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10 — Game Data Sync · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08);
+    --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,.15);
+    --text: #f0f0f0;
+    --muted: #888;
+    --faint: #555;
+
+    --layer-landing: #1e3a5f;
+    --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a;
+    --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b;
+    --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b;
+    --layer-db-text: #c4b5fd;
+    --layer-ef: #3b2a1f;
+    --layer-ef-text: #fbbf24;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+  .badge-ef       { background: var(--layer-ef);       color: var(--layer-ef-text); }
+
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 0; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .step-item:hover { background: rgba(255,255,255,.04); }
+  .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; }
+  .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-db { background: var(--layer-db-text); }
+  .dot-ef { background: var(--layer-ef-text); }
+
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; }
+  .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.db  { background: var(--layer-db);  color: var(--layer-db-text);  border-color: rgba(196,181,253,.15); }
+  .fm-box.ef  { background: var(--layer-ef);  color: var(--layer-ef-text);  border-color: rgba(251,191,36,.15); }
+  .fm-box.current { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fm-box:hover { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); }
+  .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend { display: flex; gap: .75rem; flex-wrap: wrap; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: .72rem; }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok      { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12);  color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high    { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium  { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low     { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done    { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+
+  .what-card { width: 100%; }
+  .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; }
+  .code-kw  { color: #93c5fd; }
+  .code-fn  { color: #86efac; }
+  .code-str { color: #fde68a; }
+  .code-const { color: #f9a8d4; }
+
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in   { color: #93c5fd; }
+  .example-label.out  { color: #86efac; }
+  .example-label.err  { color: #fca5a5; }
+  .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 160px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); }
+  .state-val.set  { color: #86efac; }
+  .state-val.warn { color: var(--gold); }
+
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">10 — Game Data Sync (Edge Function)</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-db">Database</span>
+    <span class="badge badge-ef">Edge Function</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('trigger')">Trigger + Boot</button>
+  <button class="tab-btn" onclick="switchPath('fetch')">API Fetch</button>
+  <button class="tab-btn" onclick="switchPath('upsert')">Upsert to DB</button>
+  <button class="tab-btn" onclick="switchPath('errorgroups')">Error Groups</button>
+  <button class="tab-btn" onclick="switchPath('rules')">&#128203; Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-db-text)">Database (PostgreSQL)</div>
+          <div class="legend-desc">pg_cron schedules the sync. Supabase Postgres stores all game data, scores, stats, and odds.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-ef-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-ef-text)">Edge Function (Deno)</div>
+          <div class="legend-desc"><code>football-api-sync/index.ts</code> — TypeScript running on Deno. Fetches from api-football.com, parses, and upserts to Supabase. v24 ACTIVE.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+  trigger: {
+    label: 'Trigger + Boot',
+    steps: [
+      {
+        num: 1, label: 'pg_cron fires', layer: 'db', file: 'supabase/migrations/',
+        what: 'A pg_cron job is scheduled in the database to call the football-api-sync Edge Function daily at 03:00 UTC. The cron uses net.http_post() (pg_net extension) to fire an HTTP POST to the EF URL. This runs server-side in Postgres — no external trigger needed.',
+        code: `<span class="code-comment">-- Migration: schedule daily sync</span>
+<span class="code-kw">SELECT</span> cron.schedule(
+  <span class="code-str">'football-api-sync'</span>,
+  <span class="code-str">'0 3 * * *'</span>,        <span class="code-comment">-- daily 03:00 UTC</span>
+  <span class="code-str">$$SELECT net.http_post(
+    url := EF_URL,
+    headers := '{"Authorization": "Bearer SERVICE_KEY"}'::jsonb,
+    body := '{}'::jsonb
+  )$$</span>
+)`,
+        example: [
+          { label: 'Schedule', type: 'in',  val: 'Cron: "0 3 * * *" → fires daily at 03:00 UTC' },
+          { label: 'HTTP call', type: 'out', val: 'POST https://…supabase.co/functions/v1/football-api-sync\nAuthorization: Bearer <service_role_key>' },
+          { label: 'Failure', type: 'err', val: 'If Supabase project is paused → net.http_post silently fails\nCheck pg_cron logs in Supabase dashboard' },
+        ],
+        db: [{ table: 'cron.job', action: 'Scheduled — fires daily 03:00 UTC via net.http_post' }],
+        state: { 'cron': '"0 3 * * *" (daily 03:00 UTC)', 'trigger': 'HTTP POST to EF URL', 'auth': 'service_role_key in Authorization header' }
+      },
+      {
+        num: 2, label: 'EF boots + authenticates', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'The Edge Function receives the HTTP POST. It first checks the Authorization header — must be "Bearer <service_role_key>". If the key is wrong or missing, it returns 401 immediately. The service key is stored in Supabase vault and injected as an environment variable at runtime.',
+        code: `<span class="code-kw">Deno</span>.serve(<span class="code-kw">async</span> (req) => {
+  <span class="code-kw">const</span> authHeader = req.headers.get(<span class="code-str">'Authorization'</span>)
+  <span class="code-kw">if</span> (authHeader !== <span class="code-str">\`Bearer \${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}\`</span>) {
+    <span class="code-kw">return new</span> Response(<span class="code-str">'Unauthorized'</span>, { status: <span class="code-const">401</span> })
+  }
+
+  <span class="code-comment">// Create supabase client with service role</span>
+  <span class="code-kw">const</span> supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+  <span class="code-comment">// Continue with sync logic...</span>
+})`,
+        example: [
+          { label: 'Auth OK', type: 'out', val: 'Authorization: Bearer eyJ... matches env var → continue' },
+          { label: 'Auth fail', type: 'err', val: 'Wrong key or missing header → 401 Unauthorized\nCauses: service key rotated, vault secret missing' },
+        ],
+        db: [],
+        state: { 'auth': 'service_role_key from vault', 'method': 'POST', 'EF_version': 'v24 ACTIVE' }
+      },
+      {
+        num: 3, label: 'Fetch today\'s game IDs', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'The EF queries the local Supabase games table to find games that need syncing — those with a kick_off_time >= yesterday (to catch late-night games from previous day). It retrieves the api_game_id field which maps to the api-football.com fixture ID used in the next step.',
+        code: `<span class="code-kw">const</span> yesterday = <span class="code-kw">new</span> Date()
+yesterday.setDate(yesterday.getDate() - <span class="code-const">1</span>)
+
+<span class="code-kw">const</span> { data: games, error } = <span class="code-kw">await</span> supabase
+  .from(<span class="code-str">'games'</span>)
+  .select(<span class="code-str">'id, api_game_id, kick_off_time, home_team, away_team'</span>)
+  .gte(<span class="code-str">'kick_off_time'</span>, yesterday.toISOString())
+  .order(<span class="code-str">'kick_off_time'</span>)
+
+<span class="code-comment">// api_game_id is the api-football.com fixture ID</span>`,
+        example: [
+          { label: 'Query', type: 'in',  val: 'games WHERE kick_off_time >= yesterday' },
+          { label: 'Result', type: 'out', val: '[\n  { id: "uuid-1", api_game_id: 12345, home_team: "ARG", ... },\n  { id: "uuid-2", api_game_id: 12346, home_team: "BRA", ... }\n]' },
+          { label: 'Empty', type: 'note', val: 'games = [] → no games today → EF returns early (nothing to sync)' },
+        ],
+        db: [{ table: 'games', action: 'SELECT — id, api_game_id, kick_off_time for recent games' }],
+        state: { 'games_to_sync': '4 (example)', 'api_game_ids': '[12345, 12346, ...]', 'date_range': 'yesterday → future' }
+      }
+    ]
+  },
+
+  fetch: {
+    label: 'API Fetch',
+    steps: [
+      {
+        num: 1, label: 'Fetch fixture from api-football', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'For each game, the EF calls the api-football.com fixtures endpoint with the api_game_id. The API key is stored in Supabase vault as FOOTBALL_API_KEY. Free tier allows 100 requests/day — critical limit for World Cup days with many games.',
+        code: `<span class="code-kw">const</span> apiKey = Deno.env.get(<span class="code-str">'FOOTBALL_API_KEY'</span>)  <span class="code-comment">// from vault</span>
+
+<span class="code-kw">const</span> resp = <span class="code-kw">await</span> fetch(
+  <span class="code-str">\`https://v3.football.api-sports.io/fixtures?id=\${apiId}\`</span>,
+  {
+    headers: {
+      <span class="code-str">'x-apisports-key'</span>: apiKey,
+      <span class="code-str">'x-rapidapi-host'</span>: <span class="code-str">'v3.football.api-sports.io'</span>
+    }
+  }
+)
+<span class="code-kw">const</span> json = <span class="code-kw">await</span> resp.json()
+<span class="code-kw">const</span> fixture = json.response[<span class="code-const">0</span>]`,
+        example: [
+          { label: 'Request', type: 'in',  val: 'GET https://v3.football.api-sports.io/fixtures?id=12345\nx-apisports-key: <from vault>' },
+          { label: 'Response', type: 'out', val: '{ response: [{ fixture: {...}, goals: { home: 2, away: 1 },\n  score: { extraTime: {...}, penalty: {...} },\n  statistics: [...], bookmakers: [...] }] }' },
+          { label: 'Rate limit', type: 'err', val: 'HTTP 429 — daily quota exceeded (free tier: 100/day)\nEF should log and skip remaining games' },
+        ],
+        db: [],
+        state: { 'api': 'api-football.com v3', 'key_source': 'Supabase vault (FOOTBALL_API_KEY)', 'rate_limit': '100 req/day (free tier)' }
+      },
+      {
+        num: 2, label: 'Parse scores (90-min only)', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'CRITICAL: score_home/score_away in the DB must ALWAYS be 90-minute scores only — never ET or penalties. The API returns goals.home/away (90-min) and score.extraTime/penalty separately. The EF maps each field explicitly to avoid accidentally writing ET scores to the main score columns.',
+        code: `<span class="code-kw">const</span> { goals, score } = fixture
+
+<span class="code-comment">// 90-min score ONLY — never changes after FT</span>
+<span class="code-kw">const</span> score_home = goals.home  <span class="code-comment">// null if game not finished</span>
+<span class="code-kw">const</span> score_away = goals.away
+
+<span class="code-comment">// Extra time (nullable)</span>
+<span class="code-kw">const</span> et_score_home = score.extraTime?.home ?? <span class="code-kw">null</span>
+<span class="code-kw">const</span> et_score_away = score.extraTime?.away ?? <span class="code-kw">null</span>
+<span class="code-kw">const</span> went_to_extra_time = et_score_home !== <span class="code-kw">null</span>
+
+<span class="code-comment">// Penalties (nullable)</span>
+<span class="code-kw">const</span> penalty_score_home = score.penalty?.home ?? <span class="code-kw">null</span>
+<span class="code-kw">const</span> penalty_score_away = score.penalty?.away ?? <span class="code-kw">null</span>
+<span class="code-kw">const</span> went_to_penalties = penalty_score_home !== <span class="code-kw">null</span>
+
+<span class="code-comment">// knockout_winner: actual winner after ET/pens</span>
+<span class="code-kw">const</span> knockout_winner = deriveWinner(score_home, score_away,
+  penalty_score_home, penalty_score_away)`,
+        example: [
+          { label: 'Normal FT', type: 'in',  val: 'goals.home=2, goals.away=1\nscore.extraTime=null, score.penalty=null' },
+          { label: 'Result', type: 'out', val: 'score_home=2, score_away=1\nwent_to_extra_time=false, et_score_home=null\nknockout_winner=null (group stage)' },
+          { label: 'After ET', type: 'note', val: 'goals.home=1, goals.away=1 (90-min)\nscore.extraTime.home=2, away=1\n→ score_home=1, score_away=1 (UNCHANGED)\n→ et_score_home=2, knockout_winner="home"' },
+        ],
+        db: [],
+        state: { 'score_home': '2 (90-min only)', 'score_away': '1', 'et_score_home': 'null (no ET)', 'went_to_extra_time': 'false', 'knockout_winner': 'null (group stage)' }
+      },
+      {
+        num: 3, label: 'Parse stats', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'The fixture response includes a statistics array per team. Each entry has a "type" string and a "value". The EF finds each stat by type name. A critical API quirk: some counts (especially offsides) return null instead of 0 — the EF uses ?? 0 coercion on all count fields.',
+        code: `<span class="code-kw">function</span> <span class="code-fn">getStat</span>(stats, type) {
+  <span class="code-kw">return</span> stats.find(s => s.type === type)?.value ?? <span class="code-const">0</span>
+  <span class="code-comment">// ?? 0 handles null values (API quirk for offsides etc)</span>
+}
+
+<span class="code-kw">const</span> homeStats = fixture.statistics[<span class="code-const">0</span>]?.statistics ?? []
+
+<span class="code-kw">const</span> parsed = {
+  goals_scored:     getStat(homeStats, <span class="code-str">'Goals'</span>),
+  shots_total:      getStat(homeStats, <span class="code-str">'Total Shots'</span>),
+  corners:          getStat(homeStats, <span class="code-str">'Corner Kicks'</span>),
+  yellow_cards:     getStat(homeStats, <span class="code-str">'Yellow Cards'</span>),
+  red_cards:        getStat(homeStats, <span class="code-str">'Red Cards'</span>),
+  passes_total:     getStat(homeStats, <span class="code-str">'Total passes'</span>),
+  passes_accuracy:  getStat(homeStats, <span class="code-str">'Passes accurate'</span>),
+}`,
+        example: [
+          { label: 'API raw', type: 'in',  val: '[{ type: "Total Shots", value: 8 },\n { type: "Corner Kicks", value: null },  ← API quirk\n { type: "Yellow Cards", value: 2 }]' },
+          { label: 'Parsed', type: 'out', val: '{ shots_total: 8, corners: 0, yellow_cards: 2 }\n(null → 0 via ?? coercion)' },
+          { label: 'Stats', type: 'note', val: 'Fields synced: goals, shots, corners, cards (y/r), passes_total, passes_accuracy' },
+        ],
+        db: [],
+        state: { 'stats_parsed': "['goals', 'shots', 'corners', 'cards', 'passes']", 'null_coercion': '?? 0 on all count fields', 'fixture_stats': 'per team (home + away)' }
+      }
+    ]
+  },
+
+  upsert: {
+    label: 'Upsert to DB',
+    steps: [
+      {
+        num: 1, label: 'Upsert game scores', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'After parsing, the EF upserts score data into the games table. The upsert uses onConflict: "id" making it idempotent — safe to run multiple times. The games table has NO status column; finished state is determined by score_home IS NOT NULL.',
+        code: `<span class="code-kw">await</span> supabase.from(<span class="code-str">'games'</span>).upsert({
+  id: localGameId,
+  score_home,            <span class="code-comment">// 90-min score — never changes</span>
+  score_away,
+  went_to_extra_time,    <span class="code-comment">// boolean (null for group stage)</span>
+  went_to_penalties,
+  et_score_home,         <span class="code-comment">// null if no ET</span>
+  et_score_away,
+  penalty_score_home,    <span class="code-comment">// null if no pens</span>
+  penalty_score_away,
+  knockout_winner,       <span class="code-comment">// actual winner after ET/pens</span>
+}, { onConflict: <span class="code-str">'id'</span> })
+
+<span class="code-comment">// NO status column — finished = score_home IS NOT NULL</span>`,
+        example: [
+          { label: 'Input', type: 'in',  val: '{ id: "uuid-1", score_home: 2, score_away: 1,\n  went_to_extra_time: false, knockout_winner: null }' },
+          { label: 'DB result', type: 'out', val: 'games row upserted → score_home=2, score_away=1\nTrigger fn_update_points fires → predictions scored' },
+          { label: 'Idempotent', type: 'note', val: 'Run twice → same result (onConflict: "id" → UPDATE existing)\nSafe to retry if EF times out mid-run' },
+        ],
+        db: [
+          { table: 'games', action: 'UPSERT — score_home, score_away, et scores, knockout_winner (onConflict: id)' },
+          { table: 'predictions', action: 'UPDATED via trigger fn_update_points (points_earned recalculated)' }
+        ],
+        state: { 'upserted': 'true', 'score_home': '2', 'knockout_winner': '"home_team" (knockout) or null (group)', 'trigger_fired': 'fn_update_points' }
+      },
+      {
+        num: 2, label: 'Upsert team stats', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'After each completed game, the EF upserts cumulative stats for each team into team_tournament_stats. This table accumulates W/D/L, goals, cards, corners across all tournament games for each team. Stats are tournament-wide (not per game).',
+        code: `<span class="code-kw">await</span> supabase.from(<span class="code-str">'team_tournament_stats'</span>).upsert({
+  team_code,
+  wins:             totalWins,
+  draws:            totalDraws,
+  losses:           totalLosses,
+  goals_scored:     totalGoalsScored,
+  goals_conceded:   totalGoalsConceded,
+  yellow_cards:     totalYellow,
+  red_cards:        totalRed,
+  corners:          totalCorners,
+  passes_total:     totalPasses,
+  passes_accuracy:  avgAccuracy,
+}, { onConflict: <span class="code-str">'team_code'</span> })
+
+<span class="code-comment">// Should SUM/accumulate — not just set from last game</span>`,
+        example: [
+          { label: 'Team: ARG', type: 'in',  val: 'After game 3: wins=2, draws=0, losses=1,\ngoals_scored=5, goals_conceded=2, yellow_cards=4' },
+          { label: 'DB result', type: 'out', val: 'team_tournament_stats WHERE team_code="ARG" → updated\nShown in Game.jsx "Tournament Stats" section' },
+          { label: 'Risk', type: 'err', val: 'If upsert replaces instead of accumulating → stats reset\nNeeds cumulative logic (SUM from all past games, not just last)' },
+        ],
+        db: [{ table: 'team_tournament_stats', action: 'UPSERT — cumulative tournament stats per team (onConflict: team_code)' }],
+        state: { 'team': '"ARG"', 'accumulated': 'true (tournament total)', 'source': 'all completed games for this team' }
+      },
+      {
+        num: 3, label: 'Upsert Bet365 odds', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'Game odds (home win / draw / away win) are sourced exclusively from Bet365 bookmaker in the api-football response. This is a fixed rule — other bookmakers are ignored. Odds are only meaningful pre-kickoff; they are stored in the games table and shown on Game.jsx.',
+        code: `<span class="code-kw">const</span> bookmakers = fixture.bookmakers ?? []
+
+<span class="code-comment">// Bet365 ONLY — explicit filter</span>
+<span class="code-kw">const</span> bet365 = bookmakers.find(
+  b => b.bookmaker.name === <span class="code-str">'Bet365'</span>
+)
+<span class="code-kw">const</span> matchWinner = bet365?.bets?.find(
+  b => b.name === <span class="code-str">'Match Winner'</span>
+)
+<span class="code-kw">const</span> odds_home = matchWinner?.values?.find(v => v.value === <span class="code-str">'Home'</span>)?.odd
+<span class="code-kw">const</span> odds_draw = matchWinner?.values?.find(v => v.value === <span class="code-str">'Draw'</span>)?.odd
+<span class="code-kw">const</span> odds_away = matchWinner?.values?.find(v => v.value === <span class="code-str">'Away'</span>)?.odd
+
+<span class="code-kw">await</span> supabase.from(<span class="code-str">'games'</span>)
+  .update({ odds_home, odds_draw, odds_away })
+  .eq(<span class="code-str">'id'</span>, localGameId)`,
+        example: [
+          { label: 'API data', type: 'in',  val: 'bookmakers: [{ name: "Bet365", bets: [{ name: "Match Winner",\n  values: [{ value: "Home", odd: "1.85" }, { value: "Draw", odd: "3.40" }, ...] }] }]' },
+          { label: 'DB result', type: 'out', val: 'games.odds_home=1.85, odds_draw=3.40, odds_away=4.20\nShown on Game.jsx pre-kickoff' },
+          { label: 'Wrong source', type: 'err', val: 'If Bet365 not in response → odds_home=undefined → stored as null\nNever mix with other bookmakers' },
+        ],
+        db: [{ table: 'games', action: 'UPDATE — odds_home, odds_draw, odds_away (Bet365 only)' }],
+        state: { 'source': 'Bet365 only', 'pre_kickoff': 'true (odds change before game)', 'fallback_if_missing': 'null (shown as "N/A" in UI)' }
+      }
+    ]
+  },
+
+  errorgroups: {
+    label: 'Error Groups',
+    steps: [
+      {
+        num: 1, label: 'Group 1 — API rate limit', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'The api-football.com free tier allows 100 requests/day. On World Cup match days with 8+ games, plus stats calls per game, this limit can be reached. Group 1 errors are API-level failures (4xx/5xx) that must be detected and logged.',
+        code: `<span class="code-kw">const</span> resp = <span class="code-kw">await</span> fetch(apiUrl, { headers })
+
+<span class="code-kw">if</span> (resp.status === <span class="code-const">429</span>) {
+  console.error(<span class="code-str">'[E1] Rate limit hit — stopping sync'</span>)
+  <span class="code-kw">return new</span> Response(<span class="code-str">'Rate limited'</span>, { status: <span class="code-const">429</span> })
+}
+
+<span class="code-kw">if</span> (!resp.ok) {
+  console.error(<span class="code-str">\`[E1] API error \${resp.status}\`</span>)
+  <span class="code-kw">continue</span>  <span class="code-comment">// skip this game, try next</span>
+}
+
+<span class="code-comment">// Free tier: 100 req/day max</span>
+<span class="code-comment">// WC peak: 8 games × ~3 calls = 24 req/day</span>`,
+        example: [
+          { label: 'HTTP 429', type: 'err', val: 'Rate limit exceeded → stop syncing, log error\nNext cron run (tomorrow) will catch missed games' },
+          { label: 'HTTP 500', type: 'err', val: 'API server error → skip this game → continue loop\nGames with no score stay unfinished in DB' },
+          { label: 'Normal', type: 'out', val: 'HTTP 200 → parse response → continue' },
+        ],
+        db: [],
+        state: { 'error_group': 'E1 — API level', 'action': 'stop on 429, skip on other errors', 'retry': 'automatic next cron run' }
+      },
+      {
+        num: 2, label: 'Group 2 — Parse errors', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'API response structure can change or have unexpected nulls/missing fields. Group 2 errors are parse-time failures — accessing nested properties that do not exist. These must be caught per-field with fallbacks, not as a catch-all that loses all data.',
+        code: `<span class="code-kw">try</span> {
+  score_home = fixture.goals?.home ?? <span class="code-kw">null</span>
+  score_away = fixture.goals?.away ?? <span class="code-kw">null</span>
+} <span class="code-kw">catch</span>(e) {
+  console.error(<span class="code-str">'[E2] Score parse error'</span>, e)
+  score_home = <span class="code-kw">null</span>  <span class="code-comment">// game stays unfinished</span>
+  score_away = <span class="code-kw">null</span>
+}
+
+<span class="code-comment">// Use optional chaining throughout</span>
+<span class="code-kw">const</span> et = fixture.score?.extraTime?.home ?? <span class="code-kw">null</span>
+
+<span class="code-comment">// Null fallback for all stats</span>
+<span class="code-kw">const</span> stat = stats.find(s => s.type === type)?.value ?? <span class="code-const">0</span>`,
+        example: [
+          { label: 'Missing field', type: 'err', val: 'fixture.goals is undefined → .goals?.home → null\ngame score stays null → stays "unfinished" in UI' },
+          { label: 'Null stat', type: 'note', val: 'API returns { type: "Offsides", value: null }\n→ ?? 0 coercion → stored as 0\n(Known API quirk: offsides = null when count is 0)' },
+          { label: 'OK', type: 'out', val: 'All fields parsed with optional chaining + fallbacks' },
+        ],
+        db: [],
+        state: { 'error_group': 'E2 — parse level', 'fallback': 'null scores → game stays unfinished', 'coercion': '?? 0 for all stat counts' }
+      },
+      {
+        num: 3, label: 'Group 3 — DB upsert conflicts', layer: 'ef', file: 'football-api-sync/index.ts',
+        what: 'Upserts use onConflict to handle duplicate inserts gracefully. If the cron fires twice (race condition), the second upsert is a no-op for already-stored data. Score data is safe; cumulative stats need additional care to avoid double-counting.',
+        code: `<span class="code-comment">// onConflict makes upserts idempotent for scores</span>
+<span class="code-kw">await</span> supabase.from(<span class="code-str">'games'</span>).upsert(
+  gameData,
+  { onConflict: <span class="code-str">'id'</span> }   <span class="code-comment">← UPDATE if exists, INSERT if not</span>
+)
+
+<span class="code-kw">await</span> supabase.from(<span class="code-str">'team_tournament_stats'</span>).upsert(
+  statsData,
+  { onConflict: <span class="code-str">'team_code'</span> }
+)
+
+<span class="code-comment">// Risk: cumulative stats may double-count if cron fires twice</span>
+<span class="code-comment">// Mitigation: recompute totals from all completed games each run</span>`,
+        example: [
+          { label: 'Duplicate upsert', type: 'note', val: 'Cron fires twice → second upsert hits onConflict → UPDATE\nFor scores: idempotent (same value written twice = fine)\nFor cumulative stats: risk of double-counting' },
+          { label: 'Safe', type: 'out', val: 'games score upsert: fully idempotent ✓' },
+          { label: 'Risk', type: 'err', val: 'team_tournament_stats: if stats are SUMmed each run\nand cron fires twice → numbers doubled\nFix: recompute from scratch each run' },
+        ],
+        db: [{ table: 'games', action: 'UPSERT idempotent — onConflict: id' }, { table: 'team_tournament_stats', action: 'UPSERT — risk of double-count on double-fire' }],
+        state: { 'error_group': 'E3 — DB conflict', 'scores': 'idempotent via onConflict', 'stats': 'risk: double-counting on double cron fire' }
+      }
+    ]
+  }
+}
+
+const ERROR_ROWS = [
+  { section: 'Cron / Boot' },
+  { location: 'pg_cron', name: 'Silent cron failure', when: 'Supabase project paused or pg_net not enabled', status: 'partial', priority: 'high', fix: 'Check pg_cron logs in Supabase dashboard; verify pg_net extension enabled' },
+  { location: 'EF:boot', name: 'Service key auth failure (401)', when: 'Service key rotated but vault not updated', status: 'ok', priority: 'done', fix: 'Service key stored in vault; rotated via Supabase dashboard + vault update' },
+  { section: 'API Calls' },
+  { location: 'EF:fetch', name: 'API rate limit (429)', when: 'More than 100 requests/day (free tier)', status: 'partial', priority: 'high', fix: 'Track daily usage; batch calls; consider paid plan for WC peak days (8+ games)' },
+  { location: 'EF:parse', name: 'Null stats (offsides, etc.)', when: 'API returns null instead of 0 for zero-count fields', status: 'ok', priority: 'done', fix: '?? 0 coercion applied to all stat count fields' },
+  { section: 'Score Parsing' },
+  { location: 'EF:parse', name: 'ET score written to score_home', when: 'Parse logic error — mapping wrong API field', status: 'ok', priority: 'done', fix: 'Explicit mapping: goals.home = 90-min only; score.extraTime = ET' },
+  { location: 'EF:parse', name: 'knockout_winner null during live ET', when: 'ET still in progress when sync runs', status: 'ok', priority: 'done', fix: 'NULL stored; trigger fires on non-null update when game settles' },
+  { section: 'DB Operations' },
+  { location: 'EF:upsert', name: 'Stats accumulation double-count', when: 'Cron fires twice in same minute (race condition)', status: 'partial', priority: 'medium', fix: 'Recompute cumulative stats from all completed games each run (not incremental)' },
+  { location: 'EF:upsert', name: 'Odds from wrong bookmaker', when: 'Bet365 missing from API response for a game', status: 'ok', priority: 'done', fix: 'Explicit .find("Bet365") filter; null stored if not found (shown as N/A)' },
+  { section: 'EF Runtime' },
+  { location: 'EF:runtime', name: 'EF timeout (Supabase 150s limit)', when: 'Many games to sync in one run', status: 'partial', priority: 'high', fix: 'Process games in sequential loop; EF timeout set to 150s; batch if needed' },
+  { location: 'EF:runtime', name: 'Double cron fire stats duplication', when: 'pg_cron race condition on minute boundary', status: 'partial', priority: 'medium', fix: 'Upsert is idempotent for scores; stats need dedup via recompute-from-scratch pattern' },
+]
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const state = { path: 'trigger', stepIndex: 0 }
+
+function currentSteps() { return PATHS[state.path]?.steps || [] }
+function currentStep()  { return currentSteps()[state.stepIndex] }
+
+function renderSidebar() {
+  const steps = currentSteps()
+  document.getElementById('step-list').innerHTML = steps.map((s, i) => `
+    <div class="step-item${i === state.stepIndex ? ' active' : ''}" onclick="selectStep(${i})">
+      <div class="step-layer-dot dot-${s.layer}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`).join('')
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function renderDetail() {
+  const s = currentStep()
+  const steps = currentSteps()
+  const content = document.getElementById('detail-content')
+
+  const stateRows = Object.entries(s.state).map(([k, v]) => {
+    let cls = 'state-val'
+    if (v === 'null' || String(v).startsWith('null')) cls += ' null'
+    else if (String(v).includes('✓') || String(v).includes('true') || String(v).includes('ACTIVE')) cls += ' set'
+    else if (String(v).includes('risk') || String(v).includes('partial')) cls += ' warn'
+    return `<div class="state-row"><span class="state-key">${escHtml(k)}</span><span class="${cls}">${escHtml(v)}</span></div>`
+  }).join('')
+
+  const dbContent = s.db.length === 0
+    ? `<div class="db-none">No direct database operation at this step</div>`
+    : s.db.map(op => `<div class="db-row"><span class="db-table">${op.table}</span><span class="db-action">${escHtml(op.action)}</span></div>`).join('')
+
+  const layerLabel = s.layer === 'db' ? 'Database' : 'Edge Function'
+  const layerBadge = `<span class="badge badge-${s.layer}" style="margin-left:.5rem">${layerLabel}</span>`
+
+  const flowNodes = steps.map((st, i) => {
+    const short = st.label.length > 18 ? st.label.slice(0,16)+'…' : st.label
+    const arrow  = i < steps.length-1 ? `<div class="fm-arrow">→</div>` : ''
+    return `<div class="fm-node" onclick="selectStep(${i})" title="${st.label}">
+      <div class="fm-box ${st.layer}${i===state.stepIndex?' current':''}">
+        ${short}
+      </div>
+      <div class="fm-num">${st.num}</div>
+    </div>${arrow}`
+  }).join('')
+
+  content.innerHTML = `
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow map — click any step</div>
+      <div class="flowmap">${flowNodes}</div>
+    </div>
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label} ${layerBadge}</div>
+        <div class="step-header-file">${s.file}</div>
+      </div>
+    </div>
+    <div class="card what-card">
+      <div class="card-title">What happens</div>
+      <div class="what-text">${s.what.replace(/\n/g,'<br>')}</div>
+    </div>
+    <div class="card code-card">
+      <div class="card-title">Key code</div>
+      <div class="code-block">${s.code}</div>
+    </div>
+    <div class="card example-card">
+      <div class="card-title">Example</div>
+      ${(s.example||[]).map(ex=>`<div class="example-row">
+        <span class="example-label ${ex.type}">${ex.label}</span>
+        <div class="example-val">${escHtml(ex.val)}</div>
+      </div>`).join('')}
+    </div>
+    <div class="card db-card">
+      <div class="card-title">Database operation</div>
+      <div class="db-op">${dbContent}</div>
+    </div>
+    <div class="card state-card">
+      <div class="card-title">State inspector — at this step</div>
+      <div class="state-grid">${stateRows}</div>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = `Step ${state.stepIndex+1} of ${steps.length}`
+  document.getElementById('prev-btn').disabled = state.stepIndex === 0
+  document.getElementById('next-btn').disabled = state.stepIndex === steps.length - 1
+  document.getElementById('prompt-text').textContent =
+    `football-api-sync EF — ${PATHS[state.path].label} — Step ${s.num}: "${s.label}" (${s.file}). Layer: ${s.layer}. ${s.db.length ? 'DB: '+s.db.map(d=>d.table).join(', ')+'.' : 'No DB op.'}`
+}
+
+function renderErrors() {
+  const content = document.getElementById('detail-content')
+  const rows = ERROR_ROWS.map(r => {
+    if (r.section) return `<tr class="eh-section-row"><td colspan="6">${r.section}</td></tr>`
+    const sp = r.status==='ok'?'pill-ok':r.status==='partial'?'pill-partial':'pill-missing'
+    const pp = r.priority==='done'?'prio-done':r.priority==='high'?'prio-high':r.priority==='medium'?'prio-medium':'prio-low'
+    return `<tr>
+      <td><span class="eh-location">${r.location}</span></td>
+      <td><div class="eh-error-name">${r.name}</div></td>
+      <td><span class="eh-error-desc">${r.when}</span></td>
+      <td><span class="eh-pill ${sp}">${r.status}</span></td>
+      <td><span class="eh-pill ${pp}">${r.priority}</span></td>
+      <td><span class="eh-fix">${r.fix||'—'}</span></td>
+    </tr>`
+  }).join('')
+  content.innerHTML = `<div class="eh-page">
+    <div class="eh-legend">
+      <span style="color:var(--faint);font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em">Status:</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-ok">ok</span> Handled</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-partial">partial</span> Partial</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-missing">missing</span> Not handled</span>
+      <span style="color:var(--faint);font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-left:.5rem">Priority:</span>
+      <span class="eh-legend-item"><span class="eh-pill prio-done">done</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-high">high</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-medium">medium</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-low">low</span></span>
+    </div>
+    <table class="eh-table">
+      <thead><tr>
+        <th>Location</th><th>Error</th><th>When</th><th>Status</th><th>Priority</th><th>Fix</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`
+  document.getElementById('nav-counter').textContent = `${ERROR_ROWS.filter(r=>!r.section).length} error cases`
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'football-api-sync error handling audit — all error cases, statuses, and fixes.'
+}
+
+function renderAll() { renderSidebar(); renderDetail(); }
+
+function renderRules() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">Business rules, sync rules, RLS policies, and SDK patterns for the football-api-sync Edge Function.</div>
+    </div>`
+  document.getElementById('detail-content').innerHTML = `
+    <div id="tab-rules" style="padding:24px; overflow-y:auto; width:100%;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px;">
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128208; Business Logic</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li><code>score_home/away</code> in <code>games</code> = 90-min score ONLY — EF maps <code>fixture.goals.home/away</code> here, never ET score</li>
+            <li>ET score → <code>et_score_home/away</code>; penalty score → <code>penalty_score_home/penalty_score_away</code></li>
+            <li><code>knockout_winner</code> = actual winner string (home_team or away_team code) — set based on who won after ET/pens</li>
+            <li>Odds source: <strong>Bet365 only</strong> — <code>bookmakers.find(b =&gt; b.bookmaker.name === 'Bet365')</code>; other bookmakers ignored</li>
+            <li>Null stat fields coerced to 0: <code>?? 0</code> applied to all count fields (API returns null for 0 offsides etc.)</li>
+            <li>Stats accumulated per tournament (not per-game overwrite) — <code>team_tournament_stats</code> is cumulative</li>
+            <li>EF is idempotent: upsert with <code>onConflict:'id'</code> for games, <code>onConflict:'team_code'</code> for team_stats</li>
+            <li>Rate limit: api-football.com free tier = 100 requests/day — EF tracks this</li>
+          </ul>
+        </div>
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128260; Sync Rules</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li>pg_cron fires daily at 03:00 UTC → HTTP POST to <code>football-api-sync</code> EF URL</li>
+            <li>EF fetches game IDs for yesterday's games → calls api-football.com per game ID</li>
+            <li>No webhook from api-football — polling only</li>
+            <li>After writing scores, DB triggers fire automatically (<code>fn_update_points</code>, <code>fn_award_champion_points</code>)</li>
+            <li><code>fn_schedule_auto_predictions()</code> and <code>fn_schedule_ai_summaries()</code> must be called manually when new games seeded</li>
+          </ul>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128274; RLS Policies</h3>
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="border-bottom:1px solid #333;">
+              <th style="text-align:left; padding:6px 8px; color:#888;">Table</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">Op</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">USING / WITH CHECK</th>
+            </tr></thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>games</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">INSERT/UPDATE</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">service_role only (EF uses service_role key)</td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>team_tournament_stats</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">INSERT/UPDATE</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">service_role only</td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>games</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">public</td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>team_tournament_stats</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">public</td></tr>
+              <tr><td style="padding:6px 8px;">EF auth</td><td style="padding:6px 8px;">—</td><td style="padding:6px 8px;"><code>Authorization: Bearer SERVICE_ROLE_KEY</code> header (key from Supabase vault)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128295; SDK Calls</h3>
+          <pre style="margin:0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:4px; padding:16px; overflow-x:auto; font-size:12px; line-height:1.6; color:#e2e8f0;">// Inside Edge Function (Deno + Supabase service_role)
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+
+// Fetch games to sync
+const { data: games } = await supabase.from('games')
+  .select('id, api_game_id, kick_off_time')
+  .gte('kick_off_time', yesterday.toISOString())
+
+// Upsert game scores
+await supabase.from('games').upsert({
+  id: localId,
+  score_home, score_away,                    // 90-min only
+  went_to_extra_time, went_to_penalties,
+  et_score_home, et_score_away,
+  penalty_score_home, penalty_score_away,
+  knockout_winner                             // actual match winner
+}, { onConflict: 'id' })
+
+// Upsert team stats (cumulative)
+await supabase.from('team_tournament_stats').upsert({
+  team_code, wins, draws, losses,
+  goals_scored, goals_conceded,
+  yellow_cards, red_cards, corners,
+  passes_total, passes_accuracy
+}, { onConflict: 'team_code' })
+
+// Upsert odds (Bet365 only)
+await supabase.from('games').update({
+  odds_home, odds_draw, odds_away
+}).eq('id', localId)
+
+// api-football.com call
+const resp = await fetch('https://v3.football.api-sports.io/fixtures?id=' + apiId, {
+  headers: { 'x-apisports-key': API_KEY }
+})</pre>
+        </div>
+      </div>
+    </div>`
+  document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'football-api-sync EF — Rules & SDK reference: business logic, sync rules, RLS policies, and SDK call patterns.'
+}
+
+function switchPath(path) {
+  state.path = path
+  state.stepIndex = 0
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    const paths = ['trigger','fetch','upsert','errorgroups','rules','errors']
+    btn.classList.toggle('active', paths[i] === path)
+  })
+  if (path === 'errors') { renderErrors(); return }
+  if (path === 'rules') { renderRules(); return }
+  renderAll()
+}
+
+function selectStep(i) { state.stepIndex = i; renderAll() }
+function nextStep() { if (state.stepIndex < currentSteps().length-1) { state.stepIndex++; renderAll() } }
+function prevStep() { if (state.stepIndex > 0) { state.stepIndex--; renderAll() } }
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(() => {
+    const btn = document.querySelector('.copy-btn')
+    const orig = btn.textContent
+    btn.textContent = 'Copied!'
+    setTimeout(()=>btn.textContent=orig, 1500)
+  })
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key==='ArrowRight'||e.key==='ArrowDown') nextStep()
+  if (e.key==='ArrowLeft' ||e.key==='ArrowUp')   prevStep()
+})
+
+renderAll()
+</script>
+</body>
+</html>

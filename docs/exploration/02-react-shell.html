@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>02 — React App Shell · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08);
+    --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,.15);
+    --text: #f0f0f0;
+    --muted: #888;
+    --faint: #555;
+
+    --layer-landing: #1e3a5f;
+    --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a;
+    --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b;
+    --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b;
+    --layer-db-text: #c4b5fd;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: .75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: .2rem .55rem;
+    border-radius: 4px;
+  }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+
+  .tabs {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    flex-shrink: 0;
+    padding: 0 1.25rem;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .65rem 1rem;
+    transition: color .15s, border-color .15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--surface);
+  }
+  .sidebar-label {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: .75rem 1rem .4rem;
+  }
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    padding: .55rem 1rem;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background .1s, border-color .1s;
+  }
+  .step-item:hover { background: rgba(255,255,255,.04); }
+  .step-item.active {
+    background: rgba(245,158,11,.08);
+    border-left-color: var(--gold);
+  }
+  .step-num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .65rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: .05rem;
+    color: var(--muted);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; }
+  .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: .42rem;
+  }
+  .dot-landing  { background: var(--layer-landing-text); }
+  .dot-react    { background: var(--layer-react-text); }
+  .dot-supabase { background: var(--layer-supabase-text); }
+  .dot-db       { background: var(--layer-db-text); }
+
+  .layer-legend {
+    border-top: 1px solid var(--border);
+    margin-top: .75rem;
+    padding: .75rem 1rem 1rem;
+  }
+  .layer-legend-title {
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: .6rem;
+  }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; }
+  .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+
+  .flowmap-wrap {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+  }
+  .flowmap-title {
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: .7rem;
+  }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box {
+    border-radius: 5px;
+    padding: .3rem .55rem;
+    font-size: .65rem;
+    font-weight: 600;
+    text-align: center;
+    max-width: 90px;
+    line-height: 1.25;
+    border: 1.5px solid transparent;
+    transition: all .15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fm-box:hover    { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); }
+  .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend {
+    display: flex; gap: .75rem; flex-wrap: wrap;
+    padding: .6rem .85rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    font-size: .72rem;
+  }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok      { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high    { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium  { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low     { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done    { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th {
+    text-align: left; font-size: .62rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); padding: .5rem .75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0;
+  }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--gold); color: #000;
+    font-size: 1rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+
+  .what-card { width: 100%; }
+  .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+
+  .code-card { width: 100%; }
+  .code-block {
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: .75rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
+    color: #d1d5db;
+  }
+  .code-comment { color: #4b5563; }
+  .code-kw      { color: #93c5fd; }
+  .code-fn      { color: #86efac; }
+  .code-str     { color: #fde68a; }
+  .code-const   { color: #f9a8d4; }
+
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in   { color: #93c5fd; }
+  .example-label.out  { color: #86efac; }
+  .example-label.err  { color: #fca5a5; }
+  .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 140px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); }
+  .state-val.set  { color: #86efac; }
+  .state-val.warn { color: var(--gold); }
+
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">02 — React App Shell</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-landing">Landing (Vanilla)</span>
+    <span class="badge badge-react">React App</span>
+    <span class="badge badge-supabase">Supabase</span>
+    <span class="badge badge-db">Database</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('boot')">App Boot</button>
+  <button class="tab-btn" onclick="switchPath('routing')">Routing</button>
+  <button class="tab-btn" onclick="switchPath('authguard')">AuthGuard</button>
+  <button class="tab-btn" onclick="switchPath('context')">Context</button>
+  <button class="tab-btn" onclick="switchPath('navigation')">Navigation</button>
+  <button class="tab-btn" onclick="switchPath('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-landing-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-landing-text)">Landing — Vanilla JS</div>
+          <div class="legend-desc">Plain HTML + CSS files served statically. <code>app.html</code> is the SPA entry point built by Vite. <code>css/style.css</code> is shared between landing and React app.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-react-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-react-text)">React App</div>
+          <div class="legend-desc">Vite SPA at <code>app.html</code>. React 18 + HashRouter. Context providers wrap the whole app. All inner pages live here.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-supabase-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-supabase-text)">Supabase</div>
+          <div class="legend-desc">Cloud backend: Auth, DB, Realtime. ESM npm client used in the React app (different from the UMD CDN client in the landing page).</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-db-text)">Database (PostgreSQL)</div>
+          <div class="legend-desc">Supabase-hosted Postgres. RLS policies guard all tables. Accessed via SDK or stored RPCs.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+
+  boot: {
+    label: 'App Boot',
+    steps: [
+      {
+        num: 1, label: 'app.html loads', layer: 'landing', file: 'src/app.html',
+        what: 'Vite builds app.html as the SPA entry point. It has a single <div id="root">. The JS bundle (hashed filename like assets/index-Bx3k.js) is injected by Vite at build time. When the browser loads app.html, it downloads the bundle, React mounts into #root, and the full provider tree initialises.',
+        code: `<span class="code-comment">&lt;!-- src/app.html --&gt;</span>
+<span class="code-kw">&lt;div</span> id=<span class="code-str">"root"</span><span class="code-kw">&gt;&lt;/div&gt;</span>
+<span class="code-kw">&lt;script</span> type=<span class="code-str">"module"</span> src=<span class="code-str">"/src/main.jsx"</span><span class="code-kw">&gt;&lt;/script&gt;</span>
+
+<span class="code-comment">// src/main.jsx</span>
+<span class="code-kw">import</span> ReactDOM <span class="code-kw">from</span> <span class="code-str">'react-dom/client'</span>
+<span class="code-kw">import</span> App <span class="code-kw">from</span> <span class="code-str">'./App.jsx'</span>
+<span class="code-kw">import</span> <span class="code-str">'../css/style.css'</span>
+ReactDOM.createRoot(document.getElementById(<span class="code-str">'root'</span>)).render(
+  <span class="code-kw">&lt;AuthProvider&gt;&lt;ToastProvider&gt;</span><span class="code-fn">&lt;App /&gt;</span><span class="code-kw">&lt;/ToastProvider&gt;&lt;/AuthProvider&gt;</span>
+)`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'browser loads https://…/app.html' },
+          { label: 'OUT',  type: 'out',  val: 'React tree mounted, AuthProvider runs, session=undefined (loading)' },
+        ],
+        db: [],
+        state: { 'session': 'undefined (loading)', 'route': '"#/dashboard" (from URL hash)' }
+      },
+      {
+        num: 2, label: 'AuthProvider mounts', layer: 'react', file: 'src/context/AuthContext.jsx',
+        what: 'AuthProvider is the outermost React wrapper. It initialises session state as `undefined` — not null. This distinction matters: undefined = still loading, null = unauthenticated, object = authenticated. It immediately calls getSession() and sets up the onAuthStateChange listener to keep the session fresh.',
+        code: `<span class="code-kw">const</span> [session, setSession] = <span class="code-fn">useState</span>(<span class="code-kw">undefined</span>) <span class="code-comment">// undefined = still loading</span>
+<span class="code-kw">const</span> [user, setUser] = <span class="code-fn">useState</span>(<span class="code-kw">null</span>)
+<span class="code-comment">// loading = session === undefined (used by AuthGuard)</span>
+
+supabase.auth.<span class="code-fn">getSession</span>().then(({ data: { session } }) => {
+  <span class="code-fn">setSession</span>(session)   <span class="code-comment">// null or session object</span>
+})
+supabase.auth.<span class="code-fn">onAuthStateChange</span>((_event, session) => {
+  <span class="code-fn">setSession</span>(session)
+})`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'component mounts' },
+          { label: 'OUT',  type: 'out',  val: 'session=undefined, loading=true, spinner shown by AuthGuard' },
+        ],
+        db: [{ table: 'profiles', action: 'SELECT (partial registration guard in AuthContext)' }],
+        state: { 'session': 'undefined', 'loading': 'true' }
+      },
+      {
+        num: 3, label: 'ToastContext mounts', layer: 'react', file: 'src/context/ToastContext.jsx',
+        what: 'Provides a global showToast(message, type) function available to all pages via useToast(). Toasts appear as temporary overlay messages (success/error/info). They auto-dismiss after ~3 seconds. No DB access required — purely client-side state.',
+        code: `<span class="code-comment">// Used across all pages:</span>
+<span class="code-kw">const</span> { showToast } = <span class="code-fn">useToast</span>()
+<span class="code-fn">showToast</span>(<span class="code-str">'Prediction saved!'</span>, <span class="code-str">'success'</span>)
+<span class="code-fn">showToast</span>(<span class="code-str">'Group is full'</span>, <span class="code-str">'error'</span>)
+<span class="code-fn">showToast</span>(<span class="code-str">'Account created — finishing setup…'</span>, <span class="code-str">'info'</span>)`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'any page calls showToast()' },
+          { label: 'OUT',  type: 'out',  val: 'toast appears for ~3s then fades' },
+        ],
+        db: [],
+        state: { 'toasts': '[] → [{ message, type, id }]' }
+      },
+      {
+        num: 4, label: 'CSS loaded', layer: 'landing', file: 'css/style.css',
+        what: 'The React app imports the shared CSS file via `import \'../css/style.css\'` in main.jsx. This is the SAME file used by the vanilla landing page (index.html). Vite bundles it into the JS output. CSS variables (--gold, --muted, --bg, etc.) are defined here and available everywhere in both the landing and the React app.',
+        code: `<span class="code-comment">// src/main.jsx</span>
+<span class="code-kw">import</span> <span class="code-str">'../css/style.css'</span>
+
+<span class="code-comment">// css/style.css — key variables</span>
+:root {
+  --bg: <span class="code-str">#0a0a0a</span>;
+  --gold: <span class="code-str">#f59e0b</span>;
+  --muted: <span class="code-str">#888</span>;
+  --radius: <span class="code-str">10px</span>;
+}`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'Vite build' },
+          { label: 'OUT',  type: 'out',  val: 'CSS variables available everywhere, same styles on landing + React app' },
+        ],
+        db: [],
+        state: { 'css': 'loaded', 'theme': 'dark (#0a0a0a base)' }
+      },
+    ]
+  },
+
+  routing: {
+    label: 'Routing',
+    steps: [
+      {
+        num: 1, label: 'HashRouter', layer: 'react', file: 'src/App.jsx',
+        what: 'The app uses React Router\'s HashRouter. This means all routes are after the # symbol: app.html#/dashboard, app.html#/groups, etc. HashRouter is used instead of BrowserRouter because GitHub Pages doesn\'t support server-side routing — hash-based routing works purely client-side with no server config needed.',
+        code: `<span class="code-kw">import</span> { HashRouter, Navigate, Route, Routes } <span class="code-kw">from</span> <span class="code-str">'react-router-dom'</span>
+
+<span class="code-comment">// Routes:</span>
+<span class="code-comment">// #/dashboard → Dashboard.jsx</span>
+<span class="code-comment">// #/game/:id  → Game.jsx  (with ?group= param)</span>
+<span class="code-comment">// #/picks     → Picks.jsx</span>
+<span class="code-comment">// #/groups    → Groups.jsx</span>
+<span class="code-comment">// #/ai-feed   → AiFeed.jsx</span>
+<span class="code-comment">// /* (catch-all) → redirect to #/dashboard</span>`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'URL = app.html#/groups' },
+          { label: 'OUT',  type: 'out',  val: 'Groups.jsx renders (if authenticated)' },
+        ],
+        db: [],
+        state: { 'currentRoute': '"#/groups"', 'params': '{}' }
+      },
+      {
+        num: 2, label: 'Route matching', layer: 'react', file: 'src/App.jsx',
+        what: 'React Router matches the URL hash to a route component. The :id param in /game/:id is extracted via useParams() inside Game.jsx. The ?group= query param is read via useSearchParams(). A catch-all route redirects unknown hashes to /dashboard. Each route is wrapped in AuthGuard.',
+        code: `<span class="code-kw">&lt;Routes&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"/dashboard"</span> element={<span class="code-kw">&lt;AuthGuard&gt;&lt;Dashboard /&gt;&lt;/AuthGuard&gt;</span>} <span class="code-kw">/&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"/game/:id"</span>  element={<span class="code-kw">&lt;AuthGuard&gt;&lt;Game /&gt;&lt;/AuthGuard&gt;</span>} <span class="code-kw">/&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"/picks"</span>     element={<span class="code-kw">&lt;AuthGuard&gt;&lt;Picks /&gt;&lt;/AuthGuard&gt;</span>} <span class="code-kw">/&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"/groups"</span>    element={<span class="code-kw">&lt;AuthGuard&gt;&lt;Groups /&gt;&lt;/AuthGuard&gt;</span>} <span class="code-kw">/&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"/ai-feed"</span>   element={<span class="code-kw">&lt;AuthGuard&gt;&lt;AiFeed /&gt;&lt;/AuthGuard&gt;</span>} <span class="code-kw">/&gt;</span>
+  <span class="code-kw">&lt;Route</span> path=<span class="code-str">"*"</span>          element={<span class="code-kw">&lt;Navigate</span> to=<span class="code-str">"/dashboard"</span> replace <span class="code-kw">/&gt;</span>} <span class="code-kw">/&gt;</span>
+<span class="code-kw">&lt;/Routes&gt;</span>`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'hash = "#/game/abc123?group=xyz"' },
+          { label: 'OUT',  type: 'out',  val: 'Game.jsx renders, id="abc123", groupId="xyz"' },
+        ],
+        db: [],
+        state: { 'route': '"/game/:id"', 'params.id': '"abc123"', 'search': '"?group=xyz"' }
+      },
+      {
+        num: 3, label: 'Navigation', layer: 'react', file: 'src/components/BottomNav.jsx',
+        what: 'The bottom navigation bar is always visible. It uses useNavigate() from React Router to push new routes. Four tabs: Dashboard, Groups, Picks, AI Feed. The active tab is determined by useLocation() matching the current path. Programmatic navigation (e.g. after creating a group) uses the same navigate() call.',
+        code: `<span class="code-kw">import</span> { useNavigate, useLocation } <span class="code-kw">from</span> <span class="code-str">'react-router-dom'</span>
+<span class="code-kw">const</span> navigate = <span class="code-fn">useNavigate</span>()
+<span class="code-kw">const</span> { pathname } = <span class="code-fn">useLocation</span>()
+
+<span class="code-comment">// Navigate programmatically:</span>
+<span class="code-fn">navigate</span>(<span class="code-str">'/groups'</span>)
+<span class="code-fn">navigate</span>(<span class="code-str">\`/game/\${gameId}?group=\${groupId}\`</span>)`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'user taps "Groups" in BottomNav' },
+          { label: 'OUT',  type: 'out',  val: "navigate('/groups') → URL = app.html#/groups → Groups.jsx renders" },
+        ],
+        db: [],
+        state: { 'pathname': '"/groups"', 'activeTab': '"Groups"' }
+      },
+    ]
+  },
+
+  authguard: {
+    label: 'AuthGuard',
+    steps: [
+      {
+        num: 1, label: 'Loading state', layer: 'react', file: 'src/App.jsx',
+        what: 'While session is undefined (getSession() hasn\'t resolved), AuthGuard shows a loading spinner. This typically takes 5–50ms (localStorage read). The spinner is a minimal div — no skeleton, no animation — just "Loading…" text centered on screen. This prevents a flash of the unauthenticated redirect.',
+        code: `<span class="code-kw">function</span> <span class="code-fn">AuthGuard</span>({ children }) {
+  <span class="code-kw">const</span> { session, loading } = <span class="code-fn">useAuth</span>()
+  <span class="code-comment">// loading = session === undefined</span>
+  <span class="code-kw">if</span> (loading) <span class="code-kw">return</span> (
+    <span class="code-kw">&lt;div</span> style={{ display:<span class="code-str">'flex'</span>, alignItems:<span class="code-str">'center'</span>,
+      justifyContent:<span class="code-str">'center'</span>, minHeight:<span class="code-str">'100vh'</span>,
+      color:<span class="code-str">'var(--muted)'</span> }}<span class="code-kw">&gt;</span>
+      Loading…
+    <span class="code-kw">&lt;/div&gt;</span>
+  )`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'app just mounted, session=undefined' },
+          { label: 'OUT',  type: 'out',  val: 'full-screen "Loading…" shown briefly (5-50ms)' },
+        ],
+        db: [],
+        state: { 'session': 'undefined', 'shows': '"Loading…" spinner' }
+      },
+      {
+        num: 2, label: 'Not authenticated', layer: 'react', file: 'src/App.jsx',
+        what: 'If session is null (user not logged in, or signed out), AuthGuard redirects to index.html. This is a hard redirect — window.location.href, not a React Router navigate(). The whole page reloads to the landing page. No route history is preserved.',
+        code: `<span class="code-kw">if</span> (!session) {
+  window.location.href = <span class="code-str">'./index.html'</span>
+  <span class="code-kw">return null</span>
+}`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'user visits app.html#/dashboard without session' },
+          { label: 'OUT',  type: 'out',  val: 'browser hard-redirects to index.html (full page reload)' },
+        ],
+        db: [],
+        state: { 'session': 'null', 'redirect': '"./index.html"' }
+      },
+      {
+        num: 3, label: 'Authenticated', layer: 'react', file: 'src/App.jsx',
+        what: 'Session is set. AuthGuard returns children — the actual page component renders. Each page then loads its own data from Supabase in useEffect hooks. The session object has: user.id, user.email, user.user_metadata.username.',
+        code: `<span class="code-kw">return</span> children <span class="code-comment">// Dashboard, Groups, Game, Picks, or AiFeed</span>`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'session = { user: { id, email, user_metadata: { username } } }' },
+          { label: 'OUT',  type: 'out',  val: 'Dashboard.jsx renders and starts loading its data via useEffect' },
+        ],
+        db: [{ table: 'varies', action: 'each page runs its own Supabase queries in useEffect' }],
+        state: { 'session': 'SET { user: { id, email, ... } }', 'children': '"Dashboard.jsx"' }
+      },
+    ]
+  },
+
+  context: {
+    label: 'Context',
+    steps: [
+      {
+        num: 1, label: 'useAuth hook', layer: 'react', file: 'src/context/AuthContext.jsx',
+        what: 'Every page and component that needs the session calls useAuth(). It returns { session, user, signOut, loading }. The `user` object is the raw Supabase user — it has id, email, user_metadata.username. For the display username, pages use the fallback chain shown below.',
+        code: `<span class="code-kw">export const</span> <span class="code-fn">useAuth</span> = () => <span class="code-fn">useContext</span>(AuthContext)
+
+<span class="code-comment">// In any page:</span>
+<span class="code-kw">const</span> { user, signOut } = <span class="code-fn">useAuth</span>()
+<span class="code-kw">const</span> username = user?.user_metadata?.username
+  ?? user?.email?.<span class="code-fn">split</span>(<span class="code-str">'@'</span>)[0]
+  ?? <span class="code-str">'Player'</span>`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'Dashboard.jsx mounts' },
+          { label: 'OUT',  type: 'out',  val: 'user = { id: "abc123", email: "itay@example.com", user_metadata: { username: "itayking" } }' },
+        ],
+        db: [],
+        state: { 'user.id': '"abc123"', 'user.username': '"itayking"', 'source': 'React state (no DB call)' }
+      },
+      {
+        num: 2, label: 'useToast hook', layer: 'react', file: 'src/context/ToastContext.jsx',
+        what: 'Global toast system. showToast(message, type) queues a message. Toasts auto-dismiss after ~3s. Used throughout all pages for success/error feedback on DB operations. Three types: success (green), error (red), info (gold).',
+        code: `<span class="code-kw">export const</span> <span class="code-fn">useToast</span> = () => <span class="code-fn">useContext</span>(ToastContext)
+
+<span class="code-comment">// Usage:</span>
+<span class="code-kw">const</span> { showToast } = <span class="code-fn">useToast</span>()
+<span class="code-fn">showToast</span>(<span class="code-str">'Group created!'</span>, <span class="code-str">'success'</span>)
+<span class="code-fn">showToast</span>(<span class="code-str">'Failed to save prediction'</span>, <span class="code-str">'error'</span>)
+<span class="code-fn">showToast</span>(<span class="code-str">'Account created — finishing setup…'</span>, <span class="code-str">'info'</span>)`,
+        example: [
+          { label: 'IN',   type: 'in',   val: "Groups.jsx calls showToast('Group created!')" },
+          { label: 'OUT',  type: 'out',  val: 'green toast overlay appears for 3s then fades' },
+        ],
+        db: [],
+        state: { 'toasts': '[{ message: "Group created!", type: "success", id: 123 }]' }
+      },
+      {
+        num: 3, label: 'Supabase ESM client', layer: 'supabase', file: 'src/lib/supabase.js',
+        what: 'The React app uses the npm @supabase/supabase-js package (ESM), NOT the UMD CDN version used by the landing page. Both point to the same Supabase project. The client is a singleton — created once, imported everywhere. The anon key is safe to expose publicly (it only grants access defined by RLS policies).',
+        code: `<span class="code-comment">// src/lib/supabase.js</span>
+<span class="code-kw">import</span> { createClient } <span class="code-kw">from</span> <span class="code-str">'@supabase/supabase-js'</span>
+<span class="code-kw">const</span> SUPABASE_URL  = <span class="code-str">'https://ftryuvfdihmhlzvbpfeu.supabase.co'</span>
+<span class="code-kw">const</span> SUPABASE_ANON = <span class="code-str">'eyJhbGc…'</span>
+<span class="code-kw">export const</span> supabase = <span class="code-fn">createClient</span>(SUPABASE_URL, SUPABASE_ANON)
+
+<span class="code-comment">// vs landing (js/supabase.js — UMD CDN):</span>
+<span class="code-kw">const</span> _supabase = window.supabase.<span class="code-fn">createClient</span>(URL, ANON)`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'any page imports supabase' },
+          { label: 'OUT',  type: 'out',  val: 'same singleton client instance shared across all pages' },
+          { label: 'NOTE', type: 'note', val: 'ESM (React) vs UMD (landing) — different module formats, same Supabase project' },
+        ],
+        db: [{ table: 'all tables', action: 'accessed via this singleton client' }],
+        state: { 'client': 'singleton', 'authToken': 'from localStorage (set by Supabase SDK)' }
+      },
+    ]
+  },
+
+  navigation: {
+    label: 'Navigation',
+    steps: [
+      {
+        num: 1, label: 'Layout component', layer: 'react', file: 'src/components/Layout.jsx',
+        what: 'Every page is wrapped in Layout. It renders the page title, optional left/right header slots, padding, and the fixed BottomNav. Pages pass their title as a prop. The Layout handles the common shell so pages don\'t each re-implement the header or bottom nav.',
+        code: `<span class="code-comment">// Every page:</span>
+<span class="code-kw">&lt;Layout</span> title=<span class="code-str">"Groups"</span>
+  leftSlot={<span class="code-kw">&lt;button</span> onClick={openJoin}<span class="code-kw">&gt;</span>Join<span class="code-kw">&lt;/button&gt;</span>}
+  rightSlot={<span class="code-kw">&lt;button</span> onClick={openCreate}<span class="code-kw">&gt;</span>+ Create<span class="code-kw">&lt;/button&gt;</span>}
+<span class="code-kw">&gt;</span>
+  {<span class="code-comment">/* page content */</span>}
+<span class="code-kw">&lt;/Layout&gt;</span>`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'Groups.jsx renders' },
+          { label: 'OUT',  type: 'out',  val: '"Groups" in header, Join + Create buttons, BottomNav fixed at bottom' },
+        ],
+        db: [],
+        state: { 'title': '"Groups"', 'leftSlot': '"Join button"', 'rightSlot': '"+ Create button"' }
+      },
+      {
+        num: 2, label: 'BottomNav', layer: 'react', file: 'src/components/BottomNav.jsx',
+        what: 'Fixed bottom navigation with 4 tabs. Always visible on every page (rendered inside Layout). Uses useLocation to highlight the active tab. Tapping navigates via React Router. Icons are emoji for zero-dependency simplicity.',
+        code: `<span class="code-comment">// 4 tabs:</span>
+<span class="code-kw">const</span> TABS = [
+  { path: <span class="code-str">'/dashboard'</span>, label: <span class="code-str">'Dashboard'</span>, icon: <span class="code-str">'📊'</span> },
+  { path: <span class="code-str">'/groups'</span>,    label: <span class="code-str">'Groups'</span>,    icon: <span class="code-str">'👥'</span> },
+  { path: <span class="code-str">'/picks'</span>,     label: <span class="code-str">'Picks'</span>,     icon: <span class="code-str">'⚽'</span> },
+  { path: <span class="code-str">'/ai-feed'</span>,   label: <span class="code-str">'AI Feed'</span>,   icon: <span class="code-str">'🤖'</span> },
+]`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'current route = "/groups"' },
+          { label: 'OUT',  type: 'out',  val: 'Groups tab highlighted gold, others muted' },
+        ],
+        db: [],
+        state: { 'activeTab': '"/groups"' }
+      },
+      {
+        num: 3, label: 'sessionStorage tab memory', layer: 'react', file: 'multiple pages',
+        what: 'Several pages persist the selected group/tab across navigation using sessionStorage. Groups.jsx saves the selected group tab. Picks.jsx saves the active sub-tab. AiFeed.jsx saves the selected group. This prevents the UI from resetting when the user navigates away and returns within the same session.',
+        code: `<span class="code-comment">// Groups.jsx</span>
+<span class="code-kw">const</span> <span class="code-fn">selectGroup</span> = id => {
+  sessionStorage.<span class="code-fn">setItem</span>(<span class="code-str">'groups_tab'</span>, id)
+  <span class="code-fn">setSelectedGroupId</span>(id)
+}
+<span class="code-comment">// On load:</span>
+<span class="code-kw">const</span> stored = sessionStorage.<span class="code-fn">getItem</span>(<span class="code-str">'groups_tab'</span>)
+<span class="code-kw">if</span> (stored && list.<span class="code-fn">some</span>(g => g.id === stored)) <span class="code-kw">return</span> stored`,
+        example: [
+          { label: 'IN',   type: 'in',   val: 'user selects "The Lads" tab, navigates to Dashboard, comes back' },
+          { label: 'OUT',  type: 'out',  val: '"The Lads" tab still selected — sessionStorage preserved it' },
+        ],
+        db: [],
+        state: { 'sessionStorage["groups_tab"]': '"f8e7d6c5-…"' }
+      },
+    ]
+  },
+
+  errors: { label: 'Error Handling', steps: [] }
+}
+
+const ERROR_ROWS = [
+  { section: 'App Shell — Critical' },
+  { location: 'src/App.jsx', name: 'No React Error Boundary', desc: 'If any page component throws an unhandled JS error, the entire app crashes to a blank screen. No recovery path for the user.', status: 'missing', prio: 'high', fix: 'Wrap each route in an <ErrorBoundary> component that shows a "Something went wrong — reload" message.' },
+  { location: 'src/App.jsx', name: 'No offline/network detection', desc: 'If Supabase is unreachable, each page shows its own empty state or error, but there is no global "you\'re offline" banner.', status: 'missing', prio: 'high', fix: 'Add a window.addEventListener("offline") handler in AuthContext that shows a global banner.' },
+  { section: 'Auth & Session' },
+  { location: 'src/App.jsx (AuthGuard)', name: 'Loading / null / session states', desc: 'AuthGuard correctly handles undefined (loading), null (unauthenticated), and object (authenticated) states.', status: 'done', prio: 'done', fix: '' },
+  { location: 'src/context/ToastContext.jsx', name: 'DB error feedback', desc: 'Toast system provides user feedback on all DB errors across all pages.', status: 'done', prio: 'done', fix: '' },
+  { section: 'Navigation & UX' },
+  { location: 'all pages', name: 'No route-level loading indicator', desc: 'When navigating between pages, there is no transition indicator while the new page loads its Supabase data. User sees a flash of empty state.', status: 'missing', prio: 'medium', fix: 'Add a small loading bar or skeleton at the page level while initial data loads.' },
+  { location: 'Groups.jsx, Picks.jsx, AiFeed.jsx', name: 'sessionStorage tab memory', desc: 'Selected group/tab is preserved across navigation so users don\'t lose their place when switching pages.', status: 'done', prio: 'done', fix: '' },
+]
+
+// ─── ENGINE ──────────────────────────────────────────────────────────────────
+
+let currentPath = 'boot'
+let currentStep = 0
+
+function switchPath(key) {
+  currentPath = key
+  currentStep = 0
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const keys = ['boot','routing','authguard','context','navigation','rules','errors']
+    b.classList.toggle('active', keys[i] === key)
+  })
+  render()
+}
+
+function prevStep() { if (currentStep > 0) { currentStep--; render() } }
+function nextStep() {
+  const steps = PATHS[currentPath].steps
+  if (currentStep < steps.length - 1) { currentStep++; render() }
+}
+
+function layerClass(l) {
+  return { landing: 'landing', react: 'react', supabase: 'supabase', db: 'db' }[l] || 'react'
+}
+function dotClass(l) {
+  return { landing: 'dot-landing', react: 'dot-react', supabase: 'dot-supabase', db: 'dot-db' }[l] || 'dot-react'
+}
+function badgeHtml(l) {
+  const map = { landing: ['badge-landing','Landing'], react: ['badge-react','React'], supabase: ['badge-supabase','Supabase'], db: ['badge-db','DB'] }
+  const [cls, label] = map[l] || ['badge-react','React']
+  return `<span class="badge ${cls}">${label}</span>`
+}
+
+function render() {
+  const sidebar = document.querySelector('.sidebar')
+
+  if (currentPath === 'rules') {
+    sidebar.style.display = 'none'
+    renderRules()
+    document.getElementById('prev-btn').disabled = true
+    document.getElementById('next-btn').disabled = true
+    document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+    document.getElementById('prompt-text').textContent = 'React App Shell — business rules, sync behaviour, RLS policies, and SDK call patterns.'
+    return
+  }
+
+  const path = PATHS[currentPath]
+  const steps = path.steps
+  const list = document.getElementById('step-list')
+
+  if (currentPath === 'errors') {
+    sidebar.style.display = 'none'
+    renderErrors()
+    document.getElementById('prev-btn').disabled = true
+    document.getElementById('next-btn').disabled = true
+    document.getElementById('nav-counter').textContent = ''
+    document.getElementById('prompt-text').textContent = 'Error handling audit for the React App Shell — covers boot, routing, auth guard, and navigation.'
+    return
+  }
+
+  sidebar.style.display = ''
+  list.innerHTML = steps.map((s, i) => `
+    <div class="step-item ${i === currentStep ? 'active' : ''}" onclick="currentStep=${i};render()">
+      <div class="step-layer-dot ${dotClass(s.layer)}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>
+  `).join('')
+
+  const s = steps[currentStep]
+  const flowmap = steps.map((st, i) => `
+    <div class="fm-node" onclick="currentStep=${i};render()">
+      <div class="fm-box ${layerClass(st.layer)} ${i === currentStep ? 'current' : ''}" title="${st.label}">${st.label.length > 12 ? st.label.slice(0,12)+'…' : st.label}</div>
+      <div class="fm-num">${st.num}</div>
+    </div>
+    ${i < steps.length - 1 ? '<div class="fm-arrow">→</div>' : ''}
+  `).join('')
+
+  const dbHtml = s.db && s.db.length ? s.db.map(d => `
+    <div class="db-row">
+      <span class="db-table">${d.table}</span>
+      <span class="db-action">${d.action}</span>
+    </div>
+  `).join('') : '<div class="db-none">No DB operation at this step</div>'
+
+  const stateHtml = Object.entries(s.state || {}).map(([k,v]) => `
+    <div class="state-row">
+      <span class="state-key">${k}</span>
+      <span class="state-val ${v.includes('undefined') || v.includes('null') ? 'null' : v.includes('SET') || v.includes('loaded') ? 'set' : ''}">${v}</span>
+    </div>
+  `).join('')
+
+  const exHtml = (s.example || []).map(e => `
+    <div class="example-row">
+      <span class="example-label ${e.type}">${e.label}</span>
+      <span class="example-val">${e.val}</span>
+    </div>
+  `).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label}</div>
+        <div class="step-header-file">${s.file} &nbsp; ${badgeHtml(s.layer)}</div>
+      </div>
+    </div>
+
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow Map — ${path.label}</div>
+      <div class="flowmap">${flowmap}</div>
+    </div>
+
+    <div class="card what-card">
+      <div class="card-title">What happens</div>
+      <div class="what-text">${s.what.replace(/\n/g,'<br>')}</div>
+    </div>
+
+    <div class="card code-card">
+      <div class="card-title">Key code</div>
+      <div class="code-block">${s.code}</div>
+    </div>
+
+    ${exHtml ? `<div class="card example-card"><div class="card-title">Example</div>${exHtml}</div>` : ''}
+
+    <div style="display:flex;gap:1rem;width:100%;flex-wrap:wrap">
+      <div class="card db-card">
+        <div class="card-title">DB operation</div>
+        <div class="db-op">${dbHtml}</div>
+      </div>
+      <div class="card state-card">
+        <div class="card-title">State inspector</div>
+        <div class="state-grid">${stateHtml}</div>
+      </div>
+    </div>
+  `
+
+  document.getElementById('prev-btn').disabled = currentStep === 0
+  document.getElementById('next-btn').disabled = currentStep === steps.length - 1
+  document.getElementById('nav-counter').textContent = `Step ${currentStep + 1} of ${steps.length}`
+  document.getElementById('prompt-text').textContent = `${path.label} · Step ${s.num}: ${s.label} (${s.layer} layer, ${s.file})`
+}
+
+function renderRules() {
+  document.getElementById('detail-content').innerHTML = `
+    <div style="padding:24px;overflow-y:auto;width:100%;height:calc(100vh - 120px);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px;">
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">📐 Business Logic</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li><code>session === undefined</code> = loading (show spinner); <code>session === null</code> = unauthenticated (redirect); <code>session = object</code> = authenticated</li>
+            <li><code>onAuthStateChange</code> fires on token refresh with transient null — React ONLY reacts to <code>SIGNED_OUT</code> event to clear session</li>
+            <li>Partial registration guard: after session loads, React checks <code>profiles</code> table — if no row, calls <code>create_profile</code> RPC with fallback username from <code>user.email</code></li>
+            <li><code>AuthGuard</code> wraps every route — unauthenticated users are redirected to <code>./index.html</code></li>
+            <li>BottomNav shows 4 tabs: Dashboard / Groups / Picks / AI Feed — active tab highlighted in gold</li>
+            <li><code>HashRouter</code> used (not BrowserRouter) — URLs like <code>#/dashboard</code>, <code>#/game/:id</code> — no server-side routing needed for GitHub Pages</li>
+            <li><code>GroupSelector</code> component is shared across Groups, Game, Picks, AiFeed — shows pill tabs for each group</li>
+            <li>CSS is shared: <code>css/style.css</code> imported via <code>src/main.jsx</code> — applies to all React pages AND vanilla pages</li>
+          </ul>
+        </div>
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Sync Rules</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li><code>AuthContext</code> initializes once on app mount — not re-fetched on navigation</li>
+            <li>Context is re-rendered when session changes (signIn/signOut/refresh)</li>
+            <li><code>ToastContext</code> provides global toast notifications — stateless, auto-dismiss</li>
+            <li>No Realtime subscriptions in the app shell — only polling per-page where needed</li>
+            <li><code>GroupSelector</code> state lives in each page (not globally) — switching groups re-fetches data for that page</li>
+          </ul>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔒 RLS Policies</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid #333;">
+                <th style="text-align:left;padding:6px 8px;color:#888;">Table</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">Op</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">USING / WITH CHECK</th>
+              </tr>
+            </thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">profiles</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">auth.uid() = id (own always)</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">(all routes)</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">AuthGuard</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">client-side guard — RLS on DB is the true security backstop</td></tr>
+              <tr><td style="padding:6px 8px;color:#86efac;font-family:monospace">(shell)</td><td style="padding:6px 8px;">—</td><td style="padding:6px 8px;font-family:monospace;font-size:11px;">No shell-specific RLS — each page's queries have their own RLS</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔧 SDK Calls</h3>
+          <pre style="margin:0;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:16px;overflow-x:auto;font-size:12px;line-height:1.6;color:#e2e8f0;">// src/lib/supabase.js — ESM client (used by all React pages)
+import { createClient } from '@supabase/supabase-js'
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+// src/context/AuthContext.jsx
+const { data: { session } } = await supabase.auth.getSession()
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') setSession(null)
+  else if (session) setSession(session)
+})
+const { data: profile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+if (!profile) await supabase.rpc('create_profile', { p_username: fallback })
+await supabase.auth.signOut()</pre>
+        </div>
+
+      </div>
+    </div>`
+}
+
+function renderErrors() {
+  const rows = ERROR_ROWS.map(r => {
+    if (r.section) return `<tr class="eh-section-row"><td colspan="5">${r.section}</td></tr>`
+    const statusPill = r.status === 'done'
+      ? `<span class="eh-pill pill-ok">Done</span>`
+      : `<span class="eh-pill pill-missing">Missing</span>`
+    const prioPill = r.prio === 'done'
+      ? `<span class="eh-pill prio-done">Resolved</span>`
+      : r.prio === 'high' ? `<span class="eh-pill prio-high">High</span>`
+      : r.prio === 'medium' ? `<span class="eh-pill prio-medium">Medium</span>`
+      : `<span class="eh-pill prio-low">Low</span>`
+    return `<tr>
+      <td><span class="eh-location">${r.location}</span></td>
+      <td><div class="eh-error-name">${r.name}</div><div class="eh-error-desc">${r.desc}</div></td>
+      <td>${statusPill}</td>
+      <td>${r.fix ? `<span class="eh-fix">${r.fix}</span>` : '<span style="color:var(--faint)">—</span>'}</td>
+      <td>${prioPill}</td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="eh-page">
+      <div class="eh-legend">
+        <div class="eh-legend-item"><span class="eh-pill pill-ok">Done</span> <span>handled correctly</span></div>
+        <div class="eh-legend-item"><span class="eh-pill pill-missing">Missing</span> <span>not handled</span></div>
+        <div class="eh-legend-item"><span class="eh-pill prio-high">High</span> <span>fix urgently</span></div>
+        <div class="eh-legend-item"><span class="eh-pill prio-medium">Medium</span> <span>fix before launch</span></div>
+        <div class="eh-legend-item"><span class="eh-pill prio-low">Low</span> <span>nice to have</span></div>
+      </div>
+      <table class="eh-table">
+        <thead><tr>
+          <th>Location</th><th>Error / Scenario</th><th>Status</th><th>Fix</th><th>Priority</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `
+}
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent)
+    .then(() => {
+      const btn = document.querySelector('.copy-btn')
+      btn.textContent = 'Copied!'
+      setTimeout(() => btn.textContent = 'Copy', 1500)
+    })
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') prevStep()
+  if (e.key === 'ArrowRight') nextStep()
+})
+
+render()
+</script>
+</body>
+</html>

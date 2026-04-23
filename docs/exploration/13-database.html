@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13 — Database Deep-Dive · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+    --layer-ef: #3b2a1f; --layer-ef-text: #fbbf24;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-db { background: var(--layer-db); color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+  /* Sidebar — table list */
+  .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .table-item { display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .table-item:hover { background: rgba(255,255,255,.04); }
+  .table-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .table-item-name { font-size: .78rem; font-family: monospace; color: var(--muted); transition: color .15s; }
+  .table-item.active .table-item-name { color: var(--text); }
+  .table-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--layer-db-text); flex-shrink: 0; }
+
+  /* Detail pane */
+  .detail { flex: 1; display: flex; min-width: 0; overflow: hidden; }
+  .detail-main { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+
+  /* Right: relationship panel */
+  .rel-panel { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; padding: 1rem; }
+  .rel-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .75rem; }
+  .rel-box { background: var(--layer-db); border: 1px solid rgba(196,181,253,.2); border-radius: 6px; padding: .65rem .85rem; margin-bottom: .5rem; }
+  .rel-table-name { font-family: monospace; font-size: .78rem; font-weight: 700; color: var(--layer-db-text); margin-bottom: .3rem; }
+  .rel-arrow { display: flex; align-items: center; gap: .4rem; font-size: .68rem; color: var(--muted); margin-bottom: .2rem; }
+  .rel-current { background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.3); border-radius: 6px; padding: .65rem .85rem; margin-bottom: .5rem; }
+  .rel-current-name { font-family: monospace; font-size: .78rem; font-weight: 700; color: var(--gold); }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .75rem; }
+
+  /* Table header */
+  .table-header { display: flex; align-items: center; gap: .75rem; }
+  .table-header-name { font-family: monospace; font-size: 1.1rem; font-weight: 800; color: var(--gold); }
+  .table-header-note { font-size: .75rem; color: var(--muted); margin-left: auto; }
+
+  /* Column table */
+  .col-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .col-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .4rem .65rem; border-bottom: 1px solid var(--border); }
+  .col-table td { padding: .5rem .65rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.4; }
+  .col-table tr:hover td { background: rgba(255,255,255,.02); }
+  .col-name { font-family: monospace; font-size: .78rem; color: #86efac; }
+  .col-pk   { font-family: monospace; font-size: .78rem; color: var(--gold); font-weight: 700; }
+  .col-type { font-family: monospace; font-size: .72rem; color: var(--layer-supabase-text, #f9a8d4); }
+  .col-null { font-size: .68rem; color: var(--muted); }
+  .col-note { font-size: .7rem; color: #93c5fd; }
+  .col-badge { display: inline-block; font-size: .58rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: .1rem .4rem; border-radius: 3px; margin-right: .3rem; }
+  .cb-pk  { background: rgba(245,158,11,.15); color: var(--gold); border: 1px solid rgba(245,158,11,.25); }
+  .cb-fk  { background: rgba(147,197,253,.1); color: #93c5fd; border: 1px solid rgba(147,197,253,.2); }
+  .cb-uni { background: rgba(134,239,172,.1); color: #86efac; border: 1px solid rgba(134,239,172,.2); }
+
+  /* RLS list */
+  .rls-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: .65rem .85rem; margin-bottom: .5rem; }
+  .rls-op { display: inline-block; font-size: .62rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: .15rem .45rem; border-radius: 3px; margin-right: .5rem; }
+  .op-select { background: rgba(134,239,172,.1); color: #86efac; }
+  .op-insert { background: rgba(147,197,253,.1); color: #93c5fd; }
+  .op-update { background: rgba(251,191,36,.1); color: #fcd34d; }
+  .op-delete { background: rgba(252,165,165,.1); color: #fca5a5; }
+  .op-all    { background: rgba(196,181,253,.1); color: #c4b5fd; }
+  .rls-name { font-size: .75rem; font-weight: 600; color: var(--text); }
+  .rls-using { font-family: monospace; font-size: .7rem; color: var(--muted); margin-top: .3rem; }
+  .rls-absent { font-size: .78rem; color: var(--faint); font-style: italic; }
+
+  /* Tags for RPCs / triggers */
+  .tag-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .tag { font-family: monospace; font-size: .7rem; padding: .2rem .55rem; border-radius: 4px; }
+  .tag-rpc  { background: rgba(196,181,253,.1); color: #c4b5fd; border: 1px solid rgba(196,181,253,.2); }
+  .tag-trig { background: rgba(251,191,36,.1); color: #fbbf24; border: 1px solid rgba(251,191,36,.2); }
+  .tag-ef   { background: var(--layer-ef); color: var(--layer-ef-text); border: 1px solid rgba(251,191,36,.2); }
+
+  /* RLS Audit tab */
+  .audit-page { display: flex; flex-direction: column; gap: 1rem; }
+  .audit-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .audit-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .audit-table td { padding: .55rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.4; }
+  .audit-table tr:hover td { background: rgba(255,255,255,.02); }
+  .a-table-name { font-family: monospace; font-size: .78rem; font-weight: 700; color: #86efac; }
+  .a-ops { font-size: .72rem; color: var(--muted); }
+  .a-missing { font-size: .72rem; color: #fca5a5; }
+  .a-note { font-size: .72rem; color: #93c5fd; font-style: italic; }
+  .pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok      { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-none    { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+
+  /* Bottom bar */
+  .bottom-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .bottom-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .bottom-text { flex: 1; font-size: .78rem; color: var(--muted); }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  .divider { height: 1px; background: var(--border); margin: .25rem 0; }
+  .section-label { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .65rem 1rem .2rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">13 — Database Deep-Dive</div>
+    <div class="header-sub">WorldCup 2026 · Schema Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem">
+    <span class="badge badge-db">PostgreSQL</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('schema')">Schema Explorer</button>
+  <button class="tab-btn" onclick="switchTab('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchTab('audit')" style="color:#fca5a5">⚠ RLS Audit</button>
+</div>
+
+<div class="main" id="main-content">
+  <!-- Schema explorer -->
+  <div class="sidebar" id="table-sidebar">
+    <div class="sidebar-label">Tables</div>
+    <div id="table-list"></div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-main" id="detail-main"></div>
+    <div class="rel-panel" id="rel-panel"></div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <span class="bottom-label">Table</span>
+  <span class="bottom-text" id="bottom-text">Select a table to explore its schema, RLS policies, and relationships.</span>
+  <button class="copy-btn" onclick="copyInfo()">Copy</button>
+</div>
+
+<script>
+const TABLES = {
+  profiles: {
+    desc: 'Public user identity. One row per user. id matches auth.users.id exactly.',
+    columns: [
+      { name: 'id',       type: 'uuid',   nullable: false, default: null,  notes: 'PK. FK → auth.users(id) CASCADE', tags: ['pk','fk'] },
+      { name: 'username', type: 'text',   nullable: false, default: null,  notes: 'UNIQUE. 3–20 chars, letters/numbers/_. Rename locked after Jun 11.', tags: ['uni'] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'own always', using: 'auth.uid() = id' },
+      { op: 'SELECT', name: 'group members after deadline', using: 'share_a_group(id, auth.uid()) AND now() >= 2026-06-11T19:00:00Z' },
+      { op: 'INSERT', name: 'via create_profile RPC', using: 'auth.uid() = id (SECURITY DEFINER RPC)' },
+      { op: 'UPDATE', name: 'own before deadline', using: 'auth.uid() = id AND now() < 2026-06-11T19:00:00Z' },
+      { op: 'DELETE', name: 'via delete_account RPC', using: 'SECURITY DEFINER RPC only' },
+    ],
+    fks: ['auth.users'],
+    revFks: ['group_members.user_id', 'predictions.user_id', 'champion_pick.user_id', 'top_scorer_pick.user_id'],
+    rpcs: ['create_profile', 'delete_account'],
+    triggers: [],
+    efAccess: [],
+    notes: 'No email stored here — email lives only in auth.users (Supabase-managed).'
+  },
+
+  groups: {
+    desc: 'Prediction groups. Created by a user (captain). Permanent — cannot be deleted.',
+    columns: [
+      { name: 'id',          type: 'uuid',      nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'name',        type: 'text',       nullable: false, default: null, notes: 'Rename locked after Jun 11.', tags: [] },
+      { name: 'invite_code', type: 'char(6)',    nullable: false, default: null, notes: 'UNIQUE. Generated by trigger fn_generate_invite_code on INSERT.', tags: ['uni'] },
+      { name: 'created_by',  type: 'uuid',       nullable: true,  default: null, notes: 'FK → auth.users SET NULL. Captain. Null if captain deletes account.', tags: ['fk'] },
+      { name: 'created_at',  type: 'timestamptz',nullable: false, default: 'now()', notes: null, tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'members only', using: 'is_group_member(id, auth.uid())' },
+      { op: 'INSERT', name: 'via create_group RPC', using: 'SECURITY DEFINER RPC — checks max 3 groups, max 10 members' },
+      { op: 'UPDATE', name: 'captain before deadline', using: 'created_by = auth.uid() AND now() < 2026-06-11T19:00:00Z' },
+    ],
+    fks: ['auth.users (created_by SET NULL)'],
+    revFks: ['group_members.group_id', 'predictions.group_id', 'champion_pick.group_id', 'top_scorer_pick.group_id', 'ai_summaries.group_id'],
+    rpcs: ['create_group', 'join_group'],
+    triggers: ['fn_generate_invite_code (BEFORE INSERT)'],
+    efAccess: [],
+    notes: 'No DELETE policy — groups are permanent by design.'
+  },
+
+  group_members: {
+    desc: 'Membership junction table. Users join via invite code only. No leaving allowed.',
+    columns: [
+      { name: 'id',          type: 'uuid',      nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'group_id',    type: 'uuid',       nullable: false, default: null, notes: 'FK → groups CASCADE', tags: ['fk'] },
+      { name: 'user_id',     type: 'uuid',       nullable: false, default: null, notes: 'FK → auth.users CASCADE', tags: ['fk'] },
+      { name: 'joined_at',   type: 'timestamptz',nullable: false, default: 'now()', notes: null, tags: [] },
+      { name: 'is_inactive', type: 'boolean',    nullable: false, default: 'false', notes: 'Set by captain. Dimmed on leaderboard. Still earns auto-predict points.', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'members only', using: 'is_group_member(group_id, auth.uid())' },
+      { op: 'INSERT', name: 'via join_group RPC', using: 'SECURITY DEFINER — checks max 10 members, max 3 groups per user' },
+      { op: 'UPDATE', name: 'captain sets is_inactive', using: 'group.created_by = auth.uid() AND user_id != auth.uid()' },
+    ],
+    fks: ['groups (CASCADE)', 'auth.users (CASCADE)'],
+    revFks: [],
+    rpcs: ['join_group', 'delete_account (cascade)'],
+    triggers: [],
+    efAccess: ['nightly-summary reads for qualifying group filter'],
+    notes: 'UNIQUE(user_id, group_id). No DELETE policy — no leaving. Captain cannot flag themselves inactive.'
+  },
+
+  games: {
+    desc: 'All 104 WC fixtures. Scores, phase, odds. No status column — finished = score_home IS NOT NULL.',
+    columns: [
+      { name: 'id',                   type: 'uuid',       nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'api_game_id',          type: 'integer',    nullable: true,  default: null, notes: 'api-football.com fixture ID', tags: [] },
+      { name: 'home_team',            type: 'text',       nullable: false, default: null, notes: '3-letter team code', tags: [] },
+      { name: 'away_team',            type: 'text',       nullable: false, default: null, notes: '3-letter team code', tags: [] },
+      { name: 'kick_off_time',        type: 'timestamptz',nullable: false, default: null, notes: 'UTC. Prediction lock time.', tags: [] },
+      { name: 'phase',                type: 'text',       nullable: false, default: null, notes: "'group'|'r32'|'r16'|'qf'|'sf'|'third'|'final'", tags: [] },
+      { name: 'score_home',           type: 'integer',    nullable: true,  default: null, notes: '90-min score ONLY. null = not yet played.', tags: [] },
+      { name: 'score_away',           type: 'integer',    nullable: true,  default: null, notes: '90-min score ONLY. Never ET or pens.', tags: [] },
+      { name: 'went_to_extra_time',   type: 'boolean',    nullable: true,  default: null, notes: 'null = group stage or unplayed', tags: [] },
+      { name: 'went_to_penalties',    type: 'boolean',    nullable: true,  default: null, notes: 'null = group stage or unplayed', tags: [] },
+      { name: 'et_score_home',        type: 'integer',    nullable: true,  default: null, notes: 'Score after ET. null if no ET.', tags: [] },
+      { name: 'et_score_away',        type: 'integer',    nullable: true,  default: null, notes: 'Score after ET. null if no ET.', tags: [] },
+      { name: 'penalty_score_home',   type: 'integer',    nullable: true,  default: null, notes: 'Penalty shootout score. null if no pens.', tags: [] },
+      { name: 'penalty_score_away',   type: 'integer',    nullable: true,  default: null, notes: 'Penalty shootout score. null if no pens.', tags: [] },
+      { name: 'knockout_winner',      type: 'text',       nullable: true,  default: null, notes: 'Actual winner (home/away) after ET/pens. Used for champion scoring.', tags: [] },
+      { name: 'odds_home',            type: 'numeric',    nullable: true,  default: null, notes: 'Bet365 pre-game odds', tags: [] },
+      { name: 'odds_draw',            type: 'numeric',    nullable: true,  default: null, notes: 'Bet365 pre-game odds', tags: [] },
+      { name: 'odds_away',            type: 'numeric',    nullable: true,  default: null, notes: 'Bet365 pre-game odds', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'public — all users', using: 'true' },
+    ],
+    fks: [],
+    revFks: ['predictions.game_id'],
+    rpcs: [],
+    triggers: ['fn_update_points (AFTER UPDATE score_home, score_away)', 'fn_award_champion_points (AFTER UPDATE knockout_winner on final)'],
+    efAccess: ['football-api-sync: UPSERT scores, stats, odds', 'sync-odds: UPDATE odds_home/draw/away', 'nightly-summary: SELECT completed games'],
+    notes: 'NO status column — use score_home IS NOT NULL. score_home/away = 90-min ONLY, never changes after being set.'
+  },
+
+  predictions: {
+    desc: 'User scoreline predictions per game per group. Locks at kick_off_time.',
+    columns: [
+      { name: 'id',             type: 'uuid',    nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'user_id',        type: 'uuid',    nullable: false, default: null, notes: 'FK → auth.users CASCADE', tags: ['fk'] },
+      { name: 'game_id',        type: 'uuid',    nullable: false, default: null, notes: 'FK → games', tags: ['fk'] },
+      { name: 'group_id',       type: 'uuid',    nullable: true,  default: null, notes: 'FK → groups. null = ungrouped legacy row.', tags: ['fk'] },
+      { name: 'predicted_home', type: 'integer', nullable: false, default: null, notes: 'Predicted home score', tags: [] },
+      { name: 'predicted_away', type: 'integer', nullable: false, default: null, notes: 'Predicted away score', tags: [] },
+      { name: 'points_earned',  type: 'integer', nullable: false, default: '0', notes: '0 | 1 | 3. Updated by trigger when game scores are set.', tags: [] },
+      { name: 'is_auto',        type: 'boolean', nullable: false, default: 'false', notes: 'true = system-generated at kickoff. Still earns points.', tags: [] },
+      { name: 'updated_at',     type: 'timestamptz', nullable: false, default: 'now()', notes: null, tags: [] },
+    ],
+    rls: [
+      { op: 'INSERT', name: 'own before kickoff', using: 'auth.uid() = user_id AND kick_off_time > now()' },
+      { op: 'UPDATE', name: 'own before kickoff', using: 'auth.uid() = user_id AND kick_off_time > now()' },
+      { op: 'SELECT', name: 'own always', using: 'auth.uid() = user_id' },
+      { op: 'SELECT', name: 'group members after kickoff', using: 'share_a_group(user_id, auth.uid()) AND kick_off_time <= now()' },
+    ],
+    fks: ['auth.users (CASCADE)', 'games', 'groups'],
+    revFks: [],
+    rpcs: [],
+    triggers: ['fn_update_points (fires when games.score_home updated)'],
+    efAccess: ['fn_schedule_auto_predictions: inserts is_auto=true at kickoff'],
+    notes: 'UNIQUE(user_id, game_id, group_id) NULLS NOT DISTINCT. Points: 3=exact score, 1=correct outcome.'
+  },
+
+  champion_pick: {
+    desc: 'Per-group champion pick. One pick per (user, group). Locks Jun 11 19:00 UTC.',
+    columns: [
+      { name: 'id',           type: 'uuid',    nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'user_id',      type: 'uuid',    nullable: false, default: null, notes: 'FK → auth.users CASCADE', tags: ['fk'] },
+      { name: 'group_id',     type: 'uuid',    nullable: false, default: null, notes: 'FK → groups CASCADE. NOT NULL.', tags: ['fk'] },
+      { name: 'team',         type: 'text',    nullable: false, default: null, notes: '3-letter team code (e.g. "ARG")', tags: [] },
+      { name: 'points_earned',type: 'integer', nullable: false, default: '0', notes: '0 or 10. Set by trigger when final winner decided.', tags: [] },
+      { name: 'is_auto',      type: 'boolean', nullable: false, default: 'false', notes: 'true = system random pick at deadline', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'own always', using: 'auth.uid() = user_id' },
+      { op: 'SELECT', name: 'all after deadline', using: 'now() >= 2026-06-11T19:00:00Z' },
+      { op: 'INSERT', name: 'own before deadline + member', using: 'auth.uid() = user_id AND is_group_member(group_id) AND now() < 2026-06-11T19:00:00Z' },
+      { op: 'UPDATE', name: 'own before deadline + member', using: 'auth.uid() = user_id AND is_group_member(group_id) AND now() < 2026-06-11T19:00:00Z' },
+    ],
+    fks: ['auth.users (CASCADE)', 'groups (CASCADE)'],
+    revFks: [],
+    rpcs: [],
+    triggers: ['fn_award_champion_points (AFTER UPDATE knockout_winner on final game)'],
+    efAccess: ['fn_auto_assign_picks: inserts is_auto=true picks at deadline'],
+    notes: 'UNIQUE(user_id, group_id). Upsert uses onConflict: "user_id,group_id". Correct pick = 10pts.'
+  },
+
+  top_scorer_pick: {
+    desc: 'Per-group top scorer pick. Same schema pattern as champion_pick but picks a player, not a team.',
+    columns: [
+      { name: 'id',             type: 'uuid',    nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'user_id',        type: 'uuid',    nullable: false, default: null, notes: 'FK → auth.users CASCADE', tags: ['fk'] },
+      { name: 'group_id',       type: 'uuid',    nullable: false, default: null, notes: 'FK → groups CASCADE. NOT NULL.', tags: ['fk'] },
+      { name: 'player_api_id',  type: 'integer', nullable: true,  default: null, notes: 'api-football.com player ID for top scorer candidate', tags: [] },
+      { name: 'points_earned',  type: 'integer', nullable: false, default: '0', notes: '0 or 10. Set by trigger when tournament top scorer confirmed.', tags: [] },
+      { name: 'is_auto',        type: 'boolean', nullable: false, default: 'false', notes: 'true = system random pick at deadline', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'own always', using: 'auth.uid() = user_id' },
+      { op: 'SELECT', name: 'all after deadline', using: 'now() >= 2026-06-11T19:00:00Z' },
+      { op: 'INSERT', name: 'own before deadline + member', using: 'auth.uid() = user_id AND is_group_member(group_id) AND now() < 2026-06-11T19:00:00Z' },
+      { op: 'UPDATE', name: 'own before deadline + member', using: 'auth.uid() = user_id AND is_group_member(group_id) AND now() < 2026-06-11T19:00:00Z' },
+    ],
+    fks: ['auth.users (CASCADE)', 'groups (CASCADE)'],
+    revFks: [],
+    rpcs: [],
+    triggers: ['fn_award_champion_points (AFTER UPDATE — top scorer determined)'],
+    efAccess: ['fn_auto_assign_picks: inserts is_auto=true at deadline'],
+    notes: 'UNIQUE(user_id, group_id). Same RLS pattern as champion_pick. Correct pick = 10pts.'
+  },
+
+  team_tournament_stats: {
+    desc: 'Cumulative tournament stats per team. Written by football-api-sync EF after each game.',
+    columns: [
+      { name: 'team_code',       type: 'text',    nullable: false, default: null, notes: 'PK. 3-letter team code (e.g. "ARG")', tags: ['pk'] },
+      { name: 'wins',            type: 'integer', nullable: false, default: '0', notes: 'Total tournament wins', tags: [] },
+      { name: 'draws',           type: 'integer', nullable: false, default: '0', notes: 'Total tournament draws', tags: [] },
+      { name: 'losses',          type: 'integer', nullable: false, default: '0', notes: 'Total tournament losses', tags: [] },
+      { name: 'goals_scored',    type: 'integer', nullable: false, default: '0', notes: 'Total goals scored in tournament', tags: [] },
+      { name: 'goals_conceded',  type: 'integer', nullable: false, default: '0', notes: 'Total goals conceded in tournament', tags: [] },
+      { name: 'yellow_cards',    type: 'integer', nullable: false, default: '0', notes: 'Total yellow cards', tags: [] },
+      { name: 'red_cards',       type: 'integer', nullable: false, default: '0', notes: 'Total red cards (incl VAR reds)', tags: [] },
+      { name: 'corners',         type: 'integer', nullable: false, default: '0', notes: 'Total corner kicks', tags: [] },
+      { name: 'passes_total',    type: 'integer', nullable: false, default: '0', notes: 'Total passes (v22+ tracking)', tags: [] },
+      { name: 'passes_accuracy', type: 'numeric', nullable: true,  default: null, notes: 'Average pass accuracy % across games', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'public — all users', using: 'true' },
+    ],
+    fks: [],
+    revFks: [],
+    rpcs: [],
+    triggers: [],
+    efAccess: ['football-api-sync: UPSERT after each completed game (onConflict: team_code)'],
+    notes: 'Shown in Game.jsx "Tournament Stats" section. Should accumulate (SUM) — not replace — stats per game.'
+  },
+
+  ai_summaries: {
+    desc: 'Nightly AI-generated group summaries. One row per group per day.',
+    columns: [
+      { name: 'id',           type: 'uuid',        nullable: false, default: 'gen_random_uuid()', notes: 'PK', tags: ['pk'] },
+      { name: 'group_id',     type: 'uuid',        nullable: false, default: null, notes: 'FK → groups CASCADE', tags: ['fk'] },
+      { name: 'date',         type: 'date',        nullable: false, default: null, notes: 'Summary date (YYYY-MM-DD)', tags: [] },
+      { name: 'summary_text', type: 'text',        nullable: false, default: null, notes: 'AI-generated text (or FALLBACK_MSG)', tags: [] },
+      { name: 'input_json',   type: 'jsonb',       nullable: true,  default: null, notes: 'Full LLM payload snapshot. Never contains global_ranks.', tags: [] },
+      { name: 'display_data', type: 'jsonb',       nullable: true,  default: null, notes: 'UI-only data. Never sent to LLM. Contains global_ranks + daily_standings. null on pre-M57 rows.', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'group members only', using: 'is_group_member(group_id, auth.uid())' },
+    ],
+    fks: ['groups (CASCADE)'],
+    revFks: [],
+    rpcs: [],
+    triggers: [],
+    efAccess: ['nightly-summary: INSERT (service_role only)'],
+    notes: 'No UPDATE policy — summaries are write-once. Missing: UNIQUE(group_id, date) to prevent duplicates on double cron-fire.'
+  },
+
+  champion_odds: {
+    desc: 'Pre-tournament champion odds per team. Written by sync-odds EF. William Hill only.',
+    columns: [
+      { name: 'team',       type: 'text',        nullable: false, default: null, notes: 'PK. Team name (full name from TheOddsAPI)', tags: ['pk'] },
+      { name: 'odds',       type: 'numeric',     nullable: true,  default: null, notes: 'Decimal odds (William Hill)', tags: [] },
+      { name: 'updated_at', type: 'timestamptz', nullable: false, default: 'now()', notes: 'Last sync time', tags: [] },
+    ],
+    rls: [
+      { op: 'SELECT', name: 'public — all users', using: 'true' },
+    ],
+    fks: [],
+    revFks: [],
+    rpcs: [],
+    triggers: [],
+    efAccess: ['sync-odds: UPSERT (William Hill only, onConflict: team). v14: filters non-WC long-shots.'],
+    notes: 'Source: TheOddsAPI. Single source: William Hill only. USA maps to "United States" in normalization.'
+  }
+}
+
+const RLS_AUDIT = [
+  { table: 'profiles',            ops: 'SELECT ✓  UPDATE ✓  INSERT ✓ (RPC)  DELETE ✓ (RPC)',  missing: 'None', status: 'ok',      note: 'Deadline enforced via RLS CHECK on UPDATE' },
+  { table: 'groups',              ops: 'SELECT ✓  INSERT ✓ (RPC)  UPDATE ✓ (captain)',          missing: 'DELETE intentionally absent', status: 'none',  note: 'Groups permanent by design; no captain transfer' },
+  { table: 'group_members',       ops: 'SELECT ✓  INSERT ✓ (RPC)  UPDATE ✓ (captain sets inactive)', missing: 'DELETE intentionally absent', status: 'none',  note: 'No leave/remove by design' },
+  { table: 'games',               ops: 'SELECT ✓ (public)',                                      missing: 'INSERT/UPDATE: EF service_role (no client policy needed)', status: 'ok',      note: 'Client never writes game data' },
+  { table: 'predictions',         ops: 'SELECT ✓  INSERT ✓  UPDATE ✓',                          missing: 'DELETE: only via delete_account cascade', status: 'ok',      note: 'Kickoff time check enforced via RLS' },
+  { table: 'champion_pick',       ops: 'SELECT ✓  INSERT ✓  UPDATE ✓',                          missing: 'DELETE: cascade from delete_account', status: 'ok',      note: 'is_group_member + deadline check in RLS' },
+  { table: 'top_scorer_pick',     ops: 'SELECT ✓  INSERT ✓  UPDATE ✓',                          missing: 'DELETE: cascade from delete_account', status: 'ok',      note: 'Same pattern as champion_pick' },
+  { table: 'team_tournament_stats',ops: 'SELECT ✓ (public)',                                     missing: 'INSERT/UPDATE: EF service_role only', status: 'ok',      note: 'Client never writes team stats' },
+  { table: 'ai_summaries',        ops: 'SELECT ✓',                                               missing: 'UPDATE: summaries are write-once (no policy needed). Missing UNIQUE(group_id, date).', status: 'partial', note: 'INSERT: EF service_role. Add UNIQUE constraint to prevent duplicate rows.' },
+  { table: 'champion_odds',       ops: 'SELECT ✓ (public)',                                      missing: 'INSERT/UPDATE: EF service_role only', status: 'ok',      note: 'Client never writes odds' },
+]
+
+const TABLE_NAMES = Object.keys(TABLES)
+let activeTable = TABLE_NAMES[0]
+let activeTab = 'schema'
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function renderTableList() {
+  document.getElementById('table-list').innerHTML = TABLE_NAMES.map(t => `
+    <div class="table-item${t===activeTable?' active':''}" onclick="selectTable('${t}')">
+      <div class="table-dot"></div>
+      <div class="table-item-name">${t}</div>
+    </div>`).join('')
+}
+
+function opClass(op) {
+  if(op==='SELECT') return 'op-select'
+  if(op==='INSERT') return 'op-insert'
+  if(op==='UPDATE') return 'op-update'
+  if(op==='DELETE') return 'op-delete'
+  return 'op-all'
+}
+
+function renderTable() {
+  const t = TABLES[activeTable]
+
+  const colRows = t.columns.map(c => {
+    const badges = (c.tags||[]).map(tag =>
+      `<span class="col-badge cb-${tag}">${tag.toUpperCase()}</span>`).join('')
+    const nameCls = c.tags?.includes('pk') ? 'col-pk' : 'col-name'
+    return `<tr>
+      <td><span class="${nameCls}">${c.name}</span> ${badges}</td>
+      <td><span class="col-type">${c.type}</span></td>
+      <td><span class="col-null">${c.nullable?'nullable':'NOT NULL'}</span></td>
+      <td><span class="col-null" style="color:var(--faint)">${c.default||'—'}</span></td>
+      <td><span class="col-note">${escHtml(c.notes||'')}</span></td>
+    </tr>`
+  }).join('')
+
+  const rlsItems = t.rls.map(p => `
+    <div class="rls-item">
+      <span class="rls-op ${opClass(p.op)}">${p.op}</span>
+      <span class="rls-name">${p.name}</span>
+      <div class="rls-using"><code>${escHtml(p.using)}</code></div>
+    </div>`).join('')
+
+  const fkList = [...(t.fks||[]),...(t.revFks||[])].length===0
+    ? '<span style="color:var(--faint);font-size:.78rem;font-style:italic">No foreign keys</span>'
+    : ''
+  const fkHtml = t.fks.length ? `<div style="margin-bottom:.5rem"><span style="font-size:.65rem;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.08em">References</span><br>${t.fks.map(f=>`<span class="col-note" style="font-family:monospace;font-size:.75rem">→ ${f}</span>`).join('<br>')}</div>` : ''
+  const revFkHtml = t.revFks.length ? `<div><span style="font-size:.65rem;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.08em">Referenced by</span><br>${t.revFks.map(f=>`<span style="font-family:monospace;font-size:.75rem;color:#fbbf24">← ${f}</span>`).join('<br>')}</div>` : ''
+
+  const rpcTags = t.rpcs.map(r=>`<span class="tag tag-rpc">${r}</span>`).join('')
+  const trigTags = t.triggers.map(r=>`<span class="tag tag-trig">${escHtml(r)}</span>`).join('')
+  const efTags = t.efAccess.map(r=>`<span class="tag tag-ef">${escHtml(r)}</span>`).join('')
+
+  document.getElementById('detail-main').innerHTML = `
+    <div class="table-header">
+      <div class="table-header-name">${activeTable}</div>
+      <div class="table-header-note">${escHtml(t.notes||'')}</div>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);line-height:1.6">${escHtml(t.desc)}</p>
+
+    <div class="card">
+      <div class="card-title">Columns</div>
+      <table class="col-table">
+        <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>${colRows}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">RLS Policies</div>
+      ${t.rls.length ? rlsItems : '<div class="rls-absent">No client-facing RLS — EF service_role only or intentionally absent</div>'}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Foreign Keys</div>
+      ${fkHtml}${revFkHtml}${fkList}
+    </div>
+
+    <div class="card">
+      <div class="card-title">RPCs that touch this table</div>
+      ${t.rpcs.length ? `<div class="tag-list">${rpcTags}</div>` : '<span style="color:var(--faint);font-size:.78rem;font-style:italic">None — direct from client or EF only</span>'}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Triggers</div>
+      ${t.triggers.length ? `<div class="tag-list">${trigTags}</div>` : '<span style="color:var(--faint);font-size:.78rem;font-style:italic">No triggers on this table</span>'}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Edge Function Access</div>
+      ${t.efAccess.length ? `<div class="tag-list">${efTags}</div>` : '<span style="color:var(--faint);font-size:.78rem;font-style:italic">No Edge Function access</span>'}
+    </div>`
+
+  // Relationship panel
+  document.getElementById('rel-panel').innerHTML = `
+    <div class="rel-title">Relationships</div>
+    <div class="rel-current"><div class="rel-current-name">${activeTable}</div><div style="font-size:.65rem;color:var(--muted);margin-top:.2rem">(selected)</div></div>
+    ${t.fks.length ? '<div style="font-size:.65rem;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem">References</div>' : ''}
+    ${t.fks.map(fk=>`<div class="rel-box"><div class="rel-arrow">→ FK</div><div class="rel-table-name">${fk}</div></div>`).join('')}
+    ${t.revFks.length ? '<div style="font-size:.65rem;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin:.5rem 0 .4rem">Referenced by</div>' : ''}
+    ${t.revFks.map(fk=>`<div class="rel-box" style="border-color:rgba(251,191,36,.2)"><div class="rel-arrow" style="color:#fbbf24">← FK</div><div class="rel-table-name" style="color:#fbbf24">${fk}</div></div>`).join('')}`
+
+  document.getElementById('bottom-text').textContent =
+    `${activeTable}: ${t.columns.length} columns, ${t.rls.length} RLS policies. ${t.notes||''}`
+}
+
+function renderRules() {
+  document.getElementById('table-sidebar').style.display = 'none'
+  document.getElementById('rel-panel').style.display = 'none'
+
+  document.getElementById('detail-main').innerHTML = `
+<div style="padding:24px; overflow-y:auto; width:100%;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px;">
+
+    <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">📐 Business Logic</h3>
+      <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+        <li><code>games</code> has NO <code>status</code> column — use <code>score_home IS NOT NULL</code> to determine if finished</li>
+        <li><code>score_home/away</code> = 90-min score ONLY — never ET or penalty score</li>
+        <li><code>predictions</code> UNIQUE: <code>UNIQUE(user_id, game_id, group_id) NULLS NOT DISTINCT</code></li>
+        <li><code>champion_pick</code> and <code>top_scorer_pick</code>: <code>UNIQUE(user_id, group_id)</code> — one pick per group per user</li>
+        <li><code>group_members</code>: no DELETE RLS policy — members are permanent (no leave, no remove)</li>
+        <li><code>groups.created_by</code> → SET NULL on <code>auth.users</code> delete — group survives without captain</li>
+        <li><code>profiles.username</code> is the display name — NOT stored in auth.users.email</li>
+        <li>All CASCADE deletes flow from <code>auth.users</code> → profiles → everything else</li>
+        <li>RLS enforced on ALL tables — anon key never bypasses RLS</li>
+        <li>Service role key (used by EFs) bypasses RLS — never expose to frontend</li>
+      </ul>
+    </div>
+
+    <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔄 Sync Rules</h3>
+      <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+        <li>DB triggers fire synchronously on INSERT/UPDATE: <code>fn_generate_invite_code</code>, <code>fn_update_points</code>, <code>fn_award_champion_points</code></li>
+        <li>pg_cron: <code>football-api-sync</code> daily 03:00 UTC; <code>nightly-summary</code> per-game at kickoff + 150min; <code>auto-predict</code> at kickoff</li>
+        <li>No Realtime channels used — all data via REST polling</li>
+        <li><code>fn_schedule_auto_predictions()</code> and <code>fn_schedule_ai_summaries()</code> must be called manually after seeding games</li>
+      </ul>
+    </div>
+
+    <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔒 RLS Policies</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr style="border-bottom:1px solid #333;">
+          <th style="text-align:left; padding:6px 8px; color:#888;">Table</th>
+          <th style="text-align:left; padding:6px 8px; color:#888;">Op</th>
+          <th style="text-align:left; padding:6px 8px; color:#888;">USING / WITH CHECK</th>
+        </tr></thead>
+        <tbody style="color:#ccc;">
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">profiles</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">own OR share_a_group OR after Jun 11</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">groups</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">is_group_member(id, auth.uid())</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">group_members</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">is_group_member(group_id, auth.uid())</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">games</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">true (public)</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">predictions</td><td style="padding:6px 8px; color:#93c5fd;">INSERT/UPDATE</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">own + before kickoff</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">predictions</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">own OR (group member + after kickoff)</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">champion_pick</td><td style="padding:6px 8px; color:#93c5fd;">INSERT/UPDATE</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">own + group member + before Jun 11</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">ai_summaries</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">is_group_member(group_id, auth.uid())</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">team_tournament_stats</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">true (public)</td></tr>
+          <tr><td style="padding:6px 8px; font-family:monospace; color:#86efac;">champion_odds</td><td style="padding:6px 8px; color:#86efac;">SELECT</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">true (public)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔧 SDK Calls</h3>
+      <pre style="margin:0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:4px; padding:16px; overflow-x:auto; font-size:12px; line-height:1.6; color:#e2e8f0;">// Helper functions used in RLS policies (defined in DB):
+is_group_member(group_id, user_id)   -- returns bool
+share_a_group(user_id_a, user_id_b)  -- returns bool (share at least 1 group)
+
+// RPCs available:
+supabase.rpc('get_leaderboard')
+supabase.rpc('get_group_leaderboard', { p_group_id })
+supabase.rpc('create_group', { p_name })
+supabase.rpc('join_group', { p_invite_code })
+supabase.rpc('create_profile', { p_username })
+supabase.rpc('delete_account')
+
+// DB trigger functions (server-side, not callable via SDK):
+fn_generate_invite_code()      -- on groups INSERT
+fn_update_points()             -- on games UPDATE (score set)
+fn_award_champion_points()     -- on games UPDATE (knockout_winner set)
+fn_award_top_scorer_points()   -- on games UPDATE (knockout_winner set)
+fn_auto_predict()              -- called by pg_cron at kickoff
+fn_auto_assign_picks()         -- called by pg_cron at Jun 11 deadline
+fn_schedule_ai_summaries()     -- must be called manually after seeding games
+fn_schedule_auto_predictions() -- must be called manually after seeding games</pre>
+    </div>
+
+  </div>
+</div>`
+  document.getElementById('bottom-text').textContent = 'Rules & SDK reference — global business logic, sync rules, RLS policies, and SDK call patterns.'
+}
+
+function renderAudit() {
+  document.getElementById('table-sidebar').style.display = 'none'
+  document.getElementById('rel-panel').style.display = 'none'
+  document.getElementById('detail-main').style.maxWidth = 'unset'
+
+  const rows = RLS_AUDIT.map(r => {
+    const sp = r.status==='ok'?'pill-ok':r.status==='partial'?'pill-partial':'pill-none'
+    return `<tr>
+      <td><span class="a-table-name">${r.table}</span></td>
+      <td><span class="a-ops">${r.ops}</span></td>
+      <td><span class="a-missing">${escHtml(r.missing)}</span></td>
+      <td><span class="pill ${sp}">${r.status}</span></td>
+      <td><span class="a-note">${escHtml(r.note)}</span></td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('detail-main').innerHTML = `<div class="audit-page">
+    <div style="font-size:.82rem;color:var(--muted);line-height:1.6;padding:.25rem 0">
+      RLS coverage audit for all tables. "None" status = intentionally absent (not a gap).
+      The only partially-covered table is <code>ai_summaries</code> — missing a UNIQUE(group_id, date) constraint.
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="audit-table">
+        <thead><tr><th>Table</th><th>Operations Covered</th><th>Missing / Notes</th><th>Status</th><th>Decision</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`
+  document.getElementById('bottom-text').textContent = 'RLS Audit — 10 tables, all reviewed.'
+}
+
+function selectTable(name) {
+  activeTable = name
+  renderTableList()
+  renderTable()
+}
+
+function switchTab(tab) {
+  activeTab = tab
+  document.querySelectorAll('.tab-btn').forEach((btn,i)=>btn.classList.toggle('active',['schema','rules','audit'][i]===tab))
+  if(tab==='audit') { renderAudit(); return }
+  if(tab==='rules') { renderRules(); return }
+  document.getElementById('table-sidebar').style.display = ''
+  document.getElementById('rel-panel').style.display = ''
+  renderTable()
+}
+
+function copyInfo() {
+  navigator.clipboard.writeText(document.getElementById('bottom-text').textContent).then(()=>{
+    const btn=document.querySelector('.copy-btn'),orig=btn.textContent
+    btn.textContent='Copied!';setTimeout(()=>btn.textContent=orig,1500)
+  })
+}
+
+renderTableList()
+renderTable()
+</script>
+</body>
+</html>

@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06 — Scoring Engine · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,.15); --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-landing: #1e3a5f; --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b; --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); } .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; position: relative; }
+  .step-item:hover { background: rgba(255,255,255,.04); } .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; } .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-landing { background: var(--layer-landing-text); } .dot-react { background: var(--layer-react-text); } .dot-supabase { background: var(--layer-supabase-text); } .dot-db { background: var(--layer-db-text); }
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; } .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; } .fm-box:hover { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); } .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high   { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low    { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done   { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+  .what-card { width: 100%; } .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; } .code-kw { color: #93c5fd; } .code-fn { color: #86efac; } .code-str { color: #fde68a; } .code-const { color: #f9a8d4; }
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in { color: #93c5fd; } .example-label.out { color: #86efac; } .example-label.err { color: #fca5a5; } .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 140px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); } .state-val.set { color: #86efac; } .state-val.warn { color: var(--gold); }
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); } .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">06 — Scoring Engine</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-db">Database</span>
+    <span class="badge badge-react">React App</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('outcome')">Outcome Points (1pt)</button>
+  <button class="tab-btn" onclick="switchPath('exact')">Exact Score (3pt)</button>
+  <button class="tab-btn" onclick="switchPath('picks')">Champion &amp; Top Scorer (10pt)</button>
+  <button class="tab-btn" onclick="switchPath('tiebreaker')">Tiebreaker</button>
+  <button class="tab-btn" onclick="switchPath('rules')">&#128203; Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">&#9888; Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-db-text)">Database (PostgreSQL)</div>
+          <div class="legend-desc">All scoring logic lives in DB triggers and RPCs. <code>fn_update_points</code> fires on game score update. <code>fn_award_champion_points</code> fires when final knockout_winner is set.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-react-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-react-text)">React App</div>
+          <div class="legend-desc">Reads leaderboard via RPC. Displays points earned per game. No scoring logic runs in the frontend — it always reads from DB.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-supabase-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-supabase-text)">Supabase</div>
+          <div class="legend-desc">Triggers fire on INSERT/UPDATE to <code>games</code>. RLS ensures users can read their own points. RPCs compute aggregate totals for leaderboard display.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">&#8592; Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next &#8594;</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+
+  outcome: {
+    label: 'Outcome Points (1pt)',
+    steps: [
+      {
+        num: 1,
+        label: 'Prediction submitted — outcome check',
+        layer: 'db',
+        file: 'predictions trigger / fn_update_points',
+        what: 'When a game\'s score_home and score_away are updated (set from NULL to actual values), a DB trigger fires fn_update_points for all predictions on that game.\n\nThe function compares the predicted outcome (home win / draw / away win) to the actual outcome. If they match, the prediction earns 1pt. The exact score is NOT required for this award — only the direction of the result matters.\n\nExample: user predicted 2-1, actual is 1-0. Both are home wins → outcome_match = true → 1pt.',
+        code: `<span class="code-comment">-- fn_update_points: outcome comparison (simplified)</span>
+<span class="code-kw">CASE</span>
+  <span class="code-comment">-- Home win: predicted home > away AND actual home > away</span>
+  <span class="code-kw">WHEN</span> pred_home > pred_away <span class="code-kw">AND</span> score_home > score_away <span class="code-kw">THEN</span> 1
+  <span class="code-comment">-- Draw: both sides equal</span>
+  <span class="code-kw">WHEN</span> pred_home = pred_away <span class="code-kw">AND</span> score_home = score_away <span class="code-kw">THEN</span> 1
+  <span class="code-comment">-- Away win: predicted away > home AND actual away > home</span>
+  <span class="code-kw">WHEN</span> pred_home < pred_away <span class="code-kw">AND</span> score_home < score_away <span class="code-kw">THEN</span> 1
+  <span class="code-kw">ELSE</span> 0
+<span class="code-kw">END</span>`,
+        db: [
+          { table: 'predictions', action: 'UPDATE — points_earned = 1 WHERE outcome matches' }
+        ],
+        example: [
+          { label: 'Input', type: 'in',  val: 'predicted: 2-1  |  actual: 1-0' },
+          { label: 'Check', type: 'note', val: '2 > 1 (home win predicted) AND 1 > 0 (home win actual) → match!' },
+          { label: 'Output', type: 'out', val: 'points_earned = 1' },
+          { label: 'Miss', type: 'err',  val: 'predicted: 0-0 (draw)  |  actual: 1-0 (home win) → 0pt' },
+        ],
+        state: {
+          'predicted': '2-1',
+          'actual': '1-0',
+          'outcome_match': 'true',
+          'exact_match': 'false',
+          'points': '1',
+        }
+      },
+      {
+        num: 2,
+        label: 'Outcome comparison — W/D/L only',
+        layer: 'db',
+        file: 'fn_update_points',
+        what: 'The outcome check is purely directional — it maps both predicted and actual scores to one of three buckets: Home Win (H > A), Draw (H = A), Away Win (H < A).\n\nThe actual goal counts do not matter for this comparison. A prediction of 5-0 correctly earns 1pt for a 1-0 result. A prediction of 0-0 earns 0pt for a 1-1 result because the goal counts differ — wait, no: a 0-0 prediction IS a draw prediction, and a 1-1 actual IS a draw → 1pt.\n\nOnly the relative direction (greater, equal, lesser) is compared, never the magnitude.',
+        code: `<span class="code-comment">-- Draw detection: both predicted AND actual must be ties</span>
+<span class="code-kw">ELSIF</span> pred_home = pred_away <span class="code-kw">AND</span> score_home = score_away <span class="code-kw">THEN</span>
+  <span class="code-comment">-- 0-0 predicted, 1-1 actual → both draws → 1pt</span>
+  <span class="code-comment">-- 0-0 predicted, 1-0 actual → draw vs home win → 0pt</span>
+  points := 1
+
+<span class="code-comment">-- Away win check</span>
+<span class="code-kw">ELSIF</span> pred_home < pred_away <span class="code-kw">AND</span> score_home < score_away <span class="code-kw">THEN</span>
+  points := 1`,
+        db: [],
+        example: [
+          { label: 'Draw hit', type: 'out', val: 'predicted: 0-0  |  actual: 2-2  → both draws → 1pt' },
+          { label: 'Away win', type: 'out', val: 'predicted: 1-2  |  actual: 0-3  → both away wins → 1pt' },
+          { label: 'Miss', type: 'err',  val: 'predicted: 1-1  |  actual: 2-1  → draw vs home win → 0pt' },
+        ],
+        state: {
+          'comparison': 'outcome only (W/D/L direction)',
+          'result': 'correct W — home win matched',
+          'points': '1',
+        }
+      }
+    ]
+  },
+
+  exact: {
+    label: 'Exact Score (3pt)',
+    steps: [
+      {
+        num: 1,
+        label: 'Exact scoreline match — 3pt awarded',
+        layer: 'db',
+        file: 'fn_update_points',
+        what: 'Before the outcome check runs, fn_update_points first tests for an exact scoreline match. If predicted_home equals score_home AND predicted_away equals score_away exactly, the function awards 3 points immediately.\n\nThis check is always first — if it passes, the outcome check is skipped entirely. The 3pt is a replacement, not an addition.',
+        code: `<span class="code-comment">-- fn_update_points: exact check runs FIRST</span>
+<span class="code-kw">IF</span> predicted_home = score_home <span class="code-kw">AND</span> predicted_away = score_away <span class="code-kw">THEN</span>
+  points := 3
+  <span class="code-comment">-- outcome check below is SKIPPED — exact already gives max</span>
+
+<span class="code-kw">ELSIF</span> <span class="code-comment">... outcome check ...</span>
+
+<span class="code-kw">ELSE</span>
+  points := 0
+<span class="code-kw">END IF</span>
+
+<span class="code-kw">UPDATE</span> predictions <span class="code-kw">SET</span> points_earned = points
+  <span class="code-kw">WHERE</span> game_id = NEW.id`,
+        db: [
+          { table: 'predictions', action: 'UPDATE — points_earned = 3 WHERE exact scoreline matches' }
+        ],
+        example: [
+          { label: 'Input', type: 'in',  val: 'predicted: 2-1  |  actual: 2-1' },
+          { label: 'Check', type: 'note', val: 'predicted_home(2) = score_home(2) AND predicted_away(1) = score_away(1) → TRUE' },
+          { label: 'Output', type: 'out', val: 'points_earned = 3' },
+        ],
+        state: {
+          'predicted': '2-1',
+          'actual': '2-1',
+          'exact_match': 'true',
+          'points': '3',
+        }
+      },
+      {
+        num: 2,
+        label: 'Not additive — exact replaces outcome',
+        layer: 'db',
+        file: 'fn_update_points',
+        what: 'Exact score is 3pt, NOT 3+1=4pt. The logic is IF-ELSIF-ELSE, so only one branch executes. If the exact branch fires, the function returns 3 immediately without ever checking the outcome branch.\n\nThis means the maximum points per game is exactly 3. There is no "bonus" for getting both exact AND correct outcome — exact already implies correct outcome.',
+        code: `<span class="code-comment">-- Points per game: only ONE branch executes</span>
+<span class="code-kw">IF</span> exact_match <span class="code-kw">THEN</span>
+  points := 3   <span class="code-comment">-- max; outcome check skipped</span>
+<span class="code-kw">ELSIF</span> outcome_match <span class="code-kw">THEN</span>
+  points := 1
+<span class="code-kw">ELSE</span>
+  points := 0
+<span class="code-kw">END IF</span>
+
+<span class="code-comment">-- NOT additive: 2-1 predicted, 2-1 actual = 3pt (not 4)</span>
+<span class="code-comment">-- rule: replace not stack; max_per_game = 3</span>`,
+        db: [],
+        example: [
+          { label: 'Rule', type: 'note', val: 'exact = 3pt (not 1+3). Outcome check skipped when exact fires.' },
+          { label: 'Max per game', type: 'out', val: '3pt (exact score)' },
+          { label: 'Outcome only', type: 'out', val: '1pt (correct W/D/L, wrong score)' },
+        ],
+        state: {
+          'rule': 'replace not stack',
+          'max_per_game': '3',
+        }
+      },
+      {
+        num: 3,
+        label: 'Wrong outcome → 0pt',
+        layer: 'db',
+        file: 'fn_update_points',
+        what: 'If neither exact nor outcome matches, the prediction earns 0 points. The most common case: user predicted a draw (0-0) but the result was a decisive home win (3-1). Neither exact (different scoreline) nor outcome (draw vs home win) matched.\n\n0pt predictions still appear in the leaderboard — they just do not contribute to total_points.',
+        code: `<span class="code-comment">-- Fallthrough to ELSE: no points</span>
+<span class="code-kw">ELSE</span>
+  points := 0
+<span class="code-kw">END IF</span>
+
+<span class="code-comment">-- Example: predicted 0-0, actual 3-1</span>
+<span class="code-comment">-- exact: 0≠3 → false</span>
+<span class="code-comment">-- outcome: 0=0 (draw) vs 3>1 (home win) → false</span>
+<span class="code-comment">-- result: points = 0</span>`,
+        db: [
+          { table: 'predictions', action: 'UPDATE — points_earned = 0 WHERE no match' }
+        ],
+        example: [
+          { label: 'Input', type: 'in',  val: 'predicted: 0-0  |  actual: 3-1' },
+          { label: 'Exact?', type: 'err', val: '0 ≠ 3 → false' },
+          { label: 'Outcome?', type: 'err', val: 'draw (0=0) vs home win (3>1) → false' },
+          { label: 'Output', type: 'out', val: 'points_earned = 0' },
+        ],
+        state: {
+          'predicted': '0-0',
+          'actual': '3-1',
+          'points': '0',
+        }
+      }
+    ]
+  },
+
+  picks: {
+    label: 'Champion & Top Scorer (10pt)',
+    steps: [
+      {
+        num: 1,
+        label: 'Champion trigger fires — final game',
+        layer: 'db',
+        file: 'fn_award_champion_points (trigger)',
+        what: 'When the final game row is updated with a knockout_winner value (the team that won the final, accounting for ET and penalties), a trigger fires fn_award_champion_points.\n\nThe function checks that the game\'s phase is "final" before awarding anything — this prevents false triggers on other knockout games (r16, qf, sf, etc.). It then updates all champion_pick rows where the picked team matches the winner, awarding 10pt each.',
+        code: `<span class="code-comment">-- fn_award_champion_points: trigger on games UPDATE</span>
+<span class="code-kw">IF</span> NEW.phase = <span class="code-str">'final'</span> <span class="code-kw">AND</span> NEW.knockout_winner <span class="code-kw">IS NOT NULL</span>
+   <span class="code-kw">AND</span> (OLD.knockout_winner <span class="code-kw">IS NULL</span> <span class="code-comment">-- first time only</span>
+        <span class="code-kw">OR</span> OLD.knockout_winner <span class="code-const">IS DISTINCT FROM</span> NEW.knockout_winner)
+<span class="code-kw">THEN</span>
+  <span class="code-kw">UPDATE</span> champion_pick
+    <span class="code-kw">SET</span> points_earned = 10
+    <span class="code-kw">WHERE</span> team_code = NEW.knockout_winner
+<span class="code-kw">END IF</span>`,
+        db: [
+          { table: 'champion_pick', action: 'UPDATE — points_earned = 10 WHERE team = knockout_winner' }
+        ],
+        example: [
+          { label: 'Trigger', type: 'in',  val: 'UPDATE games SET knockout_winner = \'ARG\' WHERE phase = \'final\'' },
+          { label: 'DB result', type: 'out', val: 'champion_pick rows with team_code = \'ARG\' → points_earned = 10' },
+          { label: 'Others', type: 'note', val: 'All other champion_pick rows remain at points_earned = 0' },
+        ],
+        state: {
+          'trigger': 'UPDATE games WHERE phase=final',
+          'winner': 'ARG (Argentina)',
+          'points': '10',
+        }
+      },
+      {
+        num: 2,
+        label: 'Top scorer trigger fires',
+        layer: 'db',
+        file: 'fn_award_top_scorer_points (trigger)',
+        what: 'The same game update (or a separate tournament top scorer update) triggers fn_award_top_scorer_points. This function checks which player_api_id is set as the tournament top scorer and awards 10pt to all top_scorer_pick rows that match.\n\nThe top scorer may be stored in a separate tournament_meta table or derived from player stats. The function looks up the player with the most goals across all tournament games.',
+        code: `<span class="code-comment">-- fn_award_top_scorer_points</span>
+<span class="code-comment">-- Find top scorer from player stats</span>
+<span class="code-kw">SELECT</span> player_api_id
+  <span class="code-kw">INTO</span> top_scorer_id
+  <span class="code-kw">FROM</span> player_stats
+  <span class="code-kw">ORDER BY</span> goals <span class="code-kw">DESC</span>
+  <span class="code-kw">LIMIT</span> 1
+
+<span class="code-comment">-- Award to all who picked that player</span>
+<span class="code-kw">UPDATE</span> top_scorer_pick
+  <span class="code-kw">SET</span> points_earned = 10
+  <span class="code-kw">WHERE</span> player_api_id = top_scorer_id`,
+        db: [
+          { table: 'top_scorer_pick', action: 'UPDATE — points_earned = 10 WHERE player_api_id matches top scorer' }
+        ],
+        example: [
+          { label: 'Top scorer', type: 'in',  val: 'player_api_id = 521234 (Mbappe, 8 goals)' },
+          { label: 'Matches', type: 'out', val: 'top_scorer_pick WHERE player_api_id = 521234 → points_earned = 10' },
+          { label: 'No match', type: 'note', val: 'player_matched = false → points_earned stays 0' },
+        ],
+        state: {
+          'player_matched': 'true',
+          'points': '10',
+        }
+      },
+      {
+        num: 3,
+        label: 'Per-group independence — 3 groups, 3 picks',
+        layer: 'db',
+        file: 'champion_pick / top_scorer_pick schema',
+        what: 'A user in 3 groups has 3 champion_pick rows and 3 top_scorer_pick rows — one per (user_id, group_id) combination. Each is scored independently.\n\nIf the user picked Argentina in Group A and Brazil in Groups B and C, and Argentina wins, only the Group A row earns 10pt. Groups B and C remain at 0pt.\n\nThis is enforced by the UNIQUE(user_id, group_id) constraint. The trigger updates ALL matching rows across all groups, so if the user picked Argentina in multiple groups, all those rows get 10pt.',
+        code: `<span class="code-comment">-- champion_pick schema: per-group unique row</span>
+<span class="code-kw">UNIQUE</span>(user_id, group_id)
+<span class="code-comment">-- each group scored separately</span>
+
+<span class="code-comment">-- Example: user in 3 groups</span>
+<span class="code-comment">-- Group A pick: Argentina → matches → 10pt</span>
+<span class="code-comment">-- Group B pick: Brazil    → no match → 0pt</span>
+<span class="code-comment">-- Group C pick: Brazil    → no match → 0pt</span>
+
+<span class="code-comment">-- Leaderboard: each group row scored independently</span>`,
+        db: [
+          { table: 'champion_pick', action: 'SELECT / UPDATE — per (user_id, group_id) row' }
+        ],
+        example: [
+          { label: 'User groups', type: 'in',  val: 'groups: [A, B, C]  →  3 champion_pick rows' },
+          { label: 'Group A', type: 'out', val: 'pick: ARG  |  winner: ARG  → 10pt' },
+          { label: 'Group B', type: 'note', val: 'pick: BRA  |  winner: ARG  → 0pt' },
+          { label: 'Group C', type: 'note', val: 'pick: BRA  |  winner: ARG  → 0pt' },
+        ],
+        state: {
+          'groups': '3',
+          'correct_pick_in': 'group A only',
+          'points_awarded_in': 'group A only',
+        }
+      }
+    ]
+  },
+
+  tiebreaker: {
+    label: 'Tiebreaker',
+    steps: [
+      {
+        num: 1,
+        label: 'Same total points → exact_scores count',
+        layer: 'db',
+        file: 'get_leaderboard RPC',
+        what: 'When two users have identical total_points, the leaderboard ranks them by exact_scores — the count of predictions that earned exactly 3pt (exact scoreline matches).\n\nThis tiebreaker is computed inside the RANK() window function ORDER BY clause. It is applied globally across all (user x group) rows. A user with more exact scores breaks the tie over a user with the same total points but fewer exact scores.',
+        code: `<span class="code-comment">-- get_leaderboard RPC: rank with tiebreaker</span>
+<span class="code-fn">RANK</span>() <span class="code-kw">OVER</span> (
+  <span class="code-kw">ORDER BY</span>
+    total_points  <span class="code-kw">DESC</span>,   <span class="code-comment">-- primary sort</span>
+    exact_scores  <span class="code-kw">DESC</span>    <span class="code-comment">-- tiebreaker: more exact = higher rank</span>
+) <span class="code-kw">AS</span> rank`,
+        db: [
+          { table: 'get_leaderboard', action: 'RPC — computes RANK() with exact_scores tiebreaker' }
+        ],
+        example: [
+          { label: 'User A', type: 'in',  val: 'total_pts: 45  |  exact_scores: 7  →  rank: 1' },
+          { label: 'User B', type: 'in',  val: 'total_pts: 45  |  exact_scores: 5  →  rank: 2' },
+          { label: 'Note', type: 'note', val: 'Same pts but A has more exact scores → A ranks higher' },
+        ],
+        state: {
+          'user_A': '{ pts: 45, exact: 7, rank: 1 }',
+          'user_B': '{ pts: 45, exact: 5, rank: 2 }',
+        }
+      },
+      {
+        num: 2,
+        label: 'Still tied → same rank (RANK skips)',
+        layer: 'db',
+        file: 'get_leaderboard RPC',
+        what: 'If two users have identical total_points AND identical exact_scores, they share the same rank. The RANK() function (not DENSE_RANK) then skips the next rank number.\n\nExample: users A and B both at rank 2 → next user gets rank 4, not rank 3. This is standard SQL RANK() behavior and matches how official sports leaderboards work.\n\nThere is no further tiebreaker (no username alphabetical etc.) by design — ties are legitimate and preserved.',
+        code: `<span class="code-comment">-- RANK() vs DENSE_RANK() behavior</span>
+
+<span class="code-comment">-- RANK() (what we use): skips ranks on ties</span>
+<span class="code-comment">-- User A: 45pts, 7 exact → rank 2</span>
+<span class="code-comment">-- User B: 45pts, 7 exact → rank 2 (same!)</span>
+<span class="code-comment">-- User C: 40pts, 4 exact → rank 4 (skips 3)</span>
+
+<span class="code-comment">-- DENSE_RANK() (NOT used): no skipping</span>
+<span class="code-comment">-- would give: 2, 2, 3  (but we want 2, 2, 4)</span>`,
+        db: [],
+        example: [
+          { label: 'Tied users', type: 'in',  val: 'A: 45pts/7 exact  B: 45pts/7 exact  C: 40pts/4 exact' },
+          { label: 'Ranks', type: 'out', val: 'A → rank 2\nB → rank 2\nC → rank 4  (3 is skipped)' },
+          { label: 'No more tiebreaker', type: 'note', val: 'No username alphabetical etc. Ties are preserved by design.' },
+        ],
+        state: {
+          'user_A': '{ rank: 2 }',
+          'user_B': '{ rank: 2 }',
+          'user_C': '{ rank: 4 }',
+        }
+      }
+    ]
+  }
+}
+
+const ERROR_ROWS = [
+  { section: 'fn_update_points — Trigger Logic' },
+  { location: 'fn_update_points:trigger', name: 'Game score updated but trigger not firing', when: 'score_home/away still NULL on update', status: 'partial', priority: 'done', handling: 'Trigger fires only on NOT NULL transition — if scores are not properly set from NULL, trigger may not fire. Schema ensures scores are written atomically by EF.', fix: 'EF football-api-sync writes both score_home AND score_away together. If only one is written, trigger may produce incorrect results. Verify both are always updated together.' },
+  { location: 'fn_update_points:logic', name: 'Exact score check uses ET score instead of 90-min', when: 'When games.score_home is accidentally ET score', status: 'ok', priority: 'done', handling: 'score_home is always 90-min only per schema. EF explicitly writes only 90-min score to score_home/away. ET score goes to et_score_home/away only.', fix: null },
+  { location: 'fn_update_points:rerun', name: 'Score corrected after initial write — points double-counted', when: 'EF writes wrong score, later corrects it', status: 'partial', priority: 'medium', handling: 'Trigger re-fires on any UPDATE to score_home/away. Points are overwritten (not accumulated) so correction works. But exact_scores counter in leaderboard RPC must be recounted correctly.', fix: 'Verify exact_scores is recounted from scratch on each leaderboard query, not incremented on trigger.' },
+
+  { section: 'fn_award_champion_points — Champion Trigger' },
+  { location: 'champion_pick:trigger', name: 'knockout_winner NULL for group stage game fires trigger', when: 'When wrong game updated with knockout_winner', status: 'ok', priority: 'done', handling: 'Trigger checks phase = \'final\' before awarding. Group stage games have phase = \'group\' so they never trigger champion award.', fix: null },
+  { location: 'champion_pick:trigger', name: 'Trigger fires twice if knockout_winner updated twice', when: 'Data correction scenario', status: 'partial', priority: 'medium', handling: 'Second trigger fire re-updates same rows to 10pt — idempotent, no double-count. But non-winners remain at 0pt correctly.', fix: 'Add OLD.knockout_winner IS DISTINCT FROM NEW.knockout_winner guard to prevent unnecessary re-evaluation.' },
+
+  { section: 'fn_award_top_scorer_points — Top Scorer' },
+  { location: 'top_scorer_pick:matching', name: 'player_api_id mismatch — name-based fallback', when: 'When API player ID changes between seasons', status: 'missing', priority: 'high', handling: 'Currently no fallback. If API Football changes a player\'s internal ID, existing top_scorer_pick rows with old ID will never match.', fix: 'Add player name fallback in trigger: if player_api_id match fails, try matching by player_name as secondary key.' },
+  { location: 'top_scorer_pick:tie', name: 'Multiple players tied for top scorer', when: 'Two players finish tournament with same goals', status: 'missing', priority: 'medium', handling: 'LIMIT 1 in query picks one winner arbitrarily (by DB row order). No handling for golden boot ties.', fix: 'Award 10pt to ALL tied top scorers. Change LIMIT 1 to a tie-aware query and update all matching picks.' },
+
+  { section: 'Tiebreaker — Leaderboard RPC' },
+  { location: 'tiebreaker:exact_scores', name: 'exact_scores column not updated on points re-evaluation', when: 'When prediction points are recalculated', status: 'partial', priority: 'high', handling: 'exact_scores must be recomputed from predictions WHERE points_earned = 3 on every leaderboard query. If cached, it may be stale.', fix: 'Confirm exact_scores is a live COUNT() in the RPC, not a cached column that needs separate updates.' },
+  { location: 'get_leaderboard:perf', name: 'Rank window function slow on large dataset', when: 'With 100+ users across multiple groups', status: 'partial', priority: 'medium', handling: 'RANK() OVER full result set works but may be slow without index on (user_id, group_id) in predictions.', fix: 'Add composite index on predictions(user_id, game_id) and group_members(group_id, user_id).' },
+
+  { section: 'Auto-Predict & Group Scoping' },
+  { location: 'auto-predict:points', name: 'Auto-predicted score earns points same as manual', when: 'Always — auto-predict is scored identically', status: 'ok', priority: 'done', handling: 'No distinction in fn_update_points. is_auto flag is display-only. Scoring logic ignores it.', fix: null },
+  { location: 'group scoping:points', name: 'Group leaderboard uses cross-group points', when: 'If RPC not filtered by group_id', status: 'ok', priority: 'done', handling: 'get_group_leaderboard(group_id) uses WHERE gm.group_id = $1 throughout. Champion and top scorer picks are also filtered by group_id.', fix: null },
+  { location: 'pick points:champion', name: 'Champion points double-awarded in 2 groups', when: 'When user in multiple groups picks same champion', status: 'ok', priority: 'done', handling: 'champion_pick has group_id FK — separate row per group. Trigger updates ALL matching rows across all groups. Each group row is scored independently.', fix: null },
+  { location: 'draw detection', name: 'Draw check: both home AND away same', when: 'When predicted 0-0 vs actual 0-0', status: 'ok', priority: 'done', handling: 'pred_home = pred_away AND score_home = score_away covers all draws including 0-0. Correct.', fix: null },
+  { location: 'null prediction', name: 'NULL predicted score counts as correct?', when: 'Should never happen in production', status: 'ok', priority: 'done', handling: 'RLS prevents NULL insert on predictions. Auto-predict always inserts a random integer 0-5 for each team. NULL predicted_home/away cannot exist.', fix: null },
+]
+
+const state = { path: 'outcome', stepIndex: 0 }
+
+function currentSteps() { return PATHS[state.path].steps }
+function currentStep() { return currentSteps()[state.stepIndex] }
+
+function renderSidebar() {
+  const steps = currentSteps()
+  document.getElementById('step-list').innerHTML = steps.map((s, i) => {
+    const active = i === state.stepIndex ? ' active' : ''
+    return `<div class="step-item${active}" onclick="selectStep(${i})">
+      <div class="step-layer-dot dot-${s.layer}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`
+  }).join('')
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function renderDetail() {
+  const s = currentStep()
+  const steps = currentSteps()
+  const content = document.getElementById('detail-content')
+
+  const stateRows = Object.entries(s.state).map(([k, v]) => {
+    let cls = 'state-val'
+    if (v === 'null' || v === 'false') cls += ' null'
+    else if (String(v).includes('true') || String(v).includes('3') || String(v).includes('10') || String(v).includes('1pt') || String(v).includes('SET')) cls += ' set'
+    else if (String(v).includes('0') && String(v).length < 4) cls += ' warn'
+    return `<div class="state-row"><span class="state-key">${escHtml(k)}</span><span class="${cls}">${escHtml(v)}</span></div>`
+  }).join('')
+
+  const dbContent = s.db.length === 0
+    ? `<div class="db-none">No direct DB operation at this step</div>`
+    : s.db.map(op => `<div class="db-row"><span class="db-table">${op.table}</span><span class="db-action">${escHtml(op.action)}</span></div>`).join('')
+
+  const layerLabels = { landing: 'Landing (Vanilla JS)', react: 'React App', supabase: 'Supabase', db: 'Database' }
+  const layerBadge = `<span class="badge badge-${s.layer}" style="margin-left:.5rem">${layerLabels[s.layer]}</span>`
+
+  const flowNodes = steps.map((st, i) => {
+    const isCurrent = i === state.stepIndex
+    const shortLabel = st.label.length > 18 ? st.label.slice(0, 16) + '…' : st.label
+    const arrow = i < steps.length - 1 ? `<div class="fm-arrow">→</div>` : ''
+    return `<div class="fm-node" onclick="selectStep(${i})" title="${st.label}">
+      <div class="fm-box ${st.layer}${isCurrent ? ' current' : ''}">${shortLabel}</div>
+      <div class="fm-num">${st.num}</div>
+    </div>${arrow}`
+  }).join('')
+
+  const examples = (s.example || []).map(ex => `
+    <div class="example-row">
+      <span class="example-label ${ex.type}">${ex.label}</span>
+      <div class="example-val">${escHtml(ex.val)}</div>
+    </div>`).join('')
+
+  content.innerHTML = `
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow map — click any step</div>
+      <div class="flowmap">${flowNodes}</div>
+    </div>
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label} ${layerBadge}</div>
+        <div class="step-header-file">${s.file}</div>
+      </div>
+    </div>
+    <div class="card what-card">
+      <div class="card-title">What happens</div>
+      <div class="what-text">${s.what.replace(/\n/g, '<br>')}</div>
+    </div>
+    <div class="card code-card">
+      <div class="card-title">Key code</div>
+      <div class="code-block">${s.code}</div>
+    </div>
+    <div class="card example-card">
+      <div class="card-title">Example</div>
+      ${examples}
+    </div>
+    <div class="card db-card">
+      <div class="card-title">Database operation</div>
+      <div class="db-op">${dbContent}</div>
+    </div>
+    <div class="card state-card">
+      <div class="card-title">State inspector — at this step</div>
+      <div class="state-grid">${stateRows}</div>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = `Step ${state.stepIndex + 1} of ${steps.length}`
+  document.getElementById('prev-btn').disabled = state.stepIndex === 0
+  document.getElementById('next-btn').disabled = state.stepIndex === steps.length - 1
+  updatePrompt()
+}
+
+function updatePrompt() {
+  const s = currentStep()
+  document.getElementById('prompt-text').textContent =
+    `Scoring engine — ${PATHS[state.path].label} — Step ${s.num}: "${s.label}" (${s.file}). Layer: ${s.layer}. ${s.db.length ? 'DB: ' + s.db.map(d => d.table).join(', ') + '.' : 'No DB op.'}`
+}
+
+function renderAll() { renderSidebar(); renderDetail() }
+
+function renderRules() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">Business rules, sync rules, RLS policies, and SDK patterns for the scoring engine.</div>
+    </div>`
+  document.getElementById('detail-content').innerHTML = `
+    <div id="tab-rules" style="padding:24px; overflow-y:auto; width:100%;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px;">
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128208; Business Logic</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li>Exact score (predicted_home == score_home AND predicted_away == score_away) = <strong>3pt</strong> — replaces outcome, NOT additive (never 3+1)</li>
+            <li>Correct outcome only (W/D/L matches but not exact) = <strong>1pt</strong></li>
+            <li>Wrong outcome = <strong>0pt</strong></li>
+            <li>Correct champion pick = <strong>10pt</strong> — awarded when final game's <code>knockout_winner</code> is set</li>
+            <li>Correct top scorer pick = <strong>10pt</strong> — same event; matched by <code>player_api_id</code></li>
+            <li>Tiebreaker: <code>RANK() OVER (ORDER BY total_points DESC, exact_scores DESC)</code> — no username tiebreaker</li>
+            <li>Tied users get the SAME rank; next rank skips (e.g., 3 tied at #1 → next is #4)</li>
+            <li><code>score_home/away</code> = 90-min score ONLY — ET/pens scores never used for prediction comparison</li>
+            <li><code>is_auto = true</code> predictions earn the same points as manual — no distinction in scoring</li>
+          </ul>
+        </div>
+        <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128260; Sync Rules</h3>
+          <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+            <li><code>fn_update_points</code> trigger fires on <code>games</code> table UPDATE when <code>score_home IS NOT NULL</code> transitions from NULL → value</li>
+            <li><code>fn_award_champion_points</code> trigger fires on <code>games</code> UPDATE when <code>knockout_winner IS NOT NULL</code> and <code>phase = 'final'</code></li>
+            <li><code>fn_award_top_scorer_points</code> fires on same event — checks <code>top_scorer_pick.player_api_id</code> match</li>
+            <li>Points are set server-side by triggers — React never writes <code>points_earned</code> directly</li>
+            <li><code>exact_scores</code> count used for tiebreaker — must be recomputed whenever points update</li>
+          </ul>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128274; RLS Policies</h3>
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="border-bottom:1px solid #333;">
+              <th style="text-align:left; padding:6px 8px; color:#888;">Table</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">Op</th>
+              <th style="text-align:left; padding:6px 8px; color:#888;">USING / WITH CHECK</th>
+            </tr></thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>predictions</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT (points)</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>auth.uid() = user_id</code> (own) OR post-kickoff group reveal</td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>games</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">public — anyone can read scores</td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>champion_pick</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT (own)</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>auth.uid() = user_id</code></td></tr>
+              <tr><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>champion_pick</code></td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;">SELECT (all)</td><td style="padding:6px 8px; border-bottom:1px solid #1a1a1a;"><code>now() &gt;= '2026-06-11T19:00:00Z'</code></td></tr>
+              <tr><td style="padding:6px 8px;">triggers</td><td style="padding:6px 8px;">UPDATE</td><td style="padding:6px 8px;">SECURITY DEFINER — bypass RLS to update points_earned on all rows</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+          <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">&#128295; SDK Calls</h3>
+          <pre style="margin:0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:4px; padding:16px; overflow-x:auto; font-size:12px; line-height:1.6; color:#e2e8f0;">// Scoring is DB-side only — these are READ calls from React
+
+// Fetch user's prediction + points for a game
+const { data: pred } = await supabase
+  .from('predictions')
+  .select('predicted_home, predicted_away, points_earned, is_auto')
+  .eq('user_id', user.id)
+  .eq('game_id', gameId)
+  .eq('group_id', groupId)
+  .single()
+
+// Fetch champion pick + points
+const { data: champPick } = await supabase
+  .from('champion_pick')
+  .select('team, points_earned, is_auto')
+  .eq('user_id', user.id)
+  .eq('group_id', groupId)
+  .single()
+
+// Fetch top scorer pick + points
+const { data: tsPick } = await supabase
+  .from('top_scorer_pick')
+  .select('player_api_id, points_earned, is_auto')
+  .eq('user_id', user.id)
+  .eq('group_id', groupId)
+  .single()
+
+// DB trigger code (reference — not SDK):
+-- fn_update_points (fires on games UPDATE)
+IF NEW.predicted_home = NEW.score_home AND NEW.predicted_away = NEW.score_away THEN
+  points := 3;
+ELSIF (outcome comparison matches) THEN
+  points := 1;
+ELSE points := 0; END IF;
+UPDATE predictions SET points_earned = points WHERE game_id = NEW.id;</pre>
+        </div>
+      </div>
+    </div>`
+  document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'Scoring engine — Rules & SDK reference: business logic, sync rules, RLS policies, and SDK call patterns.'
+}
+
+function switchPath(path) {
+  state.path = path
+  state.stepIndex = 0
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    const paths = ['outcome', 'exact', 'picks', 'tiebreaker', 'rules', 'errors']
+    btn.classList.toggle('active', paths[i] === path)
+  })
+  if (path === 'errors') renderErrors()
+  else if (path === 'rules') renderRules()
+  else renderAll()
+}
+
+function selectStep(i) { state.stepIndex = i; renderAll() }
+function nextStep() { if (state.stepIndex < currentSteps().length - 1) { state.stepIndex++; renderAll() } }
+function prevStep() { if (state.stepIndex > 0) { state.stepIndex--; renderAll() } }
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(() => {
+    const btn = document.querySelector('.copy-btn')
+    const orig = btn.textContent
+    btn.textContent = 'Copied!'
+    setTimeout(() => btn.textContent = orig, 1500)
+  })
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextStep()
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevStep()
+})
+
+function renderErrors() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">All error points in the scoring engine — triggers, tiebreaker, group scoping.</div>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Status</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-ok">Handled</span><span style="font-size:.7rem;color:var(--muted)">works correctly</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-partial">Partial</span><span style="font-size:.7rem;color:var(--muted)">incomplete handling</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-missing">Missing</span><span style="font-size:.7rem;color:var(--muted)">no handling at all</span></div>
+        <div style="margin-top:.75rem;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Priority</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-high">High</span><span style="font-size:.7rem;color:var(--muted)">user-visible failure</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-medium">Medium</span><span style="font-size:.7rem;color:var(--muted)">confusing but recoverable</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-low">Low</span><span style="font-size:.7rem;color:var(--muted)">edge case, minor impact</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-done">Done ✓</span><span style="font-size:.7rem;color:var(--muted)">already handled</span></div>
+      </div>
+    </div>`
+
+  const rows = ERROR_ROWS.map(row => {
+    if (row.section) return `<tr class="eh-section-row"><td colspan="5">${row.section}</td></tr>`
+    const statusPill = row.status === 'ok' ? `<span class="eh-pill pill-ok">Handled</span>` : row.status === 'partial' ? `<span class="eh-pill pill-partial">Partial</span>` : `<span class="eh-pill pill-missing">Missing</span>`
+    const prioPill = row.priority === 'done' ? `<span class="eh-pill prio-done">Done ✓</span>` : row.priority === 'high' ? `<span class="eh-pill prio-high">High</span>` : row.priority === 'medium' ? `<span class="eh-pill prio-medium">Medium</span>` : `<span class="eh-pill prio-low">Low</span>`
+    const fixCell = row.fix ? `<span class="eh-fix">${escHtml(row.fix)}</span>` : `<span style="color:var(--faint);font-size:.7rem;font-style:italic">—</span>`
+    return `<tr>
+      <td><span class="eh-location">${row.location}</span></td>
+      <td><div class="eh-error-name">${row.name}</div><div class="eh-error-desc">${escHtml(row.when)}</div></td>
+      <td>${statusPill}</td>
+      <td style="max-width:260px"><div class="eh-error-desc">${escHtml(row.handling)}</div></td>
+      <td>${prioPill}<div style="margin-top:.35rem">${fixCell}</div></td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="eh-page">
+      <table class="eh-table">
+        <thead><tr>
+          <th style="min-width:140px">Location</th>
+          <th style="min-width:180px">Error / Scenario</th>
+          <th style="min-width:90px">Status</th>
+          <th style="min-width:220px">Current Handling</th>
+          <th style="min-width:200px">Priority &amp; Fix</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = `${ERROR_ROWS.filter(r => !r.section).length} error points`
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent =
+    'Scoring engine error audit — ' +
+    ERROR_ROWS.filter(r => r.status === 'ok').length + ' handled, ' +
+    ERROR_ROWS.filter(r => r.status === 'partial').length + ' partial, ' +
+    ERROR_ROWS.filter(r => r.status === 'missing').length + ' missing.'
+}
+
+renderAll()
+</script>
+</body>
+</html>

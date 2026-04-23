@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>03 — Friend Groups · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-landing: #1e3a5f; --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b; --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .step-item:hover { background: rgba(255,255,255,.04); }
+  .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; }
+  .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-landing { background: var(--layer-landing-text); } .dot-react { background: var(--layer-react-text); } .dot-supabase { background: var(--layer-supabase-text); } .dot-db { background: var(--layer-db-text); }
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; }
+  .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fm-box:hover    { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); }
+  .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend { display: flex; gap: .75rem; flex-wrap: wrap; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: .72rem; }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok      { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high    { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium  { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low     { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done    { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+  .what-card { width: 100%; }
+  .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; } .code-kw { color: #93c5fd; } .code-fn { color: #86efac; } .code-str { color: #fde68a; } .code-const { color: #f9a8d4; }
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in { color: #93c5fd; } .example-label.out { color: #86efac; } .example-label.err { color: #fca5a5; } .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 140px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); } .state-val.set { color: #86efac; } .state-val.warn { color: var(--gold); }
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">03 — Friend Groups</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-landing">Landing</span>
+    <span class="badge badge-react">React App</span>
+    <span class="badge badge-supabase">Supabase</span>
+    <span class="badge badge-db">Database</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('create')">Create Group</button>
+  <button class="tab-btn" onclick="switchPath('join')">Join Group</button>
+  <button class="tab-btn" onclick="switchPath('card')">Group Card</button>
+  <button class="tab-btn" onclick="switchPath('leaderboard')">Leaderboard</button>
+  <button class="tab-btn" onclick="switchPath('members')">Manage Members</button>
+  <button class="tab-btn" onclick="switchPath('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-react-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-react-text)">React App</div><div class="legend-desc">Groups.jsx manages create/join/card/leaderboard UI. State is local to component. sessionStorage persists selected group tab.</div></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-supabase-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-supabase-text)">Supabase</div><div class="legend-desc">RPCs: create_group, join_group, get_group_leaderboard. Direct table access for group_members UPDATE (inactive toggle).</div></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-db-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-db-text)">Database</div><div class="legend-desc">Tables: groups, group_members, predictions, champion_pick, top_scorer_pick. Trigger auto-generates invite_code on INSERT.</div></div></div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+
+  create: {
+    label: 'Create Group',
+    steps: [
+      {
+        num: 1, label: 'Captain clicks "+ Create"', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'The "+ Create" button in the Groups.jsx header opens a modal. The button is disabled if the user is already in 3 groups (max 3 per user, created + joined combined). This check is enforced client-side here and server-side by the RPC. The modal collects a group name up to 30 characters.',
+        code: `<span class="code-kw">const</span> canCreateMore = myGroupCount < 3
+<span class="code-kw">&lt;button</span> disabled={!canCreateMore}
+  onClick={() => <span class="code-fn">setCreateOpen</span>(<span class="code-kw">true</span>)}<span class="code-kw">&gt;</span>
+  + Create
+<span class="code-kw">&lt;/button&gt;</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'user in 1 group, clicks "+ Create"' },
+          { label: 'OUT', type: 'out', val: 'modal opens, name input focused' },
+          { label: 'IN',  type: 'in',  val: 'user in 3 groups' },
+          { label: 'OUT', type: 'out', val: 'button disabled — tooltip "Max 3 groups reached"' },
+        ],
+        db: [],
+        state: { 'createOpen': 'true', 'canCreateMore': 'true', 'myGroupCount': '1' }
+      },
+      {
+        num: 2, label: 'create_group RPC called', layer: 'supabase', file: 'src/pages/Groups.jsx',
+        what: 'On form submit, the create_group RPC is called with the group name. The RPC runs atomically: (1) checks user isn\'t already in 3 groups, (2) inserts the groups row, (3) inserts the user as the first group_member with is_inactive=false. A DB trigger then generates the 6-char alphanumeric invite_code.',
+        code: `<span class="code-kw">const</span> { error } = <span class="code-kw">await</span> supabase.<span class="code-fn">rpc</span>(<span class="code-str">'create_group'</span>, { group_name: name })
+<span class="code-kw">if</span> (error?.message === <span class="code-str">'max_groups_reached'</span>) {
+  <span class="code-fn">showToast</span>(<span class="code-str">'Max 3 groups'</span>, <span class="code-str">'error'</span>)
+  <span class="code-kw">return</span>
+}`,
+        example: [
+          { label: 'IN',  type: 'in',  val: "rpc('create_group', { group_name: 'The Lads' })" },
+          { label: 'OUT', type: 'out', val: 'groups row: { id, name: "The Lads", invite_code: "XK9P2M", created_by: userId }\ngroup_members row: { group_id, user_id: captain, is_inactive: false }' },
+          { label: 'ERR', type: 'err', val: '"max_groups_reached" → toast "Max 3 groups"' },
+        ],
+        db: [
+          { table: 'groups', action: 'INSERT — id, name, created_by, invite_code (set by trigger)' },
+          { table: 'group_members', action: 'INSERT — group_id, user_id (captain), is_inactive: false' }
+        ],
+        state: { 'groups': '[..., { id: "new-uuid", name: "The Lads", invite_code: "XK9P2M" }]' }
+      },
+      {
+        num: 3, label: 'DB trigger: invite_code', layer: 'db', file: 'supabase/migrations',
+        what: 'A BEFORE INSERT trigger on the groups table generates invite_code automatically. The code is 6 characters, alphanumeric (A-Z, 0-9), guaranteed unique via a UNIQUE constraint. If a collision occurs (rare), it retries. Users never see how it\'s generated — they just get the code.',
+        code: `<span class="code-comment">-- Trigger: fn_generate_invite_code()</span>
+<span class="code-comment">-- Called BEFORE INSERT on groups</span>
+<span class="code-comment">-- Generates: substr('ABC...Z0123456789', ...) × 6 chars</span>
+<span class="code-comment">-- Retries on collision (UNIQUE constraint)</span>
+<span class="code-comment">-- Result stored in NEW.invite_code</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'INSERT INTO groups(name, created_by)' },
+          { label: 'OUT', type: 'out', val: 'invite_code = "XK9P2M" auto-set before row committed' },
+          { label: 'NOTE',type: 'note',val: 'UNIQUE constraint guarantees no two groups share a code' },
+        ],
+        db: [{ table: 'groups', action: 'trigger fires on INSERT, sets invite_code before commit' }],
+        state: { 'invite_code': '"XK9P2M" (6-char, unique, auto-generated)' }
+      },
+      {
+        num: 4, label: 'Group card appears', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'After creation, loadGroups() is called to refresh the list. The new group tab appears. The group card shows: group name, member count (1/10), captain badge, invite code, and action buttons. The captain sees Invite + Rename + Manage buttons.',
+        code: `<span class="code-comment">// After successful create:</span>
+<span class="code-fn">showToast</span>(<span class="code-str">'Group created!'</span>)
+<span class="code-fn">setCreateOpen</span>(<span class="code-kw">false</span>)
+<span class="code-fn">setCreateName</span>(<span class="code-str">''</span>)
+<span class="code-fn">loadGroups</span>() <span class="code-comment">// refresh from DB</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'group created successfully' },
+          { label: 'OUT', type: 'out', val: 'new tab "The Lads", card shows: 1/10 members, code: XK9P2M, captain badge, [🔗 Invite] [✏️ Rename] [Manage ▾]' },
+        ],
+        db: [{ table: 'groups', action: 'SELECT (loadGroups refresh)' }],
+        state: { 'groups': '[{ id, name: "The Lads", invite_code: "XK9P2M", created_by: userId }]', 'createOpen': 'false' }
+      },
+    ]
+  },
+
+  join: {
+    label: 'Join Group',
+    steps: [
+      {
+        num: 1, label: 'Captain copies invite link', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'Captain clicks the "🔗 Invite" button on their group card. The app builds the full invite URL: base URL + "index.html?invite=" + invite_code. It copies it to clipboard via navigator.clipboard.writeText(). A success toast appears. The captain shares this link via WhatsApp.',
+        code: `<span class="code-kw">const</span> <span class="code-fn">copyInvite</span> = <span class="code-kw">async</span> code => {
+  <span class="code-kw">const</span> base = window.location.href.<span class="code-fn">replace</span>(/app\\.html.*$/, <span class="code-str">''</span>)
+  <span class="code-kw">const</span> link = <span class="code-str">\`\${base}index.html?invite=\${code}\`</span>
+  <span class="code-kw">await</span> navigator.clipboard.<span class="code-fn">writeText</span>(link)
+  <span class="code-fn">showToast</span>(<span class="code-str">'Invite link copied!'</span>)
+}`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'invite_code = "XK9P2M"' },
+          { label: 'OUT', type: 'out', val: 'copies "https://itayavioz.github.io/…/index.html?invite=XK9P2M" to clipboard' },
+        ],
+        db: [],
+        state: { 'clipboard': '"https://…?invite=XK9P2M"' }
+      },
+      {
+        num: 2, label: 'Friend opens link → join modal', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'Friend clicks the link. If already logged in and in the React app, Groups.jsx reads ?invite= from the URL search params or wc2026_pending_invite from localStorage (set during login). It pre-fills the Join modal and opens it automatically.',
+        code: `<span class="code-fn">useEffect</span>(() => {
+  <span class="code-kw">const</span> urlCode = searchParams.<span class="code-fn">get</span>(<span class="code-str">'invite'</span>)
+  <span class="code-kw">const</span> stored  = localStorage.<span class="code-fn">getItem</span>(<span class="code-str">'wc2026_pending_invite'</span>)
+  <span class="code-kw">const</span> code    = urlCode || stored
+  <span class="code-kw">if</span> (code) {
+    <span class="code-fn">setJoinCode</span>(code.<span class="code-fn">toUpperCase</span>())
+    <span class="code-fn">setJoinOpen</span>(<span class="code-kw">true</span>) <span class="code-comment">// modal auto-opens</span>
+    <span class="code-kw">if</span> (stored) localStorage.<span class="code-fn">removeItem</span>(<span class="code-str">'wc2026_pending_invite'</span>)
+  }
+}, [searchParams])`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'URL has ?invite=XK9P2M' },
+          { label: 'OUT', type: 'out', val: 'Join modal opens with code "XK9P2M" pre-filled' },
+        ],
+        db: [],
+        state: { 'joinOpen': 'true', 'joinCode': '"XK9P2M"' }
+      },
+      {
+        num: 3, label: 'join_group RPC called', layer: 'supabase', file: 'src/pages/Groups.jsx',
+        what: 'User submits the join form. The join_group RPC validates five conditions in order: (1) invite code exists, (2) not already a member, (3) group not full (max 10 members), (4) user hasn\'t hit 3-group limit, (5) tournament hasn\'t started. On success, inserts a group_members row.',
+        code: `<span class="code-kw">const</span> { error } = <span class="code-kw">await</span> supabase.<span class="code-fn">rpc</span>(<span class="code-str">'join_group'</span>, { p_invite_code: code })
+<span class="code-comment">// Error codes:</span>
+<span class="code-comment">// 'group_full'          → max 10 members</span>
+<span class="code-comment">// 'invalid_invite_code' → code not found</span>
+<span class="code-comment">// 'already_member'      → already in group</span>
+<span class="code-comment">// 'max_groups_reached'  → user in 3 groups already</span>
+<span class="code-comment">// 'tournament_started'  → after Jun 11</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: "rpc('join_group', { p_invite_code: 'XK9P2M' })" },
+          { label: 'OUT', type: 'out', val: 'group_members: { group_id, user_id, is_inactive: false }' },
+          { label: 'ERR', type: 'err', val: '"group_full" → toast "This group is full (max 10)"' },
+        ],
+        db: [{ table: 'group_members', action: 'INSERT — group_id, user_id, is_inactive: false' }],
+        state: { 'groups': '[..., newGroup]', 'groupCount': 'previous + 1' }
+      },
+    ]
+  },
+
+  card: {
+    label: 'Group Card',
+    steps: [
+      {
+        num: 1, label: 'Group card structure', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'Each group is displayed as a card with multiple sections: (1) header with name, member count, captain badge, invite code, and action buttons, (2) group leaderboard, (3) focus game widget showing the next/live game and predictions, (4) collapsible manage members section.',
+        code: `<span class="code-comment">// Card sections:</span>
+<span class="code-comment">// 1. grp-card-top: name, X/10, 👑 Captain, code,</span>
+<span class="code-comment">//    [🔗 Invite] [✏️ Rename] [Manage ▾]</span>
+<span class="code-comment">// 2. grp-section: Group Board (leaderboard)</span>
+<span class="code-comment">// 3. grp-section: Game Prediction · Up Next</span>
+<span class="code-comment">// 4. grp-section: Game Prediction · Results</span>
+<span class="code-comment">// 5. grp-members-list: collapsible manage section</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'group with 3 members' },
+          { label: 'OUT', type: 'out', val: 'card shows "3/10", leaderboard with 3 rows, next game widget' },
+        ],
+        db: [],
+        state: { 'selectedGroupId': '"f8e7…"', 'isManageOpen': 'false' }
+      },
+      {
+        num: 2, label: 'Focus game widget', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'Each group card shows the next upcoming game (or all live games if any are in progress). It polls every 60 seconds. Pre-kickoff: shows "Enter My Prediction →" button. Post-kickoff: locks button, shows group members\' predictions and distribution stats. Live games are shown regardless of kickoff time (all simultaneous games).',
+        code: `<span class="code-comment">// Fetches unscored games (score_home IS NULL):</span>
+<span class="code-comment">// Live games (past KO, no score) → show all live (max 5)</span>
+<span class="code-comment">// No live games → show next upcoming (1 game)</span>
+<span class="code-comment">// Polls every 60s:</span>
+<span class="code-kw">const</span> interval = <span class="code-fn">setInterval</span>(fetchFocusGames, 60_000)`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'game at 20:00, now 19:55' },
+          { label: 'OUT', type: 'out', val: '"⚽ Enter My Prediction →" button active' },
+          { label: 'IN',  type: 'in',  val: 'now 20:05 (past kickoff)' },
+          { label: 'OUT', type: 'out', val: '"🔒 Predictions Locked", members\' picks visible' },
+        ],
+        db: [
+          { table: 'games', action: 'SELECT unscored games (score_home IS NULL), ordered by kick_off_time' },
+          { table: 'predictions', action: 'SELECT for group members on focus games' }
+        ],
+        state: { 'focusGames': '[game]', 'focusPastKO': 'false → true (after kickoff)' }
+      },
+      {
+        num: 3, label: 'Invite code display', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'The invite code is always visible on the group card — not hidden. This is intentional: sharing the code is encouraged. The code is 6 chars displayed in monospace. Captain sees the 🔗 Invite copy button; members see the code but no copy button (to avoid confusion — only captain should share).',
+        code: `<span class="code-kw">&lt;div</span> className=<span class="code-str">"grp-invite-row"</span><span class="code-kw">&gt;</span>
+  <span class="code-kw">&lt;span</span> className=<span class="code-str">"grp-code-label"</span><span class="code-kw">&gt;</span>Code<span class="code-kw">&lt;/span&gt;</span>
+  <span class="code-kw">&lt;span</span> className=<span class="code-str">"grp-code-val"</span><span class="code-kw">&gt;</span>{group.invite_code}<span class="code-kw">&lt;/span&gt;</span>
+<span class="code-kw">&lt;/div&gt;</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'group card renders' },
+          { label: 'OUT', type: 'out', val: '"Code XK9P2M" always visible; captain sees [🔗 Invite]; members see code only' },
+        ],
+        db: [],
+        state: { 'invite_code': '"XK9P2M"', 'visible': 'true (always)' }
+      },
+    ]
+  },
+
+  leaderboard: {
+    label: 'Leaderboard',
+    steps: [
+      {
+        num: 1, label: 'get_group_leaderboard RPC', layer: 'supabase', file: 'src/pages/Groups.jsx',
+        what: 'For each group, the get_group_leaderboard(p_group_id) RPC is called. It returns one row per member: group_rank, global_rank, username, champion_team (if picked and after deadline), top_scorer_player, total_points, exact_scores. Ordered by total_points DESC, exact_scores DESC (same tie logic as global leaderboard).',
+        code: `supabase.<span class="code-fn">rpc</span>(<span class="code-str">'get_group_leaderboard'</span>, { p_group_id: g.id })
+<span class="code-comment">// Returns per member:</span>
+<span class="code-comment">// { group_rank, global_rank, user_id, username,</span>
+<span class="code-comment">//   champion_team, top_scorer_player,</span>
+<span class="code-comment">//   total_points, exact_scores }</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: "rpc('get_group_leaderboard', { p_group_id: 'abc...' })" },
+          { label: 'OUT', type: 'out', val: '[{group_rank:1, username:"itayking", total_points:3, exact_scores:1},\n {group_rank:2, username:"yoni", total_points:1},\n {group_rank:3, username:"dana", total_points:0}]' },
+        ],
+        db: [
+          { table: 'predictions', action: 'SELECT (inside RPC, aggregated per user)' },
+          { table: 'champion_pick', action: 'SELECT (inside RPC, per group)' },
+          { table: 'top_scorer_pick', action: 'SELECT (inside RPC, per group)' }
+        ],
+        state: { 'leaderboards': '{ [groupId]: [...rows] }' }
+      },
+      {
+        num: 2, label: 'Leaderboard display', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'The leaderboard table shows 5 columns: # rank, Player name, 🏆 (champion flag), ⚽ top scorer, Pts. Current user\'s row is highlighted gold. Inactive members are dimmed. Pre-tournament, if RPC returns empty (no games played yet), placeholder rows are built from the group_members list at 0 pts.',
+        code: `<span class="code-comment">// Pre-tournament: build placeholders</span>
+<span class="code-kw">const</span> lbRows = lbRowsRaw.length > 0
+  ? lbRowsRaw
+  : members.<span class="code-fn">map</span>((m, i) => ({
+      username: m.profiles?.username ?? <span class="code-str">'Unknown'</span>,
+      group_rank: i + 1,
+      total_points: 0,
+      _placeholder: <span class="code-kw">true</span>
+    }))`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'tournament not started (no scored games)' },
+          { label: 'OUT', type: 'out', val: 'all members shown at 0 pts with placeholder note "Scores start June 11"' },
+        ],
+        db: [],
+        state: { 'lbRows': '[placeholders]', 'lbRowsRaw.length': '0 (no scored games yet)' }
+      },
+    ]
+  },
+
+  members: {
+    label: 'Manage Members',
+    steps: [
+      {
+        num: 1, label: 'Toggle inactive', layer: 'supabase', file: 'src/pages/Groups.jsx',
+        what: 'Captain can mark any member (except themselves) as inactive. Uses a two-click confirm pattern: first click shows "Sure?" for 3 seconds, second click executes the DB update. Inactive members: still earn auto-predict points, still appear on leaderboard but dimmed, may be noted differently in AI summaries.',
+        code: `<span class="code-comment">// Two-click confirm pattern:</span>
+<span class="code-kw">if</span> (confirmId !== memberId) {
+  <span class="code-fn">setConfirmId</span>(memberId) <span class="code-comment">// first click → "Sure?"</span>
+  <span class="code-fn">setTimeout</span>(() => <span class="code-fn">setConfirmId</span>(<span class="code-kw">null</span>), 3000)
+  <span class="code-kw">return</span>
+}
+<span class="code-comment">// Second click (within 3s):</span>
+<span class="code-kw">await</span> supabase.<span class="code-fn">from</span>(<span class="code-str">'group_members'</span>)
+  .<span class="code-fn">update</span>({ is_inactive: !current })
+  .<span class="code-fn">eq</span>(<span class="code-str">'group_id'</span>, groupId)
+  .<span class="code-fn">eq</span>(<span class="code-str">'user_id'</span>, memberId)`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'captain clicks "Set Inactive" on member' },
+          { label: 'OUT', type: 'out', val: 'button shows "Sure?" for 3s' },
+          { label: 'IN',  type: 'in',  val: 'captain clicks "Sure?" (second click)' },
+          { label: 'OUT', type: 'out', val: 'member marked inactive, dimmed in leaderboard' },
+        ],
+        db: [{ table: 'group_members', action: 'UPDATE is_inactive = true/false' }],
+        state: { 'confirmId': 'memberId → null', 'is_inactive': 'true' }
+      },
+      {
+        num: 2, label: 'Captain cannot flag themselves', layer: 'react', file: 'src/pages/Groups.jsx',
+        what: 'The inactive toggle button is only rendered when canToggle is true: `const canToggle = isCaptain && !isMe`. So the captain never sees the toggle button on their own row. This is a UI-only guard. No RLS is needed for this rule because the captain can always toggle others but the button is simply not rendered for their own row.',
+        code: `<span class="code-kw">const</span> canToggle = isCaptain && !isMe
+<span class="code-comment">// captain can toggle others, not self</span>
+
+{canToggle && (
+  <span class="code-kw">&lt;button</span> onClick={() => <span class="code-fn">handleToggleInactive</span>(group.id, m.user_id, m.is_inactive)}<span class="code-kw">&gt;</span>
+    {isPending ? <span class="code-str">'Sure?'</span> : m.is_inactive ? <span class="code-str">'Reactivate'</span> : <span class="code-str">'Set Inactive'</span>}
+  <span class="code-kw">&lt;/button&gt;</span>
+)}`,
+        example: [
+          { label: 'IN',  type: 'in',  val: "captain's own row" },
+          { label: 'OUT', type: 'out', val: 'no toggle button shown (canToggle = false because isMe = true)' },
+          { label: 'IN',  type: 'in',  val: "other member's row" },
+          { label: 'OUT', type: 'out', val: '"Set Inactive" button visible' },
+        ],
+        db: [],
+        state: { 'canToggle': 'false (own row) / true (others)', 'isMe': 'true (captain row)' }
+      },
+    ]
+  },
+
+  errors: { label: 'Error Handling', steps: [] }
+}
+
+const ERROR_ROWS = [
+  { section: 'Create Group' },
+  { location: 'Groups.jsx', name: 'max_groups_reached', desc: 'User tries to create a 4th group. Caught both client-side (button disabled) and server-side (RPC raises error).', status: 'done', prio: 'done', fix: '' },
+  { location: 'Groups.jsx', name: 'Generic create error', desc: 'Network failure or unexpected RPC error during group creation.', status: 'done', prio: 'done', fix: 'showToast generic error message.' },
+  { section: 'Join Group' },
+  { location: 'Groups.jsx', name: 'join_group — 5 specific errors', desc: 'group_full, invalid_invite_code, already_member, max_groups_reached, tournament_started — all mapped to friendly toast messages.', status: 'done', prio: 'done', fix: '' },
+  { location: 'Groups.jsx', name: 'Copy invite clipboard failure', desc: 'navigator.clipboard.writeText fails silently on some browsers (HTTP, no permission). Error toast shown but no fallback.', status: 'missing', prio: 'low', fix: 'Show the raw code in a copyable text input as fallback when clipboard API fails.' },
+  { section: 'Group Card' },
+  { location: 'Groups.jsx', name: 'Focus game polling error', desc: 'If fetchFocusGames fails (network error), the 60s polling interval keeps running but the widget shows an empty state with no retry button.', status: 'missing', prio: 'medium', fix: 'Add error state to focus game section with a "Retry" button and exponential backoff.' },
+  { location: 'Groups.jsx', name: 'Leaderboard load error', desc: 'If the get_group_leaderboard RPC fails, the error is shown with a per-group retry button.', status: 'done', prio: 'done', fix: '' },
+  { section: 'Manage Members' },
+  { location: 'Groups.jsx', name: 'Toggle inactive error', desc: 'If the group_members UPDATE fails, error is shown as a toast.', status: 'done', prio: 'done', fix: '' },
+  { location: 'Groups.jsx', name: 'Rename group — no client validation', desc: 'No client-side length check on rename input before the API call. Server rejects blank/too-long names, but user gets a generic DB error instead of a friendly message.', status: 'missing', prio: 'medium', fix: 'Add maxLength=30 and non-empty validation before calling the rename RPC.' },
+]
+
+let currentPath = 'create'
+let currentStep = 0
+
+function switchPath(key) {
+  currentPath = key; currentStep = 0
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const keys = ['create','join','card','leaderboard','members','rules','errors']
+    b.classList.toggle('active', keys[i] === key)
+  })
+  render()
+}
+
+function prevStep() { if (currentStep > 0) { currentStep--; render() } }
+function nextStep() {
+  const steps = PATHS[currentPath].steps
+  if (currentStep < steps.length - 1) { currentStep++; render() }
+}
+
+function layerClass(l) { return { landing:'landing',react:'react',supabase:'supabase',db:'db' }[l]||'react' }
+function dotClass(l) { return { landing:'dot-landing',react:'dot-react',supabase:'dot-supabase',db:'dot-db' }[l]||'dot-react' }
+function badgeHtml(l) {
+  const m = { landing:['badge-landing','Landing'],react:['badge-react','React'],supabase:['badge-supabase','Supabase'],db:['badge-db','DB'] }
+  const [cls,label] = m[l]||['badge-react','React']
+  return `<span class="badge ${cls}">${label}</span>`
+}
+
+function render() {
+  const sidebar = document.querySelector('.sidebar')
+
+  if (currentPath === 'rules') {
+    sidebar.style.display = 'none'
+    renderRules()
+    document.getElementById('prev-btn').disabled = true
+    document.getElementById('next-btn').disabled = true
+    document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+    document.getElementById('prompt-text').textContent = 'Friend Groups — business rules, sync behaviour, RLS policies, and SDK call patterns.'
+    return
+  }
+
+  if (currentPath === 'errors') {
+    sidebar.style.display = 'none'
+    renderErrors()
+    document.getElementById('prev-btn').disabled = true
+    document.getElementById('next-btn').disabled = true
+    document.getElementById('nav-counter').textContent = ''
+    document.getElementById('prompt-text').textContent = 'Error handling audit for Friend Groups — create, join, card, leaderboard, manage members.'
+    return
+  }
+
+  const path = PATHS[currentPath]
+  const steps = path.steps
+  sidebar.style.display = ''
+  document.getElementById('step-list').innerHTML = steps.map((s, i) => `
+    <div class="step-item ${i===currentStep?'active':''}" onclick="currentStep=${i};render()">
+      <div class="step-layer-dot ${dotClass(s.layer)}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`).join('')
+
+  const s = steps[currentStep]
+  const flowmap = steps.map((st, i) => `
+    <div class="fm-node" onclick="currentStep=${i};render()">
+      <div class="fm-box ${layerClass(st.layer)} ${i===currentStep?'current':''}">${st.label.length>12?st.label.slice(0,12)+'…':st.label}</div>
+      <div class="fm-num">${st.num}</div>
+    </div>
+    ${i<steps.length-1?'<div class="fm-arrow">→</div>':''}`).join('')
+
+  const dbHtml = s.db&&s.db.length ? s.db.map(d=>`<div class="db-row"><span class="db-table">${d.table}</span><span class="db-action">${d.action}</span></div>`).join('') : '<div class="db-none">No DB operation at this step</div>'
+  const stateHtml = Object.entries(s.state||{}).map(([k,v])=>`<div class="state-row"><span class="state-key">${k}</span><span class="state-val ${v.includes('undefined')||v.includes('null')?'null':v.includes('true')||v.includes('false')||v.includes('[')?'set':''}">${v}</span></div>`).join('')
+  const exHtml = (s.example||[]).map(e=>`<div class="example-row"><span class="example-label ${e.type}">${e.label}</span><span class="example-val">${e.val}</span></div>`).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label}</div>
+        <div class="step-header-file">${s.file} &nbsp; ${badgeHtml(s.layer)}</div>
+      </div>
+    </div>
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow Map — ${path.label}</div>
+      <div class="flowmap">${flowmap}</div>
+    </div>
+    <div class="card what-card"><div class="card-title">What happens</div><div class="what-text">${s.what.replace(/\n/g,'<br>')}</div></div>
+    <div class="card code-card"><div class="card-title">Key code</div><div class="code-block">${s.code}</div></div>
+    ${exHtml?`<div class="card example-card"><div class="card-title">Example</div>${exHtml}</div>`:''}
+    <div style="display:flex;gap:1rem;width:100%;flex-wrap:wrap">
+      <div class="card db-card"><div class="card-title">DB operation</div><div class="db-op">${dbHtml}</div></div>
+      <div class="card state-card"><div class="card-title">State inspector</div><div class="state-grid">${stateHtml}</div></div>
+    </div>`
+
+  document.getElementById('prev-btn').disabled = currentStep===0
+  document.getElementById('next-btn').disabled = currentStep===steps.length-1
+  document.getElementById('nav-counter').textContent = `Step ${currentStep+1} of ${steps.length}`
+  document.getElementById('prompt-text').textContent = `${path.label} · Step ${s.num}: ${s.label} (${s.layer} layer, ${s.file})`
+}
+
+function renderRules() {
+  document.getElementById('detail-content').innerHTML = `
+    <div style="padding:24px;overflow-y:auto;width:100%;height:calc(100vh - 120px);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px;">
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">📐 Business Logic</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li>Max 3 groups per user (created + joined combined) — enforced by <code>create_group</code> and <code>join_group</code> RPCs</li>
+            <li>Max 10 members per group (including captain) — enforced by <code>join_group</code> RPC</li>
+            <li>Captain = <code>created_by</code> on groups table — permanent, no transfer</li>
+            <li>Captain can rename group until <code>2026-06-11T19:00:00Z</code> — locked after (RLS UPDATE policy)</li>
+            <li>Captain can flag members as <code>is_inactive</code> — but NOT themselves (UI disables own row's toggle)</li>
+            <li>No leave, no remove, no delete — group_members has no DELETE RLS policy</li>
+            <li><code>invite_code</code>: 6-char alphanumeric, auto-generated by DB trigger <code>fn_generate_invite_code</code> on INSERT into groups</li>
+            <li>Inactive members: still earn auto-predict points, still shown on leaderboard (dimmed in UI), may be skipped in AI summary</li>
+            <li>Focus game: Groups.jsx polls every 60s for games with <code>kick_off_time</code> in the last 120min or upcoming 30min — max 4 shown</li>
+          </ul>
+        </div>
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Sync Rules</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li>Group list loaded on mount via <code>group_members</code> join <code>groups</code></li>
+            <li>Focus game polls every 60s (<code>setInterval</code> in <code>useEffect</code>, cleared on unmount)</li>
+            <li>Group leaderboard fetched on group switch (not cached) via <code>get_group_leaderboard</code> RPC</li>
+            <li>Invite link generated client-side: <code>index.html?invite=</code> + <code>group.invite_code</code></li>
+            <li>No Realtime — group membership changes require page refresh to reflect</li>
+          </ul>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔒 RLS Policies</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid #333;">
+                <th style="text-align:left;padding:6px 8px;color:#888;">Table</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">Op</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">USING / WITH CHECK</th>
+              </tr>
+            </thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">groups</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">is_group_member(id, auth.uid())</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">groups</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">UPDATE</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">created_by = auth.uid() AND now() &lt; '2026-06-11T19:00:00Z'</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">group_members</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">is_group_member(group_id, auth.uid())</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">group_members</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">INSERT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">via join_group RPC (SECURITY DEFINER, bypasses RLS)</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">group_members</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">UPDATE</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">group_id IN (SELECT id FROM groups WHERE created_by = auth.uid()) AND user_id != auth.uid()</td></tr>
+              <tr><td style="padding:6px 8px;color:#86efac;font-family:monospace">groups / group_members</td><td style="padding:6px 8px;">DELETE</td><td style="padding:6px 8px;font-family:monospace;font-size:11px;">No DELETE policy (intentional)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔧 SDK Calls</h3>
+          <pre style="margin:0;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:16px;overflow-x:auto;font-size:12px;line-height:1.6;color:#e2e8f0;">// Load user's groups
+const { data: memberships } = await supabase
+  .from('group_members')
+  .select('group_id, is_inactive, joined_at, groups(id, name, invite_code, created_by)')
+  .eq('user_id', user.id)
+
+// Create group
+await supabase.rpc('create_group', { p_name: groupName })
+
+// Join group
+await supabase.rpc('join_group', { p_invite_code: inviteCode })
+
+// Rename group (captain only, before Jun 11)
+await supabase.from('groups').update({ name: newName }).eq('id', groupId)
+
+// Toggle inactive
+await supabase.from('group_members').update({ is_inactive: !current }).eq('group_id', gId).eq('user_id', targetUserId)
+
+// Group leaderboard
+const { data: lb } = await supabase.rpc('get_group_leaderboard', { p_group_id: groupId })
+
+// Focus game (polling)
+const { data: games } = await supabase.from('games').select('*')
+  .gte('kick_off_time', new Date(Date.now() - 120*60*1000).toISOString())
+  .lte('kick_off_time', new Date(Date.now() + 30*60*1000).toISOString())
+  .order('kick_off_time').limit(5)</pre>
+        </div>
+
+      </div>
+    </div>`
+}
+
+function renderErrors() {
+  const rows = ERROR_ROWS.map(r => {
+    if (r.section) return `<tr class="eh-section-row"><td colspan="5">${r.section}</td></tr>`
+    const statusPill = r.status==='done' ? `<span class="eh-pill pill-ok">Done</span>` : `<span class="eh-pill pill-missing">Missing</span>`
+    const prioPill = r.prio==='done' ? `<span class="eh-pill prio-done">Resolved</span>` : r.prio==='high' ? `<span class="eh-pill prio-high">High</span>` : r.prio==='medium' ? `<span class="eh-pill prio-medium">Medium</span>` : `<span class="eh-pill prio-low">Low</span>`
+    return `<tr><td><span class="eh-location">${r.location}</span></td><td><div class="eh-error-name">${r.name}</div><div class="eh-error-desc">${r.desc}</div></td><td>${statusPill}</td><td>${r.fix?`<span class="eh-fix">${r.fix}</span>`:'<span style="color:var(--faint)">—</span>'}</td><td>${prioPill}</td></tr>`
+  }).join('')
+  document.getElementById('detail-content').innerHTML = `
+    <div class="eh-page">
+      <div class="eh-legend">
+        <div class="eh-legend-item"><span class="eh-pill pill-ok">Done</span> handled</div>
+        <div class="eh-legend-item"><span class="eh-pill pill-missing">Missing</span> not handled</div>
+        <div class="eh-legend-item"><span class="eh-pill prio-high">High</span></div>
+        <div class="eh-legend-item"><span class="eh-pill prio-medium">Medium</span></div>
+        <div class="eh-legend-item"><span class="eh-pill prio-low">Low</span></div>
+      </div>
+      <table class="eh-table"><thead><tr><th>Location</th><th>Error / Scenario</th><th>Status</th><th>Fix</th><th>Priority</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`
+}
+
+function copyPrompt() {
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(() => {
+    const btn = document.querySelector('.copy-btn'); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1500)
+  })
+}
+
+document.addEventListener('keydown', e => { if(e.key==='ArrowLeft') prevStep(); if(e.key==='ArrowRight') nextStep() })
+render()
+</script>
+</body>
+</html>

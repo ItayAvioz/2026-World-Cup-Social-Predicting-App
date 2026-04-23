@@ -1,0 +1,2040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>01 — Auth Flow · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08);
+    --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,.15);
+    --text: #f0f0f0;
+    --muted: #888;
+    --faint: #555;
+
+    --layer-landing: #1e3a5f;
+    --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a;
+    --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b;
+    --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b;
+    --layer-db-text: #c4b5fd;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: .75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .header-sub {
+    font-size: .75rem;
+    color: var(--muted);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: .2rem .55rem;
+    border-radius: 4px;
+  }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+
+  /* ── Path tabs ── */
+  .tabs {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    flex-shrink: 0;
+    padding: 0 1.25rem;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .65rem 1rem;
+    transition: color .15s, border-color .15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  /* ── Main layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ── Steps sidebar ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--surface);
+  }
+  .sidebar-label {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: .75rem 1rem .4rem;
+  }
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    padding: .55rem 1rem;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background .1s, border-color .1s;
+    position: relative;
+  }
+  .step-item:hover { background: rgba(255,255,255,.04); }
+  .step-item.active {
+    background: rgba(245,158,11,.08);
+    border-left-color: var(--gold);
+  }
+  .step-num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .65rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: .05rem;
+    color: var(--muted);
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .step-item.active .step-num {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #000;
+  }
+  .step-label {
+    font-size: .78rem;
+    line-height: 1.35;
+    color: var(--muted);
+    transition: color .15s;
+  }
+  .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: .42rem;
+  }
+  .dot-landing  { background: var(--layer-landing-text); }
+  .dot-react    { background: var(--layer-react-text); }
+  .dot-supabase { background: var(--layer-supabase-text); }
+  .dot-db       { background: var(--layer-db-text); }
+
+  /* ── Layer legend ── */
+  .layer-legend {
+    border-top: 1px solid var(--border);
+    margin-top: .75rem;
+    padding: .75rem 1rem 1rem;
+  }
+  .layer-legend-title {
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: .6rem;
+  }
+  .legend-item {
+    display: flex;
+    gap: .55rem;
+    margin-bottom: .65rem;
+    align-items: flex-start;
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: .25rem;
+  }
+  .legend-body {}
+  .legend-name {
+    font-size: .72rem;
+    font-weight: 700;
+    margin-bottom: .1rem;
+  }
+  .legend-desc {
+    font-size: .68rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* ── Flow map strip ── */
+  .flowmap-wrap {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+  }
+  .flowmap-title {
+    font-size: .6rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: .7rem;
+  }
+  .flowmap {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    min-width: max-content;
+  }
+  .fm-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .fm-box {
+    border-radius: 5px;
+    padding: .3rem .55rem;
+    font-size: .65rem;
+    font-weight: 600;
+    text-align: center;
+    max-width: 90px;
+    line-height: 1.25;
+    border: 1.5px solid transparent;
+    transition: all .15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fm-box:hover    { opacity: .8; }
+  .fm-num {
+    font-size: .55rem;
+    color: var(--faint);
+  }
+  .fm-arrow {
+    color: #333;
+    font-size: .85rem;
+    padding: 0 .15rem;
+    margin-bottom: .9rem;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  /* ── Error handling table ── */
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend {
+    display: flex; gap: .75rem; flex-wrap: wrap;
+    padding: .6rem .85rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    font-size: .72rem;
+  }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill {
+    display: inline-block; border-radius: 4px;
+    font-size: .62rem; font-weight: 700; letter-spacing: .05em;
+    padding: .15rem .5rem; white-space: nowrap;
+  }
+  .pill-ok    { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high   { background: rgba(239,68,68,.15);   color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium { background: rgba(251,191,36,.12);  color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low    { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done   { background: rgba(134,239,172,.1);  color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th {
+    text-align: left; font-size: .62rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); padding: .5rem .75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0;
+  }
+  .eh-table td {
+    padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04);
+    vertical-align: top; line-height: 1.45;
+  }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td {
+    background: rgba(255,255,255,.03); color: var(--gold);
+    font-size: .65rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: .4rem .75rem;
+  }
+
+  /* ── Detail pane ── */
+  .detail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-content: flex-start;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  .card-title {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: .6rem;
+  }
+
+  .step-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1rem;
+  }
+  .step-header-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--gold);
+    color: #000;
+    font-size: 1rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: .2rem;
+  }
+  .step-header-file {
+    font-size: .72rem;
+    color: var(--muted);
+    font-family: 'Menlo', 'Consolas', monospace;
+  }
+
+  /* What happens */
+  .what-card {
+    width: 100%;
+  }
+  .what-text {
+    font-size: .85rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  /* Code block */
+  .code-card { width: 100%; }
+  .code-block {
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: .75rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
+    color: #d1d5db;
+  }
+  .code-comment { color: #4b5563; }
+  .code-kw      { color: #93c5fd; }
+  .code-fn      { color: #86efac; }
+  .code-str     { color: #fde68a; }
+  .code-const   { color: #f9a8d4; }
+  .code-hl      { background: rgba(245,158,11,.12); display: inline-block; width: 100%; }
+
+  /* Example card */
+  .example-card { width: 100%; }
+  .example-row {
+    display: flex;
+    gap: .6rem;
+    margin-bottom: .55rem;
+    align-items: flex-start;
+  }
+  .example-label {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    min-width: 58px;
+    padding-top: .15rem;
+  }
+  .example-label.in  { color: #93c5fd; }
+  .example-label.out { color: #86efac; }
+  .example-label.err { color: #fca5a5; }
+  .example-label.note { color: var(--gold); }
+  .example-val {
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: .72rem;
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 5px;
+    padding: .4rem .7rem;
+    color: #d1d5db;
+    line-height: 1.6;
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* DB op */
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .db-row {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    font-size: .78rem;
+  }
+  .db-table {
+    background: var(--layer-db);
+    color: var(--layer-db-text);
+    border-radius: 4px;
+    padding: .15rem .45rem;
+    font-family: monospace;
+    font-size: .7rem;
+    white-space: nowrap;
+  }
+  .db-action {
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+
+  /* State inspector */
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+  }
+  .state-row {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+  }
+  .state-key {
+    font-family: monospace;
+    font-size: .7rem;
+    color: var(--layer-supabase-text);
+    white-space: nowrap;
+    padding-top: .05rem;
+    min-width: 140px;
+  }
+  .state-val {
+    font-family: monospace;
+    font-size: .72rem;
+    color: var(--text);
+    line-height: 1.4;
+    word-break: break-all;
+  }
+  .state-val.null  { color: var(--faint); }
+  .state-val.set   { color: #86efac; }
+  .state-val.warn  { color: var(--gold); }
+
+  /* Flow diagram */
+  .flow-card { width: 100%; }
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: .5rem 0;
+    flex-wrap: nowrap;
+  }
+  .flow-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    flex-shrink: 0;
+  }
+  .flow-box {
+    border-radius: 6px;
+    padding: .4rem .7rem;
+    font-size: .72rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 90px;
+    line-height: 1.3;
+    border: 1px solid transparent;
+    transition: all .2s;
+    cursor: default;
+  }
+  .flow-box.current {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+  }
+  .flow-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.2); }
+  .flow-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.2); }
+  .flow-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.2); }
+  .flow-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.2); }
+  .flow-label {
+    font-size: .6rem;
+    color: var(--faint);
+    letter-spacing: .05em;
+  }
+  .flow-arrow {
+    color: var(--faint);
+    font-size: 1rem;
+    padding: 0 .25rem;
+    margin-bottom: .6rem;
+    flex-shrink: 0;
+  }
+
+  /* Bottom prompt area */
+  .prompt-bar {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: .75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-shrink: 0;
+  }
+  .prompt-label {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    white-space: nowrap;
+  }
+  .prompt-text {
+    flex: 1;
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .copy-btn {
+    background: var(--gold);
+    border: none;
+    border-radius: 5px;
+    color: #000;
+    cursor: pointer;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: .4rem .85rem;
+    white-space: nowrap;
+    transition: opacity .15s;
+  }
+  .copy-btn:hover { opacity: .85; }
+
+  /* Nav arrows */
+  .nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .nav-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: .75rem;
+    padding: .35rem .8rem;
+    transition: color .15s, border-color .15s;
+  }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">01 — Auth Flow</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-landing">Landing (Vanilla)</span>
+    <span class="badge badge-react">React App</span>
+    <span class="badge badge-supabase">Supabase</span>
+    <span class="badge badge-db">Database</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('register')">Register</button>
+  <button class="tab-btn" onclick="switchPath('login')">Login</button>
+  <button class="tab-btn" onclick="switchPath('invite')">Invite Flow</button>
+  <button class="tab-btn" onclick="switchPath('session')">React Session</button>
+  <button class="tab-btn" onclick="switchPath('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+
+    <!-- Layer legend -->
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-landing-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-landing-text)">Landing — Vanilla JS</div>
+          <div class="legend-desc">Plain <code>index.html</code> + <code>js/auth.js</code>. No framework. Runs in the browser directly. Handles register, login, and invite before the React app is involved.</div>
+        </div>
+      </div>
+
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-react-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-react-text)">React App</div>
+          <div class="legend-desc">Vite SPA at <code>app.html</code>. React 18 + HashRouter. All inner pages (Dashboard, Groups, Picks…). Manages session via <code>AuthContext</code> and guards routes via <code>AuthGuard</code>.</div>
+        </div>
+      </div>
+
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-supabase-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-supabase-text)">Supabase Auth</div>
+          <div class="legend-desc">Cloud auth service. Manages <code>auth.users</code>, issues JWT tokens, stores session in <code>localStorage</code> automatically. Never exposes raw passwords.</div>
+        </div>
+      </div>
+
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div class="legend-body">
+          <div class="legend-name" style="color:var(--layer-db-text)">Database (PostgreSQL)</div>
+          <div class="legend-desc">Supabase-hosted Postgres. Public tables (<code>profiles</code>, <code>groups</code>, <code>predictions</code>…). RLS policies enforce who can read/write each row. Accessed via SDK or RPCs.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+
+const PATHS = {
+
+  register: {
+    label: 'Register Path',
+    steps: [
+      {
+        num: 1,
+        label: 'User arrives at index.html',
+        layer: 'landing',
+        file: 'index.html',
+        what: 'The user lands on the vanilla HTML landing page — either by visiting the app URL directly, or via a WhatsApp invite link like:\n\nhttps://itayavioz.github.io/…/index.html?invite=ABC123\n\nThe page loads two script tags synchronously before auth.js runs:\n1. js/supabase.js — creates the Supabase UMD client as the global `_supabase`\n2. js/auth.js — runs immediately as an IIFE (Immediately Invoked Function Expression)',
+        code: `<span class="code-comment"><!-- index.html (load order matters) --></span>
+<span class="code-kw">&lt;script</span> src="js/supabase.js"<span class="code-kw">&gt;&lt;/script&gt;</span>  <span class="code-comment">← UMD Supabase client → _supabase global</span>
+<span class="code-kw">&lt;script</span> src="js/auth.js"<span class="code-kw">&gt;&lt;/script&gt;</span>    <span class="code-comment">← IIFE runs immediately</span>
+
+<span class="code-comment">// js/supabase.js</span>
+<span class="code-kw">const</span> <span class="code-const">_supabase</span> = window.supabase.createClient(SUPABASE_URL, ANON_KEY)`,
+        db: [],
+        example: [
+          { label: 'URL', type: 'in',  val: 'https://itayavioz.github.io/…/index.html?invite=ABC123' },
+          { label: 'Scripts', type: 'note', val: '1. js/supabase.js loads → window._supabase created\n2. js/auth.js loads → IIFE starts immediately' },
+        ],
+        state: {
+          'window.location.href': 'index.html?invite=ABC123',
+          'session': 'unknown (not yet checked)',
+          'localStorage["wc2026_pending_invite"]': 'null',
+          'redirect target': 'none yet'
+        }
+      },
+      {
+        num: 2,
+        label: 'auth.js IIFE starts',
+        layer: 'landing',
+        file: 'js/auth.js',
+        what: 'auth.js wraps all its logic in an async IIFE so it can use await at the top level. The very first check is whether the app is being opened from a local file:// URL — if so, Supabase cannot work and a helpful error message is shown.\n\nThis guard catches developers accidentally opening index.html directly from their filesystem rather than via a dev server.',
+        code: `<span class="code-comment">// js/auth.js — outermost wrapper</span>
+(<span class="code-kw">async</span> () => {
+
+  <span class="code-comment">// Guard: must be served (not opened as a local file)</span>
+  <span class="code-kw">if</span> (window.location.protocol === <span class="code-str">'file:'</span> || !_supabase) {
+    <span class="code-comment">// show "run npm run dev" message in the page</span>
+    <span class="code-kw">return</span>
+  }
+
+  <span class="code-comment">// ... rest of auth logic</span>
+})()`,
+        db: [],
+        example: [
+          { label: 'Protocol', type: 'in',  val: 'window.location.protocol === "https:"  → OK, continue' },
+          { label: 'Error case', type: 'err', val: 'protocol === "file:"  → shows "run npm run dev" message → return (STOPS here)' },
+        ],
+        state: {
+          'window.location.protocol': '"https:" ✓',
+          'session': 'unknown (not yet checked)',
+          'localStorage["wc2026_pending_invite"]': 'null',
+          'redirect target': 'none yet'
+        }
+      },
+      {
+        num: 3,
+        label: 'Parse invite code from URL',
+        layer: 'landing',
+        file: 'js/auth.js',
+        what: 'auth.js reads the `?invite=` query parameter from the URL. If found, it immediately stores it in localStorage under the key "wc2026_pending_invite".\n\nThis happens BEFORE the session check, so the invite code is saved even if the user is about to be redirected (because they already have a session).',
+        code: `<span class="code-comment">// Read ?invite= from URL</span>
+<span class="code-kw">const</span> <span class="code-const">params</span> = <span class="code-kw">new</span> URLSearchParams(window.location.search)
+<span class="code-kw">const</span> <span class="code-const">inviteCode</span> = params.get(<span class="code-str">'invite'</span>)
+
+<span class="code-comment">// Persist it — survives the redirect to app.html</span>
+<span class="code-kw">if</span> (inviteCode) {
+  localStorage.setItem(<span class="code-str">'wc2026_pending_invite'</span>, inviteCode)
+}`,
+        db: [],
+        example: [
+          { label: 'URL', type: 'in',  val: 'window.location.search = "?invite=ABC123"' },
+          { label: 'Stored', type: 'out', val: 'localStorage["wc2026_pending_invite"] = "ABC123"' },
+          { label: 'No invite', type: 'note', val: 'URL has no ?invite= → nothing stored, localStorage unchanged' },
+        ],
+        state: {
+          'window.location.search': '"?invite=ABC123"',
+          'inviteCode': '"ABC123"',
+          'localStorage["wc2026_pending_invite"]': '"ABC123" ← just set',
+          'session': 'unknown (not yet checked)',
+          'redirect target': 'none yet'
+        }
+      },
+      {
+        num: 4,
+        label: 'Check for existing session',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'Before showing the form, auth.js checks if the user is already logged in. The Supabase SDK reads the session from localStorage automatically.\n\nIf a session is found: skip the form, handle the invite (if any), and redirect straight to the app.\n\nIf no session: show the register/login form.',
+        code: `<span class="code-comment">// Check if already authenticated</span>
+<span class="code-kw">const</span> { data: { session } } = <span class="code-kw">await</span> _supabase.auth.getSession()
+
+<span class="code-kw">if</span> (session) {
+  <span class="code-kw">const</span> <span class="code-const">pending</span> = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  <span class="code-kw">if</span> (pending) {
+    <span class="code-comment">// Already logged in + has invite → join immediately</span>
+    <span class="code-kw">await</span> _supabase.rpc(<span class="code-str">'join_group'</span>, { p_invite_code: pending })
+    localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+    window.location.href = <span class="code-str">'./app.html#/groups'</span>
+  } <span class="code-kw">else</span> {
+    window.location.href = <span class="code-str">'./app.html#/dashboard'</span>
+  }
+  <span class="code-kw">return</span>  <span class="code-comment">← exits IIFE — form never shown</span>
+}
+<span class="code-comment">// No session → render the register/login form</span>`,
+        db: [],
+        example: [
+          { label: 'No session', type: 'out', val: 'getSession() → { data: { session: null } }\n→ form shown, invite stays in localStorage' },
+          { label: 'Has session', type: 'note', val: 'getSession() → { data: { session: { user: {...} } } }\n→ join_group("ABC123") called immediately\n→ redirect to app.html#/groups (form never shown)' },
+        ],
+        state: {
+          'session (from localStorage)': 'null → form shown',
+          'localStorage["wc2026_pending_invite"]': '"ABC123" (preserved)',
+          'redirect target': 'none (showing form)'
+        }
+      },
+      {
+        num: 5,
+        label: 'User fills register form',
+        layer: 'landing',
+        file: 'index.html + js/auth.js',
+        what: 'The register form collects three fields:\n• username — validated client-side: 3–20 chars, letters/numbers/underscore only\n• email — standard email field\n• password — Supabase enforces min 6 chars server-side\n\nValidation happens on submit. If username fails the regex, a toast is shown and the API is never called.',
+        code: `<span class="code-comment">// Username validation (client-side, on submit)</span>
+<span class="code-kw">if</span> (username.length < 3 || username.length > 20
+    || !/<span class="code-str">^[a-zA-Z0-9_]+$</span>/.test(username)) {
+  showToast(<span class="code-str">'Username must be 3–20 chars (letters, numbers, _)'</span>, <span class="code-str">'error'</span>)
+  <span class="code-kw">return</span>
+}
+
+<span class="code-comment">// Disable button to prevent double-submit</span>
+btn.disabled = <span class="code-kw">true</span>
+btn.textContent = <span class="code-str">'Creating account…'</span>`,
+        db: [],
+        example: [
+          { label: 'Valid', type: 'in',  val: 'username: "itayking"  (8 chars, letters only) ✓' },
+          { label: 'Invalid', type: 'err', val: 'username: "it"          → too short (< 3)\nusername: "itay king"  → space not allowed\nusername: "a".repeat(21) → too long (> 20)' },
+        ],
+        state: {
+          'username (form value)': '"itayavioz"',
+          'email (form value)': '"user@example.com"',
+          'password': '"••••••••" (not stored)',
+          'validation': 'passed ✓',
+          'session': 'null'
+        }
+      },
+      {
+        num: 6,
+        label: 'signUp called → auth.users created',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'The Supabase SDK sends a POST to the Auth API. Supabase creates a row in `auth.users` (its managed internal table) and stores the username inside `user_metadata`.\n\nThe session is returned immediately — no email verification is required (the app uses auto-confirm). The session object contains: `{ user: { id, email, user_metadata: { username } }, access_token, refresh_token }`.',
+        code: `<span class="code-comment">// Call Supabase Auth signUp</span>
+<span class="code-kw">const</span> { error: signUpError } = <span class="code-kw">await</span> _supabase.auth.signUp({
+  email,
+  password,
+  options: {
+    data: { username }   <span class="code-comment">← stored as user_metadata</span>
+  }
+})
+
+<span class="code-comment">// On success: session is automatically set in localStorage</span>
+<span class="code-comment">// auth.users row created with: id (uuid), email, user_metadata</span>`,
+        db: [
+          { table: 'auth.users', action: 'INSERT — id (uuid), email, user_metadata: { username }' }
+        ],
+        example: [
+          { label: 'Input', type: 'in',  val: '{ email: "itay@example.com", password: "secret123",\n  options: { data: { username: "itayking" } } }' },
+          { label: 'Output', type: 'out', val: '{ user: {\n    id: "a1b2c3d4-e5f6-...",\n    email: "itay@example.com",\n    user_metadata: { username: "itayking" }\n  },\n  access_token: "eyJhbGciOiJIUzI1NiIsInR5c…",\n  refresh_token: "abc123xyz…"\n}' },
+          { label: 'Error', type: 'err', val: '"User already registered" → email already exists in auth.users' },
+        ],
+        state: {
+          'session': 'SET ← { user: { id, email, user_metadata: { username } }, access_token, refresh_token }',
+          'localStorage["sb-…-auth-token"]': 'SET ← Supabase SDK writes automatically',
+          'localStorage["wc2026_pending_invite"]': '"ABC123" (still there)'
+        }
+      },
+      {
+        num: 7,
+        label: 'create_profile RPC → profiles row',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'After signup, auth.js calls the `create_profile` RPC to create the user\'s public profile row. The `profiles` table is the user-facing identity store — it holds `username` and is readable by other users.\n\nNote: `auth.users` is Supabase-managed and not directly readable by the client. `profiles` is the public-facing table with a foreign key to `auth.users.id`.\n\nIf this RPC fails (rare edge case), the `AuthContext` in the React app also has a guard that calls `create_profile` as a fallback.',
+        code: `<span class="code-comment">// Create the public profile row</span>
+<span class="code-kw">const</span> { error: profileError } = <span class="code-kw">await</span> _supabase
+  .rpc(<span class="code-str">'create_profile'</span>, { p_username: username })
+
+<span class="code-comment">// profiles table structure:</span>
+<span class="code-comment">// id        uuid FK → auth.users.id</span>
+<span class="code-comment">// username  text UNIQUE NOT NULL</span>
+<span class="code-comment">// (no email stored here — email lives only in auth.users)</span>`,
+        db: [
+          { table: 'profiles', action: 'INSERT — id (= auth.users.id), username' }
+        ],
+        example: [
+          { label: 'RPC call', type: 'in',  val: 'supabase.rpc("create_profile", { p_username: "itayking" })' },
+          { label: 'DB result', type: 'out', val: 'profiles table:\n{ id: "a1b2c3d4-e5f6-...",  ← same as auth.users.id\n  username: "itayking" }' },
+          { label: 'Fallback', type: 'note', val: 'If this step was skipped (crash), AuthContext re-runs it:\nfallback username = user_metadata.username\n                 OR email.split("@")[0]\n                 OR "user_" + id.slice(0,6)' },
+        ],
+        state: {
+          'session': 'SET ✓',
+          'profiles row': 'CREATED — { id: userId, username: "itayavioz" }',
+          'localStorage["wc2026_pending_invite"]': '"ABC123" (still there)'
+        }
+      },
+      {
+        num: 8,
+        label: 'Invite check + join_group (if invite)',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'After successful registration and profile creation, auth.js checks localStorage for a pending invite code. If one exists, it calls the `join_group` RPC, which:\n1. Validates the invite code exists\n2. Checks the user isn\'t already a member\n3. Checks group isn\'t full (max 10 members)\n4. Checks the user hasn\'t hit the 3-group limit\n5. Inserts a row into `group_members`\n\nAfter joining, the invite is removed from localStorage.',
+        code: `<span class="code-kw">const</span> <span class="code-const">pending</span> = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+<span class="code-kw">if</span> (pending) {
+  <span class="code-kw">await</span> _supabase.rpc(<span class="code-str">'join_group'</span>, { p_invite_code: pending })
+  localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  window.location.href = <span class="code-str">'./app.html#/groups'</span>
+} <span class="code-kw">else</span> {
+  window.location.href = <span class="code-str">'./app.html#/dashboard'</span>
+}`,
+        db: [
+          { table: 'group_members', action: 'INSERT — group_id, user_id, is_inactive: false' }
+        ],
+        example: [
+          { label: 'RPC call', type: 'in',  val: 'supabase.rpc("join_group", { p_invite_code: "ABC123" })' },
+          { label: 'Success', type: 'out', val: 'group_members row inserted:\n{ group_id: "f8e7d6c5-...", user_id: "a1b2c3d4-...", is_inactive: false }\n→ redirect to app.html#/groups' },
+          { label: 'Errors', type: 'err', val: '"group_full"         → 10 members already in group\n"invalid_invite_code" → code doesn\'t exist\n"already_member"      → user is already in this group\n"max_groups_reached"  → user already in 3 groups' },
+        ],
+        state: {
+          'pending invite': '"ABC123" → consumed',
+          'localStorage["wc2026_pending_invite"]': 'null ← removed',
+          'redirect target': '"./app.html#/groups"',
+          'auth completed': 'YES ✓'
+        }
+      },
+      {
+        num: 9,
+        label: 'React app loads + AuthContext runs',
+        layer: 'react',
+        file: 'src/context/AuthContext.jsx',
+        what: 'The browser navigates to app.html#/groups. React mounts and the AuthProvider immediately reads the session from localStorage (the Supabase SDK handles this transparently).\n\nAuthContext also runs a "partial registration guard" — if for any reason the profiles row wasn\'t created (e.g. the page crashed mid-registration), it creates it now with a fallback username.\n\nOnce session is confirmed, the AuthGuard renders the Groups page.',
+        code: `<span class="code-comment">// AuthContext.jsx — on mount</span>
+supabase.auth.getSession().then(<span class="code-kw">async</span> ({ data: { session } }) => {
+  setSession(session)
+  setUser(session?.user ?? <span class="code-kw">null</span>)
+
+  <span class="code-comment">// Partial registration guard</span>
+  <span class="code-kw">if</span> (session?.user) {
+    <span class="code-kw">const</span> { data: profile } = <span class="code-kw">await</span> supabase
+      .from(<span class="code-str">'profiles'</span>).select(<span class="code-str">'id'</span>).eq(<span class="code-str">'id'</span>, session.user.id).single()
+    <span class="code-kw">if</span> (!profile) {
+      <span class="code-comment">// Fallback: create profile if missing</span>
+      <span class="code-kw">await</span> supabase.rpc(<span class="code-str">'create_profile'</span>, { p_username: fallback })
+    }
+  }
+})`,
+        db: [
+          { table: 'profiles', action: 'SELECT — check if row exists (guard)' }
+        ],
+        example: [
+          { label: 'URL', type: 'in',  val: 'browser navigates to: app.html#/groups' },
+          { label: 'Session', type: 'out', val: 'supabase.auth.getSession() reads localStorage:\n→ { user: { id: "a1b2c3d4-...", email: "itay@example.com",\n            user_metadata: { username: "itayking" } } }' },
+          { label: 'Guard OK', type: 'note', val: 'profiles row exists → guard passes\nloading = false → AuthGuard renders Groups.jsx' },
+        ],
+        state: {
+          'session': 'SET from localStorage ✓',
+          'user': '{ id, email, user_metadata: { username } }',
+          'loading': 'false ← AuthGuard unblocks',
+          'route rendered': '"#/groups" ← Groups.jsx'
+        }
+      }
+    ]
+  },
+
+  login: {
+    label: 'Login Path',
+    steps: [
+      {
+        num: 1,
+        label: 'User arrives at index.html',
+        layer: 'landing',
+        file: 'index.html',
+        what: 'Same landing page as register. The user arrives and sees the form. By default the register form is shown — the user clicks "Sign In" to toggle to the login form.\n\nThe toggle is handled by client-side JS — no page reload. Both forms exist in the DOM, toggled with display:none.',
+        code: `<span class="code-comment">// js/auth.js — form toggle</span>
+<span class="code-kw">let</span> isLogin = <span class="code-kw">false</span>
+
+toggleLink.addEventListener(<span class="code-str">'click'</span>, e => {
+  e.preventDefault()
+  isLogin = !isLogin
+  formRegister.style.display = isLogin ? <span class="code-str">'none'</span> : <span class="code-str">''</span>
+  formLogin.style.display    = isLogin ? <span class="code-str">''</span>     : <span class="code-str">'none'</span>
+  toggleLink.textContent     = isLogin ? <span class="code-str">'Sign Up'</span> : <span class="code-str">'Sign In'</span>
+})`,
+        db: [],
+        example: [
+          { label: 'Default', type: 'in',  val: 'Page loads → register form visible, login form hidden' },
+          { label: 'Toggle', type: 'out', val: 'User clicks "Sign In" link:\n→ formRegister.style.display = "none"\n→ formLogin.style.display    = ""\n→ toggleLink.textContent = "Sign Up"' },
+        ],
+        state: {
+          'isLogin': 'false → true (after toggle)',
+          'session': 'null (checked on load)',
+          'form shown': '"login form"'
+        }
+      },
+      {
+        num: 2,
+        label: 'signInWithPassword called',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'The user submits email + password. auth.js calls `signInWithPassword`. Supabase validates the credentials against `auth.users`, then returns a session with access_token + refresh_token.\n\nThe SDK automatically writes the session to localStorage. No profile creation is needed — the profiles row was created during registration.',
+        code: `<span class="code-comment">// js/auth.js — login handler</span>
+formLogin.addEventListener(<span class="code-str">'submit'</span>, <span class="code-kw">async</span> e => {
+  e.preventDefault()
+  <span class="code-kw">const</span> email    = document.getElementById(<span class="code-str">'log-email'</span>).value.trim()
+  <span class="code-kw">const</span> password = document.getElementById(<span class="code-str">'log-password'</span>).value
+
+  <span class="code-kw">const</span> { error } = <span class="code-kw">await</span> _supabase.auth.signInWithPassword({
+    email, password
+  })
+
+  <span class="code-comment">// No profile creation needed — already exists from registration</span>
+})`,
+        db: [
+          { table: 'auth.users', action: 'SELECT — validate credentials (internal to Supabase)' }
+        ],
+        example: [
+          { label: 'Input', type: 'in',  val: 'supabase.auth.signInWithPassword({\n  email: "itay@example.com",\n  password: "secret123"\n})' },
+          { label: 'Success', type: 'out', val: '{ data: { session: { access_token: "eyJ…",\n  user: { id: "a1b2c3d4-…",\n          email: "itay@example.com",\n          user_metadata: { username: "itayking" } } } },\n  error: null }' },
+          { label: 'Error', type: 'err', val: '"Invalid login credentials"\n→ wrong password OR email not registered' },
+        ],
+        state: {
+          'session': 'SET ✓ — { access_token, refresh_token, user }',
+          'localStorage["sb-…-auth-token"]': 'SET automatically by SDK',
+          'localStorage["wc2026_pending_invite"]': 'null (unless invite in URL)'
+        }
+      },
+      {
+        num: 3,
+        label: 'Invite check + redirect',
+        layer: 'landing',
+        file: 'js/auth.js',
+        what: 'Same post-auth logic as register. auth.js checks localStorage for a pending invite — if found, calls join_group and redirects to #/groups. Otherwise, redirects to #/dashboard.\n\nNote: the invite check is identical for register and login. This is intentional — a user might follow an invite link while already registered but logged out.',
+        code: `<span class="code-comment">// After successful signIn — same as register path</span>
+<span class="code-kw">const</span> <span class="code-const">pending</span> = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+<span class="code-kw">if</span> (pending) {
+  <span class="code-kw">await</span> _supabase.rpc(<span class="code-str">'join_group'</span>, { p_invite_code: pending }).catch(() => {})
+  localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  window.location.href = <span class="code-str">'./app.html#/groups'</span>
+} <span class="code-kw">else</span> {
+  window.location.href = <span class="code-str">'./app.html#/dashboard'</span>
+}`,
+        db: [],
+        example: [
+          { label: 'No invite', type: 'out', val: 'localStorage["wc2026_pending_invite"] = null\n→ redirect to app.html#/dashboard' },
+          { label: 'With invite', type: 'note', val: 'localStorage["wc2026_pending_invite"] = "ABC123"\n→ join_group("ABC123") called\n→ redirect to app.html#/groups' },
+        ],
+        state: {
+          'pending invite': 'null (normal login)',
+          'redirect target': '"./app.html#/dashboard"',
+          'auth completed': 'YES ✓'
+        }
+      },
+      {
+        num: 4,
+        label: 'React app loads + session restored',
+        layer: 'react',
+        file: 'src/context/AuthContext.jsx',
+        what: 'app.html loads. React mounts. AuthContext reads the session from localStorage — this is synchronous at the SDK level but wrapped in a promise. Until the getSession() resolves, `session` state is `undefined` (the loading state). The AuthGuard shows a spinner during this window.',
+        code: `<span class="code-comment">// AuthContext — loading vs loaded distinction</span>
+<span class="code-kw">const</span> [session, setSession] = useState(<span class="code-kw">undefined</span>)  <span class="code-comment">← undefined = loading</span>
+
+<span class="code-comment">// AuthGuard checks this</span>
+<span class="code-kw">const</span> { session, loading } = useAuth()
+<span class="code-comment">// loading = session === undefined</span>
+
+<span class="code-kw">if</span> (loading) <span class="code-kw">return</span> <span class="code-const">&lt;Spinner /&gt;</span>
+<span class="code-kw">if</span> (!session) { window.location.href = <span class="code-str">'./index.html'</span>; <span class="code-kw">return null</span> }
+<span class="code-kw">return</span> children  <span class="code-comment">← renders the page</span>`,
+        db: [],
+        example: [
+          { label: 'Timeline', type: 'out', val: 't=0ms   app.html loads, React mounts\nt=1ms   AuthProvider runs, session = undefined → spinner\nt=5ms   getSession() resolves → session set\nt=5ms   loading = false → AuthGuard renders route\nt=5ms   Dashboard.jsx (or Groups.jsx) renders' },
+        ],
+        state: {
+          'session (initial)': 'undefined → loading spinner shown',
+          'session (after getSession)': 'SET ✓ → page renders',
+          'route': '"#/dashboard" → Dashboard.jsx'
+        }
+      }
+    ]
+  },
+
+  invite: {
+    label: 'Invite Flow',
+    steps: [
+      {
+        num: 1,
+        label: 'Captain creates group + copies invite',
+        layer: 'react',
+        file: 'src/pages/Groups.jsx',
+        what: 'A logged-in captain clicks "+ Create" in Groups.jsx. The `create_group` RPC is called with the group name. A DB trigger automatically generates a unique 6-character alphanumeric invite code and stores it in `groups.invite_code`.\n\nThe captain then clicks "🔗 Invite" — this builds the invite link and copies it to clipboard.',
+        code: `<span class="code-comment">// Groups.jsx — create group</span>
+<span class="code-kw">const</span> { error } = <span class="code-kw">await</span> supabase
+  .rpc(<span class="code-str">'create_group'</span>, { group_name: name })
+
+<span class="code-comment">// DB trigger auto-generates invite_code on INSERT</span>
+
+<span class="code-comment">// Copy invite link</span>
+<span class="code-kw">const</span> copyInvite = <span class="code-kw">async</span> code => {
+  <span class="code-kw">const</span> base = window.location.href.replace(<span class="code-str">/app\\.html.*$/</span>, <span class="code-str">''</span>)
+  <span class="code-kw">const</span> link = <span class="code-str">\`\${base}index.html?invite=\${code}\`</span>
+  <span class="code-kw">await</span> navigator.clipboard.writeText(link)
+}`,
+        db: [
+          { table: 'groups', action: 'INSERT — name, created_by, invite_code (trigger-generated)' },
+          { table: 'group_members', action: 'INSERT — captain added as first member' }
+        ],
+        example: [
+          { label: 'Create', type: 'in',  val: 'supabase.rpc("create_group", { group_name: "The Lads ⚽" })' },
+          { label: 'DB result', type: 'out', val: 'groups row:\n{ id: "f8e7d6c5-…", name: "The Lads ⚽",\n  created_by: "a1b2c3d4-…",\n  invite_code: "XK9P2M"  ← DB trigger generated this }' },
+          { label: 'Invite URL', type: 'out', val: 'https://itayavioz.github.io/…/index.html?invite=XK9P2M\n(copied to clipboard via navigator.clipboard.writeText)' },
+        ],
+        state: {
+          'invite link': '"https://…/index.html?invite=ABC123"',
+          'groups.invite_code': '"ABC123" (6-char, DB trigger)',
+          'captain role': 'groups.created_by = user.id'
+        }
+      },
+      {
+        num: 2,
+        label: 'Friend clicks WhatsApp link (new user)',
+        layer: 'landing',
+        file: 'index.html',
+        what: 'The friend receives the link via WhatsApp and taps it. Their mobile browser opens index.html?invite=ABC123.\n\nauth.js runs immediately:\n1. Parses ?invite=ABC123 → stores in localStorage\n2. Checks session → null (not registered yet)\n3. Shows the register form\n\nThe invite code sits safely in localStorage throughout the registration flow.',
+        code: `<span class="code-comment">// URL: index.html?invite=ABC123</span>
+
+<span class="code-comment">// auth.js immediately stores the invite</span>
+<span class="code-kw">const</span> <span class="code-const">inviteCode</span> = params.get(<span class="code-str">'invite'</span>)  <span class="code-comment">// "ABC123"</span>
+localStorage.setItem(<span class="code-str">'wc2026_pending_invite'</span>, inviteCode)
+
+<span class="code-comment">// Session check → null → show form</span>
+<span class="code-comment">// (invite code survives the form interaction)</span>`,
+        db: [],
+        example: [
+          { label: 'WhatsApp', type: 'in',  val: 'Friend taps: https://…/index.html?invite=XK9P2M' },
+          { label: 'Stored', type: 'out', val: 'localStorage["wc2026_pending_invite"] = "XK9P2M"\n(stored before form shown — survives the entire register flow)' },
+          { label: 'Check', type: 'note', val: 'getSession() → null (new user, no token)\n→ register form shown' },
+        ],
+        state: {
+          'inviteCode': '"ABC123"',
+          'localStorage["wc2026_pending_invite"]': '"ABC123" ← stored',
+          'session': 'null → register form shown'
+        }
+      },
+      {
+        num: 3,
+        label: 'New user registers',
+        layer: 'supabase',
+        file: 'js/auth.js',
+        what: 'The friend fills in username, email, password and submits. The full register flow runs (signUp → create_profile). After the profile is created, auth.js checks for the pending invite.\n\nThe join_group RPC is called with the invite code. On success, localStorage is cleaned and the user is redirected to app.html#/groups where they see the group they just joined.',
+        code: `<span class="code-comment">// After successful signUp + create_profile...</span>
+<span class="code-kw">const</span> <span class="code-const">pending</span> = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+
+<span class="code-kw">if</span> (pending) {
+  <span class="code-kw">await</span> _supabase.rpc(<span class="code-str">'join_group'</span>, { p_invite_code: pending })
+  localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  window.location.href = <span class="code-str">'./app.html#/groups'</span>
+}
+
+<span class="code-comment">// join_group RPC validates:</span>
+<span class="code-comment">// • invite code exists</span>
+<span class="code-comment">// • not already a member</span>
+<span class="code-comment">// • group not full (max 10)</span>
+<span class="code-comment">// • user hasn't hit 3-group limit</span>`,
+        db: [
+          { table: 'auth.users', action: 'INSERT — new user' },
+          { table: 'profiles', action: 'INSERT — username' },
+          { table: 'group_members', action: 'INSERT — new member joins group' }
+        ],
+        example: [
+          { label: 'Register', type: 'in',  val: 'username: "yoni_fan", email: "yoni@example.com"\nsignUp → create_profile → all same as Register path' },
+          { label: 'Join', type: 'out', val: 'join_group("XK9P2M") succeeds:\ngroup_members: { group_id: "f8e7…", user_id: "b2c3d4…", is_inactive: false }\n→ redirect: app.html#/groups' },
+          { label: 'Groups page', type: 'note', val: 'Groups.jsx loads → sees "The Lads ⚽" group\nUser is now member #2 (captain is member #1)' },
+        ],
+        state: {
+          'session': 'SET ✓',
+          'localStorage["wc2026_pending_invite"]': 'null ← removed',
+          'redirect': '"./app.html#/groups"',
+          'group joined': 'YES ✓'
+        }
+      },
+      {
+        num: 4,
+        label: 'Already logged-in user clicks invite',
+        layer: 'landing',
+        file: 'js/auth.js',
+        what: 'If the user is already logged in when they tap the invite link, auth.js detects this in the session check. It calls join_group immediately (no form shown), cleans up localStorage, and redirects to #/groups.\n\nThe `.catch(() => {})` on the join_group call silently ignores errors like "already_member" — the user still lands in the app.',
+        code: `<span class="code-comment">// auth.js — session already exists path</span>
+<span class="code-kw">if</span> (session) {
+  <span class="code-kw">const</span> <span class="code-const">pending</span> = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  <span class="code-kw">if</span> (pending) {
+    <span class="code-comment">// Join silently (ignore "already_member" etc.)</span>
+    <span class="code-kw">await</span> _supabase
+      .rpc(<span class="code-str">'join_group'</span>, { p_invite_code: pending })
+      .catch(() => {})
+    localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+    window.location.href = <span class="code-str">'./app.html#/groups'</span>
+  } <span class="code-kw">else</span> {
+    window.location.href = <span class="code-str">'./app.html#/dashboard'</span>
+  }
+  <span class="code-kw">return</span>  <span class="code-comment">← form never shown</span>
+}`,
+        db: [
+          { table: 'group_members', action: 'INSERT — if not already a member' }
+        ],
+        example: [
+          { label: 'Flow', type: 'out', val: '1. Itay (already logged in) taps invite link\n2. index.html loads\n3. localStorage["wc2026_pending_invite"] = "XK9P2M"\n4. getSession() → session exists!\n5. join_group("XK9P2M") called (no form shown)\n6. redirect → app.html#/groups' },
+          { label: 'Already in', type: 'err', val: '.catch(() => {}) silently ignores "already_member"\nUser still lands in the app normally' },
+        ],
+        state: {
+          'session': 'SET (from localStorage)',
+          'form shown': 'NO — redirected immediately',
+          'redirect': '"./app.html#/groups"'
+        }
+      },
+      {
+        num: 5,
+        label: 'Groups.jsx handles invite from URL',
+        layer: 'react',
+        file: 'src/pages/Groups.jsx',
+        what: 'Groups.jsx also handles an alternative path: the user navigates directly to app.html#/groups?invite=ABC123 (already logged in, invite in the URL hash params).\n\nIt reads both the URL `?invite=` param AND checks localStorage for a pending invite. If found, the Join modal is pre-filled with the code and shown automatically.',
+        code: `<span class="code-comment">// Groups.jsx — pre-fill join modal from URL or localStorage</span>
+useEffect(() => {
+  <span class="code-kw">const</span> urlCode  = searchParams.get(<span class="code-str">'invite'</span>)
+  <span class="code-kw">const</span> stored   = localStorage.getItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  <span class="code-kw">const</span> code     = urlCode || stored
+
+  <span class="code-kw">if</span> (code) {
+    setJoinCode(code.toUpperCase())
+    setJoinOpen(<span class="code-kw">true</span>)          <span class="code-comment">← open join modal automatically</span>
+    <span class="code-kw">if</span> (stored) localStorage.removeItem(<span class="code-str">'wc2026_pending_invite'</span>)
+  }
+}, [searchParams])`,
+        db: [],
+        example: [
+          { label: 'URL param', type: 'in',  val: 'app.html#/groups?invite=XK9P2M\n→ searchParams.get("invite") = "XK9P2M"' },
+          { label: 'Modal', type: 'out', val: 'setJoinCode("XK9P2M")\nsetJoinOpen(true)  ← join modal opens automatically\nUser just hits "Join Group" — code already filled in' },
+        ],
+        state: {
+          'joinCode': '"ABC123" (pre-filled)',
+          'joinOpen': 'true ← modal shown',
+          'localStorage["wc2026_pending_invite"]': 'null ← cleaned up'
+        }
+      }
+    ]
+  },
+
+  session: {
+    label: 'React Session Lifecycle',
+    steps: [
+      {
+        num: 1,
+        label: 'app.html loads → React mounts',
+        layer: 'react',
+        file: 'src/main.jsx + src/App.jsx',
+        what: 'The Vite-built app.html is loaded. The JS bundle runs, ReactDOM renders the App component wrapped in AuthProvider and ToastProvider.\n\nThe HashRouter maps URL hashes (#/dashboard, #/groups, etc.) to React routes. ALL routes are wrapped in AuthGuard.',
+        code: `<span class="code-comment">// src/main.jsx</span>
+ReactDOM.createRoot(document.getElementById(<span class="code-str">'root'</span>)).render(
+  <span class="code-const">&lt;AuthProvider&gt;
+    &lt;ToastProvider&gt;
+      &lt;App /&gt;
+    &lt;/ToastProvider&gt;
+  &lt;/AuthProvider&gt;</span>
+)
+
+<span class="code-comment">// src/App.jsx</span>
+<span class="code-kw">export default function</span> <span class="code-fn">App</span>() {
+  <span class="code-kw">return</span> (
+    <span class="code-const">&lt;HashRouter&gt;
+      &lt;Routes&gt;
+        &lt;Route path="/dashboard" element={&lt;AuthGuard&gt;&lt;Dashboard /&gt;&lt;/AuthGuard&gt;} /&gt;
+        &lt;Route path="/groups"    element={&lt;AuthGuard&gt;&lt;Groups /&gt;&lt;/AuthGuard&gt;}    /&gt;
+        <span class="code-comment">/* ... all routes wrapped in AuthGuard */</span>
+      &lt;/Routes&gt;
+    &lt;/HashRouter&gt;</span>
+  )
+}`,
+        db: [],
+        example: [
+          { label: 'Entry URL', type: 'in',  val: 'https://…/app.html#/dashboard\n(after redirect from index.html or direct visit)' },
+          { label: 'Mount order', type: 'out', val: '1. AuthProvider mounts  → session = undefined\n2. ToastProvider mounts\n3. App mounts → HashRouter reads "#/dashboard"\n4. AuthGuard checks session → undefined → spinner\n5. getSession() resolves → spinner gone → Dashboard' },
+        ],
+        state: {
+          'session': 'undefined ← loading (AuthGuard shows spinner)',
+          'user': 'null',
+          'loading': 'true'
+        }
+      },
+      {
+        num: 2,
+        label: 'AuthContext reads session from localStorage',
+        layer: 'supabase',
+        file: 'src/context/AuthContext.jsx',
+        what: 'AuthProvider calls `supabase.auth.getSession()` on mount. The Supabase SDK reads its stored token from localStorage (key: "sb-[projectRef]-auth-token") and validates it.\n\nThis resolves quickly (localStorage read + JWT decode) — no network call unless the token is expired and needs refreshing.',
+        code: `<span class="code-comment">// AuthContext.jsx</span>
+<span class="code-kw">const</span> [session, setSession] = useState(<span class="code-kw">undefined</span>)  <span class="code-comment">← undefined = loading</span>
+
+useEffect(() => {
+  supabase.auth.getSession().then(<span class="code-kw">async</span> ({ data: { session } }) => {
+    setSession(session)               <span class="code-comment">← null or session object</span>
+    setUser(session?.user ?? <span class="code-kw">null</span>)
+
+    <span class="code-comment">// Partial registration guard</span>
+    <span class="code-kw">if</span> (session?.user) {
+      <span class="code-kw">const</span> { data: profile } = <span class="code-kw">await</span> supabase
+        .from(<span class="code-str">'profiles'</span>).select(<span class="code-str">'id'</span>).eq(<span class="code-str">'id'</span>, session.user.id).single()
+      <span class="code-kw">if</span> (!profile) {
+        <span class="code-kw">await</span> supabase.rpc(<span class="code-str">'create_profile'</span>, { p_username: fallback })
+      }
+    }
+  })`,
+        db: [
+          { table: 'profiles', action: 'SELECT — guard check (does row exist?)' }
+        ],
+        example: [
+          { label: 'localStorage', type: 'in',  val: 'key: "sb-ftryuvfdihmhlzvbpfeu-auth-token"\nvalue: { access_token: "eyJ…", refresh_token: "abc…", … }' },
+          { label: 'getSession', type: 'out', val: '{ data: { session: { user: {\n    id: "a1b2c3d4-…",\n    email: "itay@example.com",\n    user_metadata: { username: "itayking" }\n  } } } }' },
+          { label: 'Guard', type: 'note', val: 'SELECT profiles WHERE id = "a1b2c3d4-…"\n→ row found → guard passes → no fallback needed' },
+        ],
+        state: {
+          'session': 'SET (or null if not logged in)',
+          'user': '{ id, email, user_metadata: { username } }',
+          'loading': 'false ← AuthGuard unblocks',
+          'localStorage key': '"sb-ftryuvfdihmhlzvbpfeu-auth-token"'
+        }
+      },
+      {
+        num: 3,
+        label: 'onAuthStateChange listener',
+        layer: 'supabase',
+        file: 'src/context/AuthContext.jsx',
+        what: 'AuthContext also sets up a realtime listener for auth events. This handles cases like:\n• Token auto-refresh (every ~1hr) — the SDK fires SIGNED_IN with a new session\n• Explicit sign-out — fires SIGNED_OUT\n\nImportant: the listener only CLEARS the session on SIGNED_OUT. Transient null sessions during token refresh are intentionally ignored — this prevents spurious logouts.',
+        code: `<span class="code-comment">// Critical: only clear on explicit sign-out</span>
+<span class="code-kw">const</span> { data: { subscription } } =
+  supabase.auth.onAuthStateChange((event, session) => {
+
+  <span class="code-kw">if</span> (event === <span class="code-str">'SIGNED_OUT'</span>) {
+    setSession(<span class="code-kw">null</span>)
+    setUser(<span class="code-kw">null</span>)
+  } <span class="code-kw">else if</span> (session) {
+    <span class="code-comment">// SIGNED_IN, TOKEN_REFRESHED, etc.</span>
+    setSession(session)
+    setUser(session.user ?? <span class="code-kw">null</span>)
+  }
+  <span class="code-comment">// Ignore: null session during token refresh</span>
+})
+
+<span class="code-kw">return</span> () => subscription.unsubscribe()  <span class="code-comment">← cleanup on unmount</span>`,
+        db: [],
+        example: [
+          { label: 'Token refresh', type: 'note', val: 'SDK fires TOKEN_REFRESHED with new session → session updated\n(happens ~every 1hr, access token expires)\nTransient null between old/new token → IGNORED (no logout)' },
+          { label: 'Sign out', type: 'out', val: 'SDK fires SIGNED_OUT → session = null, user = null\n→ AuthGuard redirects to index.html' },
+          { label: 'Another tab', type: 'note', val: 'User signs out in another browser tab\n→ storage event fires → SDK fires SIGNED_OUT here too\n→ this tab also redirects to index.html' },
+        ],
+        state: {
+          'listener active': 'YES — persists for app lifetime',
+          'events handled': 'SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT',
+          'transient nulls': 'IGNORED ← prevents spurious logout'
+        }
+      },
+      {
+        num: 4,
+        label: 'AuthGuard — route protection',
+        layer: 'react',
+        file: 'src/App.jsx',
+        what: 'Every page route is wrapped in AuthGuard. It has three states:\n1. `session === undefined` → still loading, show spinner\n2. `session === null` → not authenticated, redirect to index.html\n3. `session` is set → render the page\n\nThis means there\'s always a brief spinner on first load, even if the user is logged in. The getSession() call resolves fast enough that users rarely notice it.',
+        code: `<span class="code-kw">function</span> <span class="code-fn">AuthGuard</span>({ children }) {
+  <span class="code-kw">const</span> { session, loading } = useAuth()
+  <span class="code-comment">// loading = session === undefined</span>
+
+  <span class="code-kw">if</span> (loading) {
+    <span class="code-kw">return</span> <span class="code-const">&lt;div style={{minHeight:'100vh', color:'var(--muted)'}}&gt;
+      Loading…
+    &lt;/div&gt;</span>
+  }
+
+  <span class="code-kw">if</span> (!session) {
+    window.location.href = <span class="code-str">'./index.html'</span>
+    <span class="code-kw">return null</span>
+  }
+
+  <span class="code-kw">return</span> children  <span class="code-comment">← Dashboard, Groups, etc.</span>
+}`,
+        db: [],
+        example: [
+          { label: 'Loading', type: 'note', val: 'session = undefined\n→ <div>Loading…</div>  (spinner, briefly on every page load)' },
+          { label: 'Not authed', type: 'err', val: 'session = null\n→ window.location.href = "./index.html"\n(e.g. user never logged in, or signed out)' },
+          { label: 'Authed', type: 'out', val: 'session = { user: {…} }\n→ return children  (Dashboard, Groups, Game, Picks, AiFeed)' },
+        ],
+        state: {
+          'loading (session=undefined)': '→ spinner shown',
+          'unauthenticated (session=null)': '→ redirect to index.html',
+          'authenticated (session set)': '→ page renders'
+        }
+      },
+      {
+        num: 5,
+        label: 'Sign out',
+        layer: 'react',
+        file: 'src/context/AuthContext.jsx',
+        what: 'Sign out is triggered from the Dashboard profile sheet (gear icon ⚙️). The `signOut` function calls `supabase.auth.signOut()` which:\n1. Sends a POST to Supabase Auth to invalidate the token server-side\n2. Clears the session from localStorage\n3. Fires the SIGNED_OUT auth state event (which AuthContext handles)\n\nThen auth.js explicitly redirects to index.html.',
+        code: `<span class="code-comment">// AuthContext.jsx</span>
+<span class="code-kw">const</span> <span class="code-fn">signOut</span> = useCallback(<span class="code-kw">async</span> () => {
+  <span class="code-kw">await</span> supabase.auth.signOut()
+  <span class="code-comment">// ↑ clears localStorage token + fires SIGNED_OUT event</span>
+  window.location.href = <span class="code-str">'./index.html'</span>
+}, [])
+
+<span class="code-comment">// Dashboard.jsx — profile sheet</span>
+<span class="code-kw">const</span> { signOut } = useAuth()
+<span class="code-const">&lt;button onClick={signOut}&gt;</span>Sign out<span class="code-const">&lt;/button&gt;</span>`,
+        db: [],
+        example: [
+          { label: 'User action', type: 'in',  val: 'Opens ⚙️ gear menu → taps "Sign out"' },
+          { label: 'API call', type: 'out', val: 'POST https://ftryuvfdihmhlzvbpfeu.supabase.co/auth/v1/logout\n→ token invalidated server-side\n→ localStorage["sb-…-auth-token"] deleted\n→ onAuthStateChange fires: SIGNED_OUT' },
+          { label: 'Result', type: 'out', val: 'window.location.href = "./index.html"\n→ landing page shown, user must log in again' },
+        ],
+        state: {
+          'session': 'null ← cleared',
+          'localStorage["sb-…-auth-token"]': 'null ← cleared by SDK',
+          'redirect': '"./index.html"',
+          'auth state event': 'SIGNED_OUT fired'
+        }
+      },
+      {
+        num: 6,
+        label: 'Username rename (profile sheet)',
+        layer: 'supabase',
+        file: 'src/pages/Dashboard.jsx',
+        what: 'Users can rename their username until 2026-06-11T19:00:00Z. The rename hits two places:\n1. `profiles` table — the public display name\n2. `auth.users.user_metadata` — so the username in the session stays in sync\n\nRLS enforces the deadline: an UPDATE policy rejects writes after Jun 11.',
+        code: `<span class="code-comment">// Dashboard.jsx — saveUsername()</span>
+<span class="code-kw">const</span> { error } = <span class="code-kw">await</span> supabase
+  .from(<span class="code-str">'profiles'</span>)
+  .update({ username: val })
+  .eq(<span class="code-str">'id'</span>, user.id)
+<span class="code-comment">// RLS blocks UPDATE after 2026-06-11T19:00:00Z</span>
+
+<span class="code-comment">// Also sync to auth user_metadata</span>
+<span class="code-kw">await</span> supabase.auth.updateUser({
+  data: { username: val }
+})`,
+        db: [
+          { table: 'profiles', action: 'UPDATE username (RLS deadline enforced)' },
+          { table: 'auth.users', action: 'UPDATE user_metadata.username' }
+        ],
+        example: [
+          { label: 'Before', type: 'in',  val: 'profiles.username = "itayking"\nuser_metadata.username = "itayking"' },
+          { label: 'After', type: 'out', val: 'profiles.username = "itay2026" ← updated\nuser_metadata.username = "itay2026" ← synced\nDisplay name in app: "itay2026"' },
+          { label: 'After deadline', type: 'err', val: 'Date: 2026-06-12 (after Jun 11 deadline)\nRLS policy: CHECK (now() < \'2026-06-11T19:00:00Z\')\n→ UPDATE rejected → "permission denied for table profiles"' },
+        ],
+        state: {
+          'deadline': '2026-06-11T19:00:00Z',
+          'RLS check': 'now() < 2026-06-11T19:00:00Z',
+          'username updated in': 'profiles + auth.user_metadata'
+        }
+      }
+    ]
+  }
+}
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+
+const state = {
+  path: 'register',
+  stepIndex: 0
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+
+function currentSteps() {
+  return PATHS[state.path].steps
+}
+
+function currentStep() {
+  return currentSteps()[state.stepIndex]
+}
+
+function renderSidebar() {
+  const steps = currentSteps()
+  const list  = document.getElementById('step-list')
+  list.innerHTML = steps.map((s, i) => {
+    const active = i === state.stepIndex ? ' active' : ''
+    return `
+      <div class="step-item${active}" onclick="selectStep(${i})">
+        <div class="step-layer-dot dot-${s.layer}"></div>
+        <div class="step-num">${s.num}</div>
+        <div class="step-label">${s.label}</div>
+      </div>`
+  }).join('')
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function renderDetail() {
+  const s   = currentStep()
+  const steps = currentSteps()
+  const content = document.getElementById('detail-content')
+
+  // State rows
+  const stateRows = Object.entries(s.state).map(([k, v]) => {
+    let cls = 'state-val'
+    if (v === 'null' || v === 'null ← removed' || v === 'null ← cleared' || v === 'null ← cleared by SDK') cls += ' null'
+    else if (v.includes('✓') || v.includes('SET') || v.includes('YES')) cls += ' set'
+    else if (v.includes('loading') || v.includes('checking') || v.includes('undefined')) cls += ' warn'
+    return `<div class="state-row">
+      <span class="state-key">${escHtml(k)}</span>
+      <span class="${cls}">${escHtml(v)}</span>
+    </div>`
+  }).join('')
+
+  // DB ops
+  const dbContent = s.db.length === 0
+    ? `<div class="db-none">No database operation at this step</div>`
+    : s.db.map(op => `<div class="db-row">
+        <span class="db-table">${op.table}</span>
+        <span class="db-action">${escHtml(op.action)}</span>
+      </div>`).join('')
+
+  // Layer badge
+  const layerBadge = `<span class="badge badge-${s.layer}" style="margin-left:.5rem">${
+    s.layer === 'landing'  ? 'Landing (Vanilla JS)' :
+    s.layer === 'react'    ? 'React App' :
+    s.layer === 'supabase' ? 'Supabase Auth' :
+    'Database'
+  }</span>`
+
+  // Flow map nodes
+  const flowNodes = currentSteps().map((st, i) => {
+    const isCurrent = i === state.stepIndex
+    const shortLabel = st.label.length > 18 ? st.label.slice(0, 16) + '…' : st.label
+    const arrow = i < currentSteps().length - 1
+      ? `<div class="fm-arrow">→</div>` : ''
+    return `
+      <div class="fm-node" onclick="selectStep(${i})" title="${st.label}">
+        <div class="fm-box ${st.layer}${isCurrent ? ' current' : ''}">${shortLabel}</div>
+        <div class="fm-num">${st.num}</div>
+      </div>${arrow}`
+  }).join('')
+
+  content.innerHTML = `
+    <!-- Flow map -->
+    <div class="flowmap-wrap">
+      <div class="flowmap-title">Flow map — click any step</div>
+      <div class="flowmap">${flowNodes}</div>
+    </div>
+
+    <!-- Header -->
+    <div class="step-header">
+      <div class="step-header-num">${s.num}</div>
+      <div class="step-header-info">
+        <div class="step-header-title">${s.label} ${layerBadge}</div>
+        <div class="step-header-file">${s.file}</div>
+      </div>
+    </div>
+
+    <!-- What happens -->
+    <div class="card what-card">
+      <div class="card-title">What happens</div>
+      <div class="what-text">${s.what.replace(/\n/g, '<br>')}</div>
+    </div>
+
+    <!-- Code -->
+    <div class="card code-card">
+      <div class="card-title">Key code</div>
+      <div class="code-block">${s.code}</div>
+    </div>
+
+    <!-- Example -->
+    <div class="card example-card">
+      <div class="card-title">Example</div>
+      ${(s.example || []).map(ex => `
+        <div class="example-row">
+          <span class="example-label ${ex.type}">${ex.label}</span>
+          <div class="example-val">${escHtml(ex.val)}</div>
+        </div>`).join('')}
+    </div>
+
+    <!-- DB op + State (side by side) -->
+    <div class="card db-card">
+      <div class="card-title">Database operation</div>
+      <div class="db-op">${dbContent}</div>
+    </div>
+
+    <div class="card state-card">
+      <div class="card-title">State inspector — at this step</div>
+      <div class="state-grid">${stateRows}</div>
+    </div>
+  `
+
+  // Nav counter
+  document.getElementById('nav-counter').textContent =
+    `Step ${state.stepIndex + 1} of ${steps.length}`
+  document.getElementById('prev-btn').disabled = state.stepIndex === 0
+  document.getElementById('next-btn').disabled = state.stepIndex === steps.length - 1
+
+  updatePrompt()
+}
+
+function updatePrompt() {
+  const s = currentStep()
+  const path = PATHS[state.path].label
+  document.getElementById('prompt-text').textContent =
+    `Auth flow — ${path} — Step ${s.num}: "${s.label}" (${s.file}). ` +
+    `Layer: ${s.layer === 'landing' ? 'Landing vanilla JS' : s.layer === 'react' ? 'React app' : 'Supabase'}. ` +
+    `${s.db.length ? `DB: ${s.db.map(d => `${d.table} ${d.action.split('—')[0].trim()}`).join(', ')}.` : 'No DB op.'}`
+}
+
+function renderAll() {
+  renderSidebar()
+  renderDetail()
+}
+
+// ─── INTERACTIONS ─────────────────────────────────────────────────────────────
+
+function switchPath(path) {
+  state.path = path
+  state.stepIndex = 0
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    const paths = ['register', 'login', 'invite', 'session', 'rules', 'errors']
+    btn.classList.toggle('active', paths[i] === path)
+  })
+  if (path === 'rules') renderRules()
+  else if (path === 'errors') renderErrors()
+  else renderAll()
+}
+
+function selectStep(i) {
+  state.stepIndex = i
+  renderAll()
+}
+
+function nextStep() {
+  if (state.stepIndex < currentSteps().length - 1) {
+    state.stepIndex++
+    renderAll()
+  }
+}
+
+function prevStep() {
+  if (state.stepIndex > 0) {
+    state.stepIndex--
+    renderAll()
+  }
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-text').textContent
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn')
+    const orig = btn.textContent
+    btn.textContent = 'Copied!'
+    setTimeout(() => btn.textContent = orig, 1500)
+  })
+}
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextStep()
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   prevStep()
+})
+
+// ─── ERROR HANDLING DATA ──────────────────────────────────────────────────────
+
+const ERROR_ROWS = [
+  { section: 'js/auth.js — Landing (Vanilla)' },
+
+  {
+    location: 'auth.js:6',
+    name: 'file:// protocol',
+    when: 'User opens index.html directly from filesystem (not via server)',
+    status: 'ok',
+    handling: 'Shows inline "run npm run dev" message in page. IIFE exits cleanly.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'auth.js:25',
+    name: 'getSession() network failure',
+    when: 'Supabase unreachable when checking existing session on page load',
+    status: 'missing',
+    handling: 'Destructured without error check: const { data: { session } } = await ... — if the call throws, the IIFE crashes silently. Page appears broken with no feedback.',
+    priority: 'medium',
+    fix: 'Wrap in try/catch. On failure show "Connection error — check your internet and refresh."',
+  },
+  {
+    location: 'auth.js:29',
+    name: 'join_group RPC (already-logged-in path)',
+    when: 'Already logged-in user clicks invite but: group full / already member / 3-group limit',
+    status: 'ok',
+    handling: '.catch(() => {}) — silently ignores all errors. User is still redirected to #/groups and can see a clear state there.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'auth.js:66',
+    name: 'Username client-side validation',
+    when: 'Username too short/long, or contains invalid characters',
+    status: 'ok',
+    handling: 'showToast() with message. Submit blocked. Button stays enabled.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'auth.js:75',
+    name: 'signUp API error',
+    when: 'Email already registered, weak password (<6 chars), Supabase unreachable',
+    status: 'ok',
+    handling: 'Caught. showToast(signUpError.message). Button re-enabled.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'auth.js:89',
+    name: 'create_profile RPC failure (register)',
+    when: 'Username taken in profiles table, or DB error during profile insert',
+    status: 'partial',
+    handling: 'Retried once. If retry also fails: shows "Account created — finishing setup…" toast and continues. AuthContext fallback will create profile on first app load. BUT: if username is taken and fallback generates a different username, user may be confused by their displayed name.',
+    priority: 'medium',
+    fix: 'On "username_taken" error specifically: prompt user to pick a different username before proceeding. Current code silently falls through.',
+  },
+  {
+    location: 'auth.js:101',
+    name: 'join_group RPC failure (register path)',
+    when: 'Group full, max groups reached, or invalid code — discovered only AFTER user registered',
+    status: 'partial',
+    handling: '.catch(() => {}) — silently swallowed. User is redirected to #/dashboard instead of #/groups. No feedback that the join failed.',
+    priority: 'medium',
+    fix: 'Catch specific errors, show a toast: "Account created! But the group is full — ask the captain to make room." Then redirect to #/groups so the join modal is visible.',
+  },
+  {
+    location: 'auth.js:118',
+    name: 'signInWithPassword error',
+    when: 'Wrong password, email not found, account locked',
+    status: 'ok',
+    handling: 'Caught. showToast(error.message). Button re-enabled.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'auth.js:128',
+    name: 'Profile fallback on login',
+    when: 'User has no profiles row (edge case: partial registration)',
+    status: 'ok',
+    handling: 'Checks profiles table on every login. If missing: calls create_profile with username from user_metadata or email prefix.',
+    priority: 'done',
+    fix: null,
+  },
+
+  { section: 'src/context/AuthContext.jsx — React App' },
+
+  {
+    location: 'AuthContext:11',
+    name: 'getSession() failure in React',
+    when: 'Supabase unreachable when app first loads',
+    status: 'missing',
+    handling: 'No try/catch. If getSession() rejects, session stays "undefined" forever → AuthGuard shows spinner forever → app appears frozen with no feedback.',
+    priority: 'high',
+    fix: 'Add try/catch. On failure: setSession(null) and show an error page ("Cannot connect to server — check your connection and refresh").',
+  },
+  {
+    location: 'AuthContext:16',
+    name: 'profiles guard SELECT failure',
+    when: 'DB unreachable during partial-registration check on login',
+    status: 'missing',
+    handling: 'No error handling on the SELECT. If it fails, the if(!profile) branch is skipped — fine. But if it throws, the whole getSession callback crashes, leaving session unset.',
+    priority: 'low',
+    fix: 'Wrap guard in try/catch. On failure: log and continue (guard is non-critical — login still works without it).',
+  },
+  {
+    location: 'AuthContext:19',
+    name: 'create_profile fallback failure',
+    when: 'Fallback create_profile RPC fails (e.g. username conflict)',
+    status: 'missing',
+    handling: 'No error handling. If RPC fails, error is silently lost. User proceeds with no profiles row — their username will show as blank in leaderboards.',
+    priority: 'medium',
+    fix: 'Log the error. Retry with a generated username (e.g. "user_" + id.slice(0,6)) to guarantee a row exists.',
+  },
+  {
+    location: 'AuthContext:27',
+    name: 'onAuthStateChange token refresh failure',
+    when: 'Access token expires and refresh token is invalid/revoked',
+    status: 'ok',
+    handling: 'SDK fires SIGNED_OUT event. AuthContext sets session = null. AuthGuard redirects to index.html.',
+    priority: 'done',
+    fix: null,
+  },
+
+  { section: 'src/App.jsx — AuthGuard' },
+
+  {
+    location: 'App.jsx:9',
+    name: 'Infinite loading (session stuck at undefined)',
+    when: 'getSession() never resolves (network hang, SDK bug)',
+    status: 'missing',
+    handling: 'No timeout on the loading state. Spinner shows forever with no retry or error message.',
+    priority: 'high',
+    fix: 'Add a 10-second timeout: if session is still undefined after 10s, show an error with a Refresh button.',
+  },
+
+  { section: 'src/pages/Dashboard.jsx — Profile Sheet' },
+
+  {
+    location: 'Dashboard:323',
+    name: 'Username UPDATE RLS rejection (after deadline)',
+    when: 'User tries to rename after 2026-06-11T19:00:00Z',
+    status: 'ok',
+    handling: 'Input is disabled client-side. Lock note shown. Even if bypassed, RLS rejects the UPDATE.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'Dashboard:323',
+    name: 'Username taken (profiles UNIQUE constraint)',
+    when: 'Chosen username already exists in profiles table',
+    status: 'ok',
+    handling: 'Error caught. Shows "Username already taken" message under the field.',
+    priority: 'done',
+    fix: null,
+  },
+  {
+    location: 'Dashboard:336',
+    name: 'delete_account RPC errors',
+    when: 'After June 11 (account_locked) or user is in a group (cannot_delete_in_group)',
+    status: 'ok',
+    handling: 'Both error codes caught and mapped to user-friendly messages.',
+    priority: 'done',
+    fix: null,
+  },
+]
+
+// ─── RENDER ERRORS ────────────────────────────────────────────────────────────
+
+function renderRules() {
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">
+        Business rules, sync behaviour, RLS policies, and SDK call patterns for the auth flow.
+      </div>
+    </div>`
+
+  document.getElementById('detail-content').innerHTML = `
+    <div style="padding:24px;overflow-y:auto;width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px;">
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">📐 Business Logic</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li>Username: 3–20 chars, alphanumeric + underscore only (validated client-side before signUp)</li>
+            <li><code>auth.js</code> runs as IIFE on page load — checks session immediately; if session exists → redirect without showing form</li>
+            <li>Invite code stored in <code>localStorage('wc2026_pending_invite')</code> before register/login, cleared after join</li>
+            <li><code>create_profile</code> RPC called after signUp (creates <code>profiles</code> row with username)</li>
+            <li>If profile creation fails → retried once; if retry fails → silent (partial registration guard in React)</li>
+            <li>If invite join fails → silently ignored (<code>.catch(()=>{})</code>) — user lands in app without group</li>
+            <li><code>onAuthStateChange</code> in React: ONLY clears session on <code>SIGNED_OUT</code> event — transient nulls during token refresh are ignored</li>
+            <li>Username rename allowed until <code>2026-06-11T19:00:00Z</code> — locked after (RLS + client-side check)</li>
+            <li>Account delete: blocked if user in any group OR after Jun 11; cascades profiles, predictions, picks, group_members</li>
+          </ul>
+        </div>
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Sync Rules</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li>Session stored automatically in <code>localStorage</code> by Supabase SDK — no manual persistence needed</li>
+            <li><code>auth.js</code> (vanilla) → checks <code>protocol !== 'file:'</code> before doing anything (must be served)</li>
+            <li>IIFE calls <code>getSession()</code> synchronously on load — no waiting for user interaction</li>
+            <li>React <code>AuthContext</code>: session loaded on mount via <code>getSession()</code>, then kept in sync via <code>onAuthStateChange</code> listener</li>
+            <li><code>AuthGuard</code>: shows spinner while <code>session === undefined</code> (loading state), redirects if <code>session === null</code></li>
+            <li>Token refresh happens automatically — auth listener fires with transient nulls but React ignores them</li>
+          </ul>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔒 RLS Policies</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid #333;">
+                <th style="text-align:left;padding:6px 8px;color:#888;">Table</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">Op</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">USING / WITH CHECK</th>
+              </tr>
+            </thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">profiles</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">auth.uid() = id OR (auth.uid() IS NOT NULL AND share_a_group(id, auth.uid())) OR now() &gt; '2026-06-11T19:00:00Z'</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">profiles</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">UPDATE</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">auth.uid() = id AND now() &lt; '2026-06-11T19:00:00Z'</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">profiles</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">INSERT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">via create_profile RPC (SECURITY DEFINER)</td></tr>
+              <tr><td style="padding:6px 8px;color:#86efac;font-family:monospace">auth.users</td><td style="padding:6px 8px;">(managed by Supabase Auth)</td><td style="padding:6px 8px;font-family:monospace;font-size:11px;">n/a</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔧 SDK Calls</h3>
+          <pre style="margin:0;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:16px;overflow-x:auto;font-size:12px;line-height:1.6;color:#e2e8f0;">// Landing (js/auth.js) — UMD
+const _supabase = window.supabase.createClient(URL, ANON_KEY)
+await _supabase.auth.getSession()
+await _supabase.auth.signUp({ email, password, options: { data: { username } } })
+await _supabase.auth.signInWithPassword({ email, password })
+await _supabase.rpc('create_profile', { p_username: username })
+await _supabase.rpc('join_group', { p_invite_code: inviteCode })
+
+// React (src/context/AuthContext.jsx) — ESM
+import { supabase } from '../lib/supabase'
+const { data: { session } } = await supabase.auth.getSession()
+supabase.auth.onAuthStateChange((event, session) => { ... })
+await supabase.auth.signOut()
+
+// Profile self-service (Dashboard.jsx)
+await supabase.auth.updateUser({ data: { username: newName } })
+await supabase.from('profiles').update({ username: newName }).eq('id', user.id)
+await supabase.rpc('delete_account')</pre>
+        </div>
+
+      </div>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'Auth flow — business rules, sync behaviour, RLS policies, and SDK call patterns.'
+}
+
+function renderErrors() {
+  // Hide sidebar step controls, show full-width content
+  document.getElementById('step-list').innerHTML = `
+    <div style="padding:.75rem 1rem">
+      <div style="font-size:.72rem;color:var(--muted);line-height:1.5">
+        All error points in the auth flow — what's handled, what's missing, and what to fix first.
+      </div>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+        <div style="font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Status</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-ok">Handled</span><span style="font-size:.7rem;color:var(--muted)">works correctly</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-partial">Partial</span><span style="font-size:.7rem;color:var(--muted)">handled but incomplete</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill pill-missing">Missing</span><span style="font-size:.7rem;color:var(--muted)">no handling at all</span></div>
+        <div style="margin-top:.75rem;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Priority</div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-high">High</span><span style="font-size:.7rem;color:var(--muted)">user-visible failure</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-medium">Medium</span><span style="font-size:.7rem;color:var(--muted)">confusing but recoverable</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-low">Low</span><span style="font-size:.7rem;color:var(--muted)">edge case, minor impact</span></div>
+        <div style="display:flex;align-items:center;gap:.5rem"><span class="eh-pill prio-done">Done ✓</span><span style="font-size:.7rem;color:var(--muted)">already handled</span></div>
+      </div>
+    </div>`
+
+  const rows = ERROR_ROWS.map(row => {
+    if (row.section) {
+      return `<tr class="eh-section-row"><td colspan="5">${row.section}</td></tr>`
+    }
+    const statusPill = row.status === 'ok'
+      ? `<span class="eh-pill pill-ok">Handled</span>`
+      : row.status === 'partial'
+        ? `<span class="eh-pill pill-partial">Partial</span>`
+        : `<span class="eh-pill pill-missing">Missing</span>`
+
+    const prioPill = row.priority === 'done'
+      ? `<span class="eh-pill prio-done">Done ✓</span>`
+      : row.priority === 'high'
+        ? `<span class="eh-pill prio-high">High</span>`
+        : row.priority === 'medium'
+          ? `<span class="eh-pill prio-medium">Medium</span>`
+          : `<span class="eh-pill prio-low">Low</span>`
+
+    const fixCell = row.fix
+      ? `<span class="eh-fix">${escHtml(row.fix)}</span>`
+      : `<span style="color:var(--faint);font-size:.7rem;font-style:italic">—</span>`
+
+    return `<tr>
+      <td><span class="eh-location">${row.location}</span></td>
+      <td><div class="eh-error-name">${row.name}</div><div class="eh-error-desc">${escHtml(row.when)}</div></td>
+      <td>${statusPill}</td>
+      <td style="max-width:260px"><div class="eh-error-desc">${escHtml(row.handling)}</div></td>
+      <td>${prioPill}<div style="margin-top:.35rem">${fixCell}</div></td>
+    </tr>`
+  }).join('')
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="eh-page">
+      <table class="eh-table">
+        <thead>
+          <tr>
+            <th style="min-width:120px">Location</th>
+            <th style="min-width:180px">Error / Scenario</th>
+            <th style="min-width:90px">Status</th>
+            <th style="min-width:220px">Current Handling</th>
+            <th style="min-width:200px">Priority & Fix</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+
+  document.getElementById('nav-counter').textContent = `${ERROR_ROWS.filter(r => !r.section).length} error points`
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent =
+    'Auth flow error handling audit — ' +
+    ERROR_ROWS.filter(r => r.status === 'ok').length + ' handled, ' +
+    ERROR_ROWS.filter(r => r.status === 'partial').length + ' partial, ' +
+    ERROR_ROWS.filter(r => r.status === 'missing').length + ' missing. ' +
+    'High priority: ' + ERROR_ROWS.filter(r => r.priority === 'high').map(r => r.name).join(', ') + '.'
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+renderAll()
+</script>
+</body>
+</html>

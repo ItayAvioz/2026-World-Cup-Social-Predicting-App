@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14 — Deployment Pipeline · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-landing: #1e3a5f; --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+    --layer-ef: #3b2a1f; --layer-ef-text: #fbbf24;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-landing { background: var(--layer-landing); color: var(--layer-landing-text); }
+  .badge-react   { background: var(--layer-react);   color: var(--layer-react-text); }
+  .badge-ef      { background: var(--layer-ef);      color: var(--layer-ef-text); }
+  .badge-db      { background: var(--layer-db);      color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .step-item:hover { background: rgba(255,255,255,.04); }
+  .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; }
+  .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-landing { background: var(--layer-landing-text); }
+  .dot-react   { background: var(--layer-react-text); }
+  .dot-ef      { background: var(--layer-ef-text); }
+  .dot-db      { background: var(--layer-db-text); }
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; }
+  .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.landing { background: var(--layer-landing); color: var(--layer-landing-text); border-color: rgba(147,197,253,.15); }
+  .fm-box.react   { background: var(--layer-react);   color: var(--layer-react-text);   border-color: rgba(134,239,172,.15); }
+  .fm-box.ef      { background: var(--layer-ef);      color: var(--layer-ef-text);      border-color: rgba(251,191,36,.15); }
+  .fm-box.db      { background: var(--layer-db);      color: var(--layer-db-text);      border-color: rgba(196,181,253,.15); }
+  .fm-box.current { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fm-box:hover { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); }
+  .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; }
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend { display: flex; gap: .75rem; flex-wrap: wrap; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: .72rem; }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok      { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-partial { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.2); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high   { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium { background: rgba(251,191,36,.12); color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low    { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done   { background: rgba(134,239,172,.1); color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; }
+  .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; }
+  .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+  .what-card { width: 100%; }
+  .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; }
+  .code-kw { color: #93c5fd; }
+  .code-fn { color: #86efac; }
+  .code-str { color: #fde68a; }
+  .code-const { color: #f9a8d4; }
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in   { color: #93c5fd; }
+  .example-label.out  { color: #86efac; }
+  .example-label.err  { color: #fca5a5; }
+  .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .db-card { min-width: 200px; flex: 1; }
+  .db-op { display: flex; flex-direction: column; gap: .5rem; }
+  .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; }
+  .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+  .state-card { min-width: 280px; flex: 1; }
+  .state-grid { display: flex; flex-direction: column; gap: .45rem; }
+  .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: #f9a8d4; white-space: nowrap; padding-top: .05rem; min-width: 160px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); }
+  .state-val.set  { color: #86efac; }
+  .state-val.warn { color: var(--gold); }
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); }
+  .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">14 — Deployment Pipeline</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-react">React + Vite</span>
+    <span class="badge badge-landing">GitHub Pages</span>
+    <span class="badge badge-ef">Edge Functions</span>
+    <span class="badge badge-db">Supabase Migrations</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('build')">Build</button>
+  <button class="tab-btn" onclick="switchPath('deploy')">Manual Deploy</button>
+  <button class="tab-btn" onclick="switchPath('ef')">EF Deploy</button>
+  <button class="tab-btn" onclick="switchPath('gotchas')">Gotchas</button>
+  <button class="tab-btn" onclick="switchPath('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-react-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-react-text)">React + Vite</div>
+          <div class="legend-desc"><code>npm run build</code> → <code>dist/</code>. Hashed asset filenames. Entry: <code>dist/app.html</code>.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-landing-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-landing-text)">GitHub Pages (gh-pages branch)</div>
+          <div class="legend-desc">Fully manual deploy. No GitHub Actions. Must copy dist/ contents to root of gh-pages branch, not into a subfolder.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-ef-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-ef-text)">Edge Functions (Supabase CLI)</div>
+          <div class="legend-desc"><code>supabase functions deploy</code> — deploys TypeScript EF to Deno runtime. Vault secrets managed separately.</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--layer-db-text)"></div>
+        <div>
+          <div class="legend-name" style="color:var(--layer-db-text)">Database Migrations</div>
+          <div class="legend-desc"><code>supabase db push</code> — applies local migration files to the live Supabase project. 59 migrations deployed to date.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+  build: {
+    label: 'Build',
+    steps: [
+      {
+        num: 1, label: 'Run Vite build', layer: 'react', file: 'vite.config.js',
+        what: 'The React SPA is built using Vite. The build command transpiles and bundles everything from src/ into the dist/ directory. The output is a single HTML file (app.html) with hashed JS and CSS assets. Hash changes on every build — this provides cache-busting automatically.',
+        code: `<span class="code-comment"># From project root</span>
+npm run build
+
+<span class="code-comment"># Vite config:</span>
+<span class="code-comment">// vite.config.js</span>
+<span class="code-kw">export default</span> {
+  build: {
+    outDir: <span class="code-str">'dist'</span>,
+  },
+  <span class="code-comment">// Entry: src/app.html → dist/app.html</span>
+  <span class="code-comment">// Assets: dist/assets/main-HASH.js, index-HASH.css</span>
+}`,
+        example: [
+          { label: 'Command', type: 'in',  val: 'npm run build' },
+          { label: 'Output', type: 'out', val: 'dist/\n  app.html\n  assets/\n    main-AbCdEfGh.js    ← hash changes each build\n    index-XyZaBcDe.css  ← hash changes each build' },
+          { label: 'Time', type: 'note', val: 'Build takes ~5-10s. Fast — no large dependencies.' },
+        ],
+        db: [],
+        state: { 'output_dir': 'dist/', 'entry': 'dist/app.html', 'asset_hashing': 'true (cache-busting)', 'framework': 'React 18 + Vite' }
+      },
+      {
+        num: 2, label: 'Build output structure', layer: 'react', file: 'dist/',
+        what: 'The dist/ folder contains everything the browser needs to run the React SPA. app.html is the HTML entry point — it contains a <script> tag pointing to the hashed JS file and a <link> tag for the hashed CSS. The vanilla pages (team.html, host.html) are NOT in dist/ — they are managed separately.',
+        code: `dist/
+  app.html           <span class="code-comment">← React SPA HTML entry</span>
+  assets/
+    main-AbCdEfGh.js  <span class="code-comment">← all React JS + deps bundled</span>
+    index-XyZaBcDe.css <span class="code-comment">← all CSS bundled</span>
+
+<span class="code-comment">// Inside dist/app.html:</span>
+<span class="code-kw">&lt;link</span> rel="stylesheet" href="/assets/index-XyZaBcDe.css"<span class="code-kw">&gt;</span>
+<span class="code-kw">&lt;script</span> src="/assets/main-AbCdEfGh.js"<span class="code-kw">&gt;&lt;/script&gt;</span>
+
+<span class="code-comment">// NOT in dist/:</span>
+<span class="code-comment">// - index.html    (vanilla landing, stays at root)</span>
+<span class="code-comment">// - team.html     (vanilla, NOT a Vite entry)</span>
+<span class="code-comment">// - host.html     (vanilla, NOT a Vite entry)</span>`,
+        example: [
+          { label: 'dist/ files', type: 'out', val: 'dist/app.html (3.2 KB)\ndist/assets/main-AbCdEfGh.js (312 KB)\ndist/assets/index-XyZaBcDe.css (28 KB)' },
+          { label: 'NOT in dist/', type: 'note', val: 'index.html, team.html, host.html → these are vanilla pages\nManaged in gh-pages branch separately' },
+        ],
+        db: [],
+        state: { 'asset_names': 'hashed on every build', 'vanilla_pages': 'NOT in dist/ (managed separately)', 'SPA_entry': 'dist/app.html' }
+      }
+    ]
+  },
+
+  deploy: {
+    label: 'Manual Deploy to gh-pages',
+    steps: [
+      {
+        num: 1, label: 'Switch to gh-pages branch', layer: 'landing', file: 'git',
+        what: 'The live site is served from the gh-pages branch. There are NO GitHub Actions — every deploy is manual. Switch to gh-pages, then copy the build outputs. The main branch is the source of truth; gh-pages is the deployment target.',
+        code: `<span class="code-comment"># Switch to deployment branch</span>
+git checkout gh-pages
+
+<span class="code-comment"># gh-pages branch structure (root /  of the branch):</span>
+/
+├── index.html        <span class="code-comment">← landing page (vanilla)</span>
+├── app.html          <span class="code-comment">← React SPA entry (updated each deploy)</span>
+├── team.html         <span class="code-comment">← vanilla page (restored from main)</span>
+├── host.html         <span class="code-comment">← vanilla page (restored from main)</span>
+├── assets/           <span class="code-comment">← hashed JS + CSS (updated each deploy)</span>
+├── js/               <span class="code-comment">← vanilla JS (auth.js, main.js, supabase.js)</span>
+└── css/              <span class="code-comment">← style.css (shared)</span>
+
+<span class="code-comment"># NO GitHub Actions — fully manual!</span>`,
+        example: [
+          { label: 'Branch', type: 'in',  val: 'git checkout gh-pages\n→ now on deployment branch' },
+          { label: 'Live URL', type: 'out', val: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/\n(served from gh-pages branch root)' },
+        ],
+        db: [],
+        state: { 'branch': 'gh-pages', 'serve_root': '/ (branch root)', 'CI_CD': 'NONE — fully manual', 'source_branch': 'main' }
+      },
+      {
+        num: 2, label: 'Copy dist assets', layer: 'landing', file: 'assets/',
+        what: 'Copy the hashed JS and CSS files from dist/assets/ to the assets/ directory at the root of gh-pages. CRITICAL: copy the CONTENTS of dist/assets/, not the dist/ folder itself. Copying the folder would create /dist/assets/ which breaks all asset paths in app.html.',
+        code: `<span class="code-comment"># CORRECT: copy assets CONTENTS to root assets/</span>
+cp dist/assets/* assets/
+
+<span class="code-comment"># Update app.html with new hashed filenames</span>
+<span class="code-comment"># (copy dist/app.html over the existing app.html)</span>
+cp dist/app.html app.html
+
+<span class="code-comment"># WRONG: this creates /dist/ subfolder → breaks paths!</span>
+<span class="code-comment"># cp -r dist/ .   ← DO NOT DO THIS</span>
+
+<span class="code-comment"># Verify: app.html should reference /assets/main-NEWHASH.js</span>
+<span class="code-comment"># NOT: /dist/assets/main-NEWHASH.js</span>`,
+        example: [
+          { label: 'Before', type: 'in',  val: 'assets/main-OldHash.js (old)\nassets/index-OldHash.css (old)\napp.html references OldHash files' },
+          { label: 'After', type: 'out', val: 'assets/main-NewHash.js (new)\nassets/index-NewHash.css (new)\napp.html references NewHash files ✓' },
+          { label: 'Wrong', type: 'err', val: 'dist/assets/main-NewHash.js ← wrong path\n→ 404 errors in browser console\n→ blank page / app fails to load' },
+        ],
+        db: [],
+        state: { 'destination': 'assets/ at root of gh-pages', 'app_html': 'updated to reference new hash', 'common_mistake': 'copying dist/ folder not contents' }
+      },
+      {
+        num: 3, label: 'Restore vanilla pages', layer: 'landing', file: 'team.html, host.html',
+        what: 'team.html and host.html are vanilla pages that live in the main branch but are NOT part of the Vite build. After copying dist assets, these pages must be explicitly restored from the main branch — otherwise they may have been overwritten or lost during branch switching.',
+        code: `<span class="code-comment"># Restore vanilla pages from main branch</span>
+<span class="code-comment"># (they are NOT in dist/ — must get from source)</span>
+git checkout main -- team.html
+git checkout main -- host.html
+
+<span class="code-comment"># Why needed:</span>
+<span class="code-comment"># - team.html: mobile team detail page (?code=ARG)</span>
+<span class="code-comment"># - host.html: all 104 fixtures list (linked from landing)</span>
+<span class="code-comment"># - Both have own hardcoded TEAMS + TEAM_EXTRA data</span>
+<span class="code-comment"># - Must stay in sync with js/main.js manually</span>`,
+        example: [
+          { label: 'Command', type: 'in',  val: 'git checkout main -- team.html host.html' },
+          { label: 'Result', type: 'out', val: 'team.html restored from main branch HEAD\nhost.html restored from main branch HEAD' },
+          { label: 'Risk', type: 'err', val: 'If skipped: team.html may be stale (old team data)\nIf teams edited in js/main.js but not team.html → drift' },
+        ],
+        db: [],
+        state: { 'team.html': 'restored from main (NOT from dist/)', 'host.html': 'restored from main (NOT from dist/)', 'data_duplication': 'team.html has own hardcoded TEAMS — must sync manually' }
+      },
+      {
+        num: 4, label: 'Commit and push', layer: 'landing', file: 'git',
+        what: 'After copying assets, updating app.html, and restoring vanilla pages, commit and push to the gh-pages branch. GitHub Pages automatically re-serves the site from the updated branch. DNS/CDN propagation may take 1-2 minutes.',
+        code: `<span class="code-comment"># Stage all changed files</span>
+git add assets/ app.html team.html host.html
+
+<span class="code-comment"># Commit with deploy description</span>
+git commit -m <span class="code-str">"deploy: vX — [brief description]"</span>
+
+<span class="code-comment"># Push to gh-pages</span>
+git push origin gh-pages
+
+<span class="code-comment"># Site live at:</span>
+<span class="code-comment"># https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/</span>
+<span class="code-comment"># (GitHub Pages re-serves within ~1-2 min)</span>`,
+        example: [
+          { label: 'Push', type: 'out', val: 'git push origin gh-pages → triggers GitHub Pages rebuild\nLive within ~1-2 minutes after push' },
+          { label: 'Verify', type: 'note', val: 'Check: /app.html#/dashboard loads ✓\nCheck: /team.html?code=ARG loads ✓\nCheck: browser console no 404s for assets' },
+        ],
+        db: [],
+        state: { 'live_url': 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/', 'propagation': '~1-2 minutes', 'branch': 'gh-pages pushed' }
+      }
+    ]
+  },
+
+  ef: {
+    label: 'EF Deploy',
+    steps: [
+      {
+        num: 1, label: 'Deploy Edge Function', layer: 'ef', file: 'supabase/functions/',
+        what: 'Edge Functions are deployed using the Supabase CLI. The CLI bundles the TypeScript/Deno code and pushes it to the Supabase project. Each EF is deployed independently. The project ref is the Supabase project ID.',
+        code: `<span class="code-comment"># Deploy nightly-summary EF</span>
+supabase functions deploy nightly-summary \
+  --project-ref ftryuvfdihmhlzvbpfeu
+
+<span class="code-comment"># Deploy football-api-sync EF</span>
+supabase functions deploy football-api-sync \
+  --project-ref ftryuvfdihmhlzvbpfeu
+
+<span class="code-comment"># Deploy sync-odds EF</span>
+supabase functions deploy sync-odds \
+  --project-ref ftryuvfdihmhlzvbpfeu
+
+<span class="code-comment"># Must be logged in: supabase login (first time only)</span>`,
+        example: [
+          { label: 'Deploy', type: 'in',  val: 'supabase functions deploy nightly-summary --project-ref ...' },
+          { label: 'Output', type: 'out', val: 'Deploying function... done\nnightly-summary deployed (new version)' },
+          { label: 'Error', type: 'err', val: 'Error: Unauthorized → supabase login first\nError: TypeScript compile error → fix code, retry' },
+        ],
+        db: [],
+        state: { 'project_ref': 'ftryuvfdihmhlzvbpfeu', 'active_EFs': 'nightly-summary v16, football-api-sync v24, sync-odds v14', 'CLI_auth': 'supabase login required' }
+      },
+      {
+        num: 2, label: 'Set vault secrets', layer: 'ef', file: 'Supabase vault',
+        what: 'API keys are stored in Supabase vault — NEVER in frontend code or .env files. After deploying an EF, verify all required vault secrets are present. Secrets are injected as environment variables at EF runtime via Deno.env.get().',
+        code: `<span class="code-comment"># Set a secret in vault</span>
+supabase secrets set AI_Summary_GPT_Key=sk-... \
+  --project-ref ftryuvfdihmhlzvbpfeu
+
+<span class="code-comment"># Required vault secrets:</span>
+<span class="code-comment"># AI_Summary_GPT_Key     ← OpenAI key (nightly-summary EF)</span>
+<span class="code-comment"># FOOTBALL_API_KEY       ← api-football.com key (sync EF)</span>
+<span class="code-comment"># ODDS_API_KEY           ← theoddsapi.com key (sync-odds EF)</span>
+
+<span class="code-comment"># In EF code: Deno.env.get('AI_Summary_GPT_Key')</span>
+<span class="code-comment"># NEVER hardcode keys in source files!</span>`,
+        example: [
+          { label: 'Set secret', type: 'in',  val: 'supabase secrets set AI_Summary_GPT_Key=sk-abc123...' },
+          { label: 'Verify', type: 'out', val: 'Secret set ✓ — now accessible via Deno.env.get(...)' },
+          { label: 'Missing', type: 'err', val: 'Deno.env.get("AI_Summary_GPT_Key") → undefined\n→ OpenAI call fails with 401 Unauthorized\n→ EF stores FALLBACK_MSG instead of real summary' },
+        ],
+        db: [],
+        state: { 'secrets_in_vault': "['AI_Summary_GPT_Key', 'FOOTBALL_API_KEY', 'ODDS_API_KEY']", 'access_pattern': 'Deno.env.get(name)', 'never_in': 'source code, .env, frontend' }
+      },
+      {
+        num: 3, label: 'Apply migration', layer: 'db', file: 'supabase/migrations/',
+        what: 'If the schema changed (new table, RLS policy, function), apply the migration to the live Supabase project using supabase db push. Migrations are numbered SQL files in supabase/migrations/. 59 migrations have been deployed to date. After applying migrations that add new games, call both scheduling functions.',
+        code: `<span class="code-comment"># Apply all pending migrations to live DB</span>
+supabase db push \
+  --project-ref ftryuvfdihmhlzvbpfeu
+
+<span class="code-comment"># After seeding new WC games — call BOTH:</span>
+<span class="code-kw">SELECT</span> fn_schedule_auto_predictions();
+<span class="code-kw">SELECT</span> fn_schedule_ai_summaries();
+
+<span class="code-comment"># Migration naming convention:</span>
+<span class="code-comment"># 0057_ai_summaries_display_data.sql</span>
+<span class="code-comment"># 0059_revert_fn_schedule.sql</span>
+<span class="code-comment"># (always sequential — never skip numbers)</span>`,
+        example: [
+          { label: 'Push', type: 'in',  val: 'supabase db push --project-ref ftryuvfdihmhlzvbpfeu' },
+          { label: 'Output', type: 'out', val: 'Applying migration 0060_new_feature.sql... done\n59 → 60 migrations applied' },
+          { label: 'After games seeded', type: 'note', val: 'SELECT fn_schedule_auto_predictions(); ← covers ALL games\nSELECT fn_schedule_ai_summaries();    ← covers ALL games\nBoth must be called after new game rows added' },
+        ],
+        db: [{ table: 'cron.job', action: 'INSERT — new cron jobs via fn_schedule_auto_predictions() and fn_schedule_ai_summaries()' }],
+        state: { 'migrations': '59 deployed (as of 2026-04-22)', 'next_migration': '0060 (if schema change needed)', 'post_seed_required': 'both scheduling functions' }
+      }
+    ]
+  },
+
+  gotchas: {
+    label: 'Gotchas',
+    steps: [
+      {
+        num: 1, label: 'team.html data duplication', layer: 'landing', file: 'team.html',
+        what: 'team.html has its own hardcoded TEAMS and TEAM_EXTRA arrays — completely independent of js/main.js. Any time a team is added or edited in js/main.js, team.html must also be updated manually. This is a known technical debt issue. The approved fix (pending implementation) is to load js/main.js via a script tag in team.html instead.',
+        code: `<span class="code-comment">// team.html — has its OWN hardcoded TEAMS array:</span>
+<span class="code-kw">const</span> TEAMS = [
+  { code: <span class="code-str">'ARG'</span>, name: <span class="code-str">'Argentina'</span>, ... },
+  <span class="code-comment">// ... all 48 teams duplicated from js/main.js</span>
+]
+<span class="code-kw">const</span> TEAM_EXTRA = { <span class="code-str">'ARG'</span>: { ... }, ... }
+
+<span class="code-comment">// js/main.js — the authoritative source:</span>
+<span class="code-kw">const</span> TEAMS = [...]  <span class="code-comment">// must stay in sync manually</span>
+
+<span class="code-comment">// Pending fix:</span>
+<span class="code-comment">// &lt;script src="js/main.js"&gt;&lt;/script&gt; in team.html</span>
+<span class="code-comment">// → share one source of truth</span>`,
+        example: [
+          { label: 'Current', type: 'note', val: 'team.html: own TEAMS array\njs/main.js: own TEAMS array\n→ must edit BOTH if team data changes' },
+          { label: 'Risk', type: 'err', val: 'Edit team in js/main.js but forget team.html\n→ team.html shows stale name/flag/data\n→ discovered only when user visits team page' },
+          { label: 'Fix', type: 'out', val: 'Add <script src="js/main.js"> to team.html\n→ single TEAMS source of truth\n→ approved approach (pending implementation)' },
+        ],
+        db: [],
+        state: { 'issue': 'data duplication', 'risk': 'teams can drift out of sync', 'fix_status': 'pending — load js/main.js via script tag in team.html' }
+      },
+      {
+        num: 2, label: 'dist/ is not gh-pages root', layer: 'landing', file: 'deploy process',
+        what: 'The most common deploy mistake: copying the entire dist/ folder to gh-pages instead of its contents. GitHub Pages serves from the branch root. If dist/ is copied as a folder, all asset paths in app.html break (they reference /assets/... but the assets are at /dist/assets/...).',
+        code: `<span class="code-comment"># WRONG — creates /dist/ subfolder → breaks everything</span>
+cp -r dist/ .           <span class="code-comment">← DO NOT DO THIS</span>
+<span class="code-comment"># Result: /dist/app.html and /dist/assets/main-HASH.js</span>
+<span class="code-comment"># app.html references /assets/... → 404 (not /dist/assets/...)</span>
+
+<span class="code-comment"># CORRECT — copy file by file</span>
+cp dist/app.html ./app.html
+cp dist/assets/* ./assets/
+<span class="code-comment"># Result: /app.html and /assets/main-HASH.js</span>
+<span class="code-comment"># app.html references /assets/... → FOUND ✓</span>`,
+        example: [
+          { label: 'Wrong', type: 'err', val: 'browser: GET /assets/main-AbCd.js → 404\n(file actually at /dist/assets/main-AbCd.js)\nResult: blank page, React never loads' },
+          { label: 'Correct', type: 'out', val: 'browser: GET /assets/main-AbCd.js → 200 OK\nReact loads, app works ✓' },
+        ],
+        db: [],
+        state: { 'common_mistake': 'copying dist/ folder creates subfolder', 'correct_approach': 'copy dist/app.html and dist/assets/* to root', 'symptom': '404 errors in browser console, blank page' }
+      },
+      {
+        num: 3, label: 'Asset hash changes every build', layer: 'react', file: 'dist/app.html',
+        what: 'After every Vite build, the hashed JS and CSS filenames change. The app.html file in dist/ will reference the new filenames. When you copy dist/app.html to the root of gh-pages, it automatically references the correct new hashes. The risk is forgetting to copy app.html — leaving the old app.html referencing old (now-replaced) hashed files.',
+        code: `<span class="code-comment"># After build 1: app.html references:</span>
+<span class="code-str">&lt;script src="/assets/main-AbCdEfGh.js"&gt;</span>
+
+<span class="code-comment"># After build 2: app.html references:</span>
+<span class="code-str">&lt;script src="/assets/main-IjKlMnOp.js"&gt;</span>
+
+<span class="code-comment"># If you copy dist/assets/* but forget dist/app.html:</span>
+<span class="code-comment"># Root app.html still references main-AbCdEfGh.js</span>
+<span class="code-comment"># dist/assets/main-AbCdEfGh.js was REPLACED by main-IjKlMnOp.js</span>
+<span class="code-comment"># → 404 on old hash → blank page</span>
+
+<span class="code-comment"># Always copy BOTH: app.html AND assets/</span>`,
+        example: [
+          { label: 'Build sequence', type: 'in',  val: 'Build → hash: AbCdEfGh\nRebuild → hash: IjKlMnOp (new)' },
+          { label: 'Forgot app.html', type: 'err', val: 'assets/ updated to IjKlMnOp\napp.html still says AbCdEfGh → 404 → blank page' },
+          { label: 'Correct', type: 'out', val: 'Both copied:\ncp dist/app.html ./app.html\ncp dist/assets/* ./assets/\n→ hashes match → app loads ✓' },
+        ],
+        db: [],
+        state: { 'hash_format': 'main-AbCdEfGh.js (8 char hash)', 'changes_on': 'every build', 'fix': 'always copy dist/app.html AND dist/assets/* together' }
+      }
+    ]
+  }
+}
+
+const ERROR_ROWS = [
+  { section: 'Build' },
+  { location: 'build:vite', name: 'Vite build fails — import not found', when: 'Missing file, wrong path, or deleted component', status: 'ok', priority: 'done', fix: 'Fix import path; check console error for exact file. Build fast (~10s) so quick to iterate.' },
+  { section: 'GitHub Pages Deploy' },
+  { location: 'deploy:subfolder', name: 'dist/ copied as subfolder', when: 'cp -r dist/ . instead of cp dist/assets/* assets/', status: 'partial', priority: 'high', fix: 'Must copy contents not folder. Add to deploy checklist: "cp dist/app.html ./app.html && cp dist/assets/* ./assets/"' },
+  { location: 'deploy:hash_mismatch', name: 'app.html references old hashed JS', when: 'assets/ updated but app.html not copied after rebuild', status: 'partial', priority: 'high', fix: 'Always update app.html after copying assets. One command: "cp dist/app.html ./app.html"' },
+  { location: 'deploy:team_drift', name: 'team.html TEAMS array out of sync', when: 'Team added/edited in js/main.js but not team.html', status: 'partial', priority: 'medium', fix: 'Pending fix: load js/main.js via script tag in team.html (approved approach)' },
+  { location: 'deploy:vanilla_missing', name: 'team.html / host.html missing after deploy', when: 'Forgot to restore from main: git checkout main -- team.html host.html', status: 'partial', priority: 'medium', fix: 'Add to deploy checklist step 3: "git checkout main -- team.html host.html"' },
+  { section: 'Edge Function Deploy' },
+  { location: 'ef:secret_missing', name: 'EF deploys but API calls fail (no vault key)', when: 'New deployment or secret deleted/rotated', status: 'partial', priority: 'high', fix: 'Verify vault secrets after each EF deploy: AI_Summary_GPT_Key, FOOTBALL_API_KEY, ODDS_API_KEY' },
+  { location: 'ef:compile_error', name: 'TypeScript compile error on deploy', when: 'Type error or import error in EF code', status: 'ok', priority: 'done', fix: 'Fix TypeScript error shown in supabase CLI output; retry deploy' },
+  { section: 'Database Migrations' },
+  { location: 'migration:not_pushed', name: 'Schema changed locally but not pushed', when: 'New migration file added but db push not run', status: 'partial', priority: 'high', fix: 'supabase db push --project-ref <ref> after each new migration file' },
+  { location: 'migration:scheduling', name: 'Scheduling functions not called after seeding', when: 'New WC games seeded but fn_schedule_* not called', status: 'partial', priority: 'high', fix: 'After seeding: SELECT fn_schedule_auto_predictions(); SELECT fn_schedule_ai_summaries();' },
+  { section: 'Runtime / CDN' },
+  { location: 'pages:cache', name: 'Browser shows old version after deploy', when: 'CDN cache not yet invalidated', status: 'partial', priority: 'low', fix: 'Hard refresh (Ctrl+Shift+R). Asset hashing mostly prevents this; index.html may cache for 1-2min.' },
+]
+
+const state = { path: 'build', stepIndex: 0 }
+function currentSteps() { return PATHS[state.path]?.steps || [] }
+function currentStep()  { return currentSteps()[state.stepIndex] }
+
+function renderSidebar() {
+  document.getElementById('step-list').innerHTML = currentSteps().map((s,i) => `
+    <div class="step-item${i===state.stepIndex?' active':''}" onclick="selectStep(${i})">
+      <div class="step-layer-dot dot-${s.layer}"></div>
+      <div class="step-num">${s.num}</div>
+      <div class="step-label">${s.label}</div>
+    </div>`).join('')
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function renderDetail() {
+  const s=currentStep(), steps=currentSteps()
+  const stateRows=Object.entries(s.state).map(([k,v])=>{
+    let cls='state-val'
+    if(String(v).startsWith('null')||String(v)==='NONE') cls+=' null'
+    else if(String(v).includes('✓')||String(v).includes('true')) cls+=' set'
+    else if(String(v).includes('risk')||String(v).includes('pending')||String(v).includes('common_mistake')) cls+=' warn'
+    return `<div class="state-row"><span class="state-key">${escHtml(k)}</span><span class="${cls}">${escHtml(v)}</span></div>`
+  }).join('')
+  const dbContent=s.db.length===0
+    ? `<div class="db-none">No direct database operation at this step</div>`
+    : s.db.map(op=>`<div class="db-row"><span class="db-table">${op.table}</span><span class="db-action">${escHtml(op.action)}</span></div>`).join('')
+  const layerMap={landing:'GitHub Pages',react:'React + Vite',ef:'Edge Function',db:'Database'}
+  const layerBadge=`<span class="badge badge-${s.layer}" style="margin-left:.5rem">${layerMap[s.layer]||s.layer}</span>`
+  const flowNodes=steps.map((st,i)=>{
+    const short=st.label.length>18?st.label.slice(0,16)+'…':st.label
+    const arrow=i<steps.length-1?`<div class="fm-arrow">→</div>`:''
+    return `<div class="fm-node" onclick="selectStep(${i})" title="${st.label}"><div class="fm-box ${st.layer}${i===state.stepIndex?' current':''}">${short}</div><div class="fm-num">${st.num}</div></div>${arrow}`
+  }).join('')
+  document.getElementById('detail-content').innerHTML=`
+    <div class="flowmap-wrap"><div class="flowmap-title">Flow map — click any step</div><div class="flowmap">${flowNodes}</div></div>
+    <div class="step-header"><div class="step-header-num">${s.num}</div><div class="step-header-info"><div class="step-header-title">${s.label} ${layerBadge}</div><div class="step-header-file">${s.file}</div></div></div>
+    <div class="card what-card"><div class="card-title">What happens</div><div class="what-text">${s.what.replace(/\n/g,'<br>')}</div></div>
+    <div class="card code-card"><div class="card-title">Key code</div><div class="code-block">${s.code}</div></div>
+    <div class="card example-card"><div class="card-title">Example</div>${(s.example||[]).map(ex=>`<div class="example-row"><span class="example-label ${ex.type}">${ex.label}</span><div class="example-val">${escHtml(ex.val)}</div></div>`).join('')}</div>
+    <div class="card db-card"><div class="card-title">Database operation</div><div class="db-op">${dbContent}</div></div>
+    <div class="card state-card"><div class="card-title">State inspector — at this step</div><div class="state-grid">${stateRows}</div></div>`
+  document.getElementById('nav-counter').textContent=`Step ${state.stepIndex+1} of ${steps.length}`
+  document.getElementById('prev-btn').disabled=state.stepIndex===0
+  document.getElementById('next-btn').disabled=state.stepIndex===steps.length-1
+  document.getElementById('prompt-text').textContent=`Deployment — ${PATHS[state.path].label} — Step ${s.num}: "${s.label}" (${s.file}). Layer: ${s.layer}. ${s.db.length?'DB: '+s.db.map(d=>d.table).join(', ')+'.':'No DB op.'}`
+}
+
+function renderRules() {
+  document.getElementById('step-list').innerHTML = ''
+  document.getElementById('detail-content').innerHTML = `
+<div id="tab-rules" style="padding:24px; overflow-y:auto; width:100%; height:calc(100vh - 120px);">
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:1000px;">
+
+    <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">📐 Business Logic</h3>
+      <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+        <li>Deploy target: <code>gh-pages</code> branch root — NOT a <code>/dist/</code> subfolder</li>
+        <li>Deploy is <strong>FULLY MANUAL</strong> — no GitHub Actions, no CI/CD</li>
+        <li><code>team.html</code> and <code>host.html</code> are vanilla pages — NOT part of Vite build; must be restored from <code>main</code> branch on every deploy</li>
+        <li><code>team.html</code> has its OWN hardcoded <code>TEAMS + TEAM_EXTRA</code> array — independent of <code>js/main.js</code>; must be kept in sync manually</li>
+        <li>Asset hash changes on EVERY build — <code>main-AbCdEfGh.js</code> filename changes; must update <code>app.html</code> script src after copying</li>
+        <li>Supabase Edge Functions: each function deployed independently via <code>supabase functions deploy &lt;name&gt;</code></li>
+        <li>Vault secrets: set once, persist across EF deploys — but must verify after new project setup</li>
+        <li>Migrations: <code>supabase db push</code> applies all pending migrations to remote</li>
+        <li><code>fn_schedule_auto_predictions()</code> and <code>fn_schedule_ai_summaries()</code> must be called manually after seeding WC games</li>
+      </ul>
+    </div>
+
+    <div style="background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔄 Sync Rules</h3>
+      <ul style="margin:0; padding-left:20px; color:#ccc; font-size:13px; line-height:1.8;">
+        <li>No automated deploy pipeline — developer runs commands manually</li>
+        <li>EF deploy does NOT require app redeploy — EF and frontend are independent</li>
+        <li>Schema migration does NOT require EF redeploy (unless EF queries new columns)</li>
+        <li><code>gh-pages</code> branch is separate from <code>main</code> — changes to <code>main</code> do NOT auto-deploy</li>
+      </ul>
+    </div>
+
+    <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔒 RLS Policies</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr style="border-bottom:1px solid #333;">
+          <th style="text-align:left; padding:6px 8px; color:#888;">Table</th>
+          <th style="text-align:left; padding:6px 8px; color:#888;">Op</th>
+          <th style="text-align:left; padding:6px 8px; color:#888;">USING / WITH CHECK</th>
+        </tr></thead>
+        <tbody style="color:#ccc;">
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">N/A</td><td style="padding:6px 8px; color:#9ca3af;">—</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">Deployment is infra-level, not DB-level</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a;"><td style="padding:6px 8px; font-family:monospace; color:#86efac;">service_role key</td><td style="padding:6px 8px; color:#9ca3af;">EF only</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">Used by EFs only — never put in frontend or GitHub secrets</td></tr>
+          <tr><td style="padding:6px 8px; font-family:monospace; color:#86efac;">anon key</td><td style="padding:6px 8px; color:#86efac;">frontend safe</td><td style="padding:6px 8px; font-family:monospace; font-size:11px;">Safe to expose — only allows RLS-governed queries</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="grid-column:1/-1; background:#111; border:1px solid #222; border-radius:8px; padding:20px;">
+      <h3 style="color:#f59e0b; margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:1px;">🔧 SDK / CLI Calls</h3>
+      <pre style="margin:0; background:#0a0a0a; border:1px solid #1a1a1a; border-radius:4px; padding:16px; overflow-x:auto; font-size:12px; line-height:1.6; color:#e2e8f0;"># 1. Build React app
+npm run build
+# Output: dist/app.html + dist/assets/main-HASH.js + dist/assets/index-HASH.css
+
+# 2. Deploy to GitHub Pages (manual)
+git checkout gh-pages
+cp dist/assets/* assets/                    # copy assets to root/assets/
+cp dist/app.html app.html                   # copy SPA entry (with new hash in script src)
+git checkout main -- team.html host.html    # restore vanilla pages
+git add -A && git commit -m "deploy $(date +%Y-%m-%d)"
+git push origin gh-pages
+
+# 3. Deploy Edge Function
+supabase functions deploy nightly-summary --project-ref ftryuvfdihmhlzvbpfeu
+supabase functions deploy football-api-sync --project-ref ftryuvfdihmhlzvbpfeu
+supabase functions deploy sync-odds --project-ref ftryuvfdihmhlzvbpfeu
+
+# 4. Set vault secrets (once per project or after rotation)
+supabase secrets set AI_Summary_GPT_Key=sk-... --project-ref ftryuvfdihmhlzvbpfeu
+supabase secrets set FOOTBALL_API_KEY=... --project-ref ftryuvfdihmhlzvbpfeu
+
+# 5. Apply DB migrations
+supabase db push --project-ref ftryuvfdihmhlzvbpfeu
+
+# 6. After seeding WC games — call scheduling functions
+SELECT fn_schedule_auto_predictions();
+SELECT fn_schedule_ai_summaries();</pre>
+    </div>
+
+  </div>
+</div>`
+  document.getElementById('nav-counter').textContent = 'Rules & SDK reference'
+  document.getElementById('prev-btn').disabled = true
+  document.getElementById('next-btn').disabled = true
+  document.getElementById('prompt-text').textContent = 'Deployment — Rules & SDK reference: business logic, sync rules, RLS scope, CLI commands.'
+}
+
+function renderErrors() {
+  const rows=ERROR_ROWS.map(r=>{
+    if(r.section) return `<tr class="eh-section-row"><td colspan="6">${r.section}</td></tr>`
+    const sp=r.status==='ok'?'pill-ok':r.status==='partial'?'pill-partial':'pill-missing'
+    const pp=r.priority==='done'?'prio-done':r.priority==='high'?'prio-high':r.priority==='medium'?'prio-medium':'prio-low'
+    return `<tr><td><span class="eh-location">${r.location}</span></td><td><div class="eh-error-name">${r.name}</div></td><td><span class="eh-error-desc">${r.when}</span></td><td><span class="eh-pill ${sp}">${r.status}</span></td><td><span class="eh-pill ${pp}">${r.priority}</span></td><td><span class="eh-fix">${r.fix||'—'}</span></td></tr>`
+  }).join('')
+  document.getElementById('detail-content').innerHTML=`<div class="eh-page">
+    <div class="eh-legend">
+      <span style="color:var(--faint);font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em">Status:</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-ok">ok</span> Handled</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-partial">partial</span> Partial</span>
+      <span class="eh-legend-item"><span class="eh-pill pill-missing">missing</span> Not handled</span>
+      <span style="margin-left:.5rem;color:var(--faint);font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em">Priority:</span>
+      <span class="eh-legend-item"><span class="eh-pill prio-done">done</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-high">high</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-medium">medium</span></span>
+      <span class="eh-legend-item"><span class="eh-pill prio-low">low</span></span>
+    </div>
+    <table class="eh-table"><thead><tr><th>Location</th><th>Error</th><th>When</th><th>Status</th><th>Priority</th><th>Fix</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`
+  document.getElementById('nav-counter').textContent=`${ERROR_ROWS.filter(r=>!r.section).length} error cases`
+  document.getElementById('prev-btn').disabled=true
+  document.getElementById('next-btn').disabled=true
+  document.getElementById('prompt-text').textContent='Deployment error handling audit — build, deploy, EF, migration gotchas.'
+}
+
+function renderAll(){renderSidebar();renderDetail()}
+function switchPath(path){
+  state.path=path;state.stepIndex=0
+  document.querySelectorAll('.tab-btn').forEach((btn,i)=>btn.classList.toggle('active',['build','deploy','ef','gotchas','rules','errors'][i]===path))
+  if(path==='errors'){renderErrors();return}
+  if(path==='rules'){renderRules();return}
+  renderAll()
+}
+function selectStep(i){state.stepIndex=i;renderAll()}
+function nextStep(){if(state.stepIndex<currentSteps().length-1){state.stepIndex++;renderAll()}}
+function prevStep(){if(state.stepIndex>0){state.stepIndex--;renderAll()}}
+function copyPrompt(){
+  navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(()=>{
+    const btn=document.querySelector('.copy-btn'),orig=btn.textContent
+    btn.textContent='Copied!';setTimeout(()=>btn.textContent=orig,1500)
+  })
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='ArrowDown')nextStep()
+  if(e.key==='ArrowLeft' ||e.key==='ArrowUp')  prevStep()
+})
+renderAll()
+</script>
+</body>
+</html>

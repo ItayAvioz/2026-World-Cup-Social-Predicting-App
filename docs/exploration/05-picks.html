@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05 — Champion &amp; Top Scorer Picks · WorldCup 2026 Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+    --border: rgba(255,255,255,.08); --gold: #f59e0b;
+    --text: #f0f0f0; --muted: #888; --faint: #555;
+    --layer-landing: #1e3a5f; --layer-landing-text: #93c5fd;
+    --layer-react: #1e3b2a; --layer-react-text: #86efac;
+    --layer-supabase: #3b1f2b; --layer-supabase-text: #f9a8d4;
+    --layer-db: #2d1f3b; --layer-db-text: #c4b5fd;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+  .header-title { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+  .header-sub { font-size: .75rem; color: var(--muted); }
+  .badge { display: inline-flex; align-items: center; gap: .35rem; font-size: .65rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: .2rem .55rem; border-radius: 4px; }
+  .badge-landing  { background: var(--layer-landing);  color: var(--layer-landing-text); }
+  .badge-react    { background: var(--layer-react);    color: var(--layer-react-text); }
+  .badge-supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); }
+  .badge-db       { background: var(--layer-db);       color: var(--layer-db-text); }
+  .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; padding: 0 1.25rem; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: .8rem; font-weight: 600; padding: .65rem 1rem; transition: color .15s, border-color .15s; }
+  .tab-btn:hover { color: var(--text); } .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; background: var(--surface); }
+  .sidebar-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: .75rem 1rem .4rem; }
+  .step-item { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem 1rem; cursor: pointer; border-left: 3px solid transparent; transition: background .1s, border-color .1s; }
+  .step-item:hover { background: rgba(255,255,255,.04); } .step-item.active { background: rgba(245,158,11,.08); border-left-color: var(--gold); }
+  .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: .05rem; color: var(--muted); transition: background .15s, border-color .15s, color .15s; }
+  .step-item.active .step-num { background: var(--gold); border-color: var(--gold); color: #000; }
+  .step-label { font-size: .78rem; line-height: 1.35; color: var(--muted); transition: color .15s; } .step-item.active .step-label { color: var(--text); }
+  .step-layer-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: .42rem; }
+  .dot-landing { background: var(--layer-landing-text); } .dot-react { background: var(--layer-react-text); } .dot-supabase { background: var(--layer-supabase-text); } .dot-db { background: var(--layer-db-text); }
+  .layer-legend { border-top: 1px solid var(--border); margin-top: .75rem; padding: .75rem 1rem 1rem; }
+  .layer-legend-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .legend-item { display: flex; gap: .55rem; margin-bottom: .65rem; align-items: flex-start; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: .25rem; }
+  .legend-name { font-size: .72rem; font-weight: 700; margin-bottom: .1rem; } .legend-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; }
+  .flowmap-wrap { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; overflow-x: auto; }
+  .flowmap-title { font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .7rem; }
+  .flowmap { display: flex; align-items: center; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .fm-node { display: flex; flex-direction: column; align-items: center; gap: .25rem; cursor: pointer; flex-shrink: 0; }
+  .fm-box { border-radius: 5px; padding: .3rem .55rem; font-size: .65rem; font-weight: 600; text-align: center; max-width: 90px; line-height: 1.25; border: 1.5px solid transparent; transition: all .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fm-box.landing  { background: var(--layer-landing);  color: var(--layer-landing-text);  border-color: rgba(147,197,253,.15); }
+  .fm-box.react    { background: var(--layer-react);    color: var(--layer-react-text);    border-color: rgba(134,239,172,.15); }
+  .fm-box.supabase { background: var(--layer-supabase); color: var(--layer-supabase-text); border-color: rgba(249,168,212,.15); }
+  .fm-box.db       { background: var(--layer-db);       color: var(--layer-db-text);       border-color: rgba(196,181,253,.15); }
+  .fm-box.current  { outline: 2px solid var(--gold); outline-offset: 2px; } .fm-box:hover { opacity: .8; }
+  .fm-num { font-size: .55rem; color: var(--faint); } .fm-arrow { color: #333; font-size: .85rem; padding: 0 .15rem; margin-bottom: .9rem; flex-shrink: 0; line-height: 1; }
+  .eh-page { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+  .eh-legend { display: flex; gap: .75rem; flex-wrap: wrap; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font-size: .72rem; }
+  .eh-legend-item { display: flex; align-items: center; gap: .4rem; }
+  .eh-pill { display: inline-block; border-radius: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .05em; padding: .15rem .5rem; white-space: nowrap; }
+  .pill-ok { background: rgba(134,239,172,.15); color: #86efac; border: 1px solid rgba(134,239,172,.25); }
+  .pill-missing { background: rgba(252,165,165,.12); color: #fca5a5; border: 1px solid rgba(252,165,165,.2); }
+  .prio-high { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+  .prio-medium { background: rgba(251,191,36,.12); color: #fcd34d; border: 1px solid rgba(251,191,36,.2); }
+  .prio-low { background: rgba(107,114,128,.15); color: #9ca3af; border: 1px solid rgba(107,114,128,.2); }
+  .prio-done { background: rgba(134,239,172,.1); color: #6ee7b7; border: 1px solid rgba(134,239,172,.15); }
+  .eh-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .eh-table th { text-align: left; font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: .5rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; }
+  .eh-table td { padding: .6rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; line-height: 1.45; }
+  .eh-table tr:hover td { background: rgba(255,255,255,.02); }
+  .eh-location { font-family: monospace; font-size: .7rem; color: var(--muted); }
+  .eh-error-name { color: var(--text); font-weight: 600; margin-bottom: .2rem; }
+  .eh-error-desc { color: var(--muted); font-size: .72rem; } .eh-fix { color: #93c5fd; font-size: .72rem; font-style: italic; }
+  .eh-section-row td { background: rgba(255,255,255,.03); color: var(--gold); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: .4rem .75rem; }
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .detail-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; gap: 1rem; flex-wrap: wrap; align-content: flex-start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .card-title { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .6rem; }
+  .step-header { width: 100%; display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .step-header-num { width: 36px; height: 36px; border-radius: 50%; background: var(--gold); color: #000; font-size: 1rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-header-info { flex: 1; min-width: 0; } .step-header-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .2rem; }
+  .step-header-file { font-size: .72rem; color: var(--muted); font-family: 'Menlo', 'Consolas', monospace; }
+  .what-card { width: 100%; } .what-text { font-size: .85rem; line-height: 1.6; color: var(--text); }
+  .code-card { width: 100%; }
+  .code-block { background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; padding: .85rem 1rem; font-family: 'Menlo', 'Consolas', monospace; font-size: .75rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #d1d5db; }
+  .code-comment { color: #4b5563; } .code-kw { color: #93c5fd; } .code-fn { color: #86efac; } .code-str { color: #fde68a; } .code-const { color: #f9a8d4; }
+  .example-card { width: 100%; }
+  .example-row { display: flex; gap: .6rem; margin-bottom: .55rem; align-items: flex-start; }
+  .example-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; min-width: 58px; padding-top: .15rem; }
+  .example-label.in { color: #93c5fd; } .example-label.out { color: #86efac; } .example-label.err { color: #fca5a5; } .example-label.note { color: var(--gold); }
+  .example-val { font-family: 'Menlo', 'Consolas', monospace; font-size: .72rem; background: #0d0d0d; border: 1px solid rgba(255,255,255,.06); border-radius: 5px; padding: .4rem .7rem; color: #d1d5db; line-height: 1.6; flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .db-card { min-width: 200px; flex: 1; } .db-op { display: flex; flex-direction: column; gap: .5rem; } .db-row { display: flex; align-items: flex-start; gap: .5rem; font-size: .78rem; }
+  .db-table { background: var(--layer-db); color: var(--layer-db-text); border-radius: 4px; padding: .15rem .45rem; font-family: monospace; font-size: .7rem; white-space: nowrap; }
+  .db-action { color: var(--muted); line-height: 1.4; } .db-none { color: var(--faint); font-style: italic; font-size: .78rem; }
+  .state-card { min-width: 280px; flex: 1; } .state-grid { display: flex; flex-direction: column; gap: .45rem; } .state-row { display: flex; align-items: flex-start; gap: .5rem; }
+  .state-key { font-family: monospace; font-size: .7rem; color: var(--layer-supabase-text); white-space: nowrap; padding-top: .05rem; min-width: 140px; }
+  .state-val { font-family: monospace; font-size: .72rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+  .state-val.null { color: var(--faint); } .state-val.set { color: #86efac; } .state-val.warn { color: var(--gold); }
+  .prompt-bar { border-top: 1px solid var(--border); background: var(--surface); padding: .75rem 1.25rem; display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+  .prompt-label { font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .prompt-text { flex: 1; font-size: .78rem; color: var(--muted); line-height: 1.4; }
+  .copy-btn { background: var(--gold); border: none; border-radius: 5px; color: #000; cursor: pointer; font-size: .72rem; font-weight: 700; padding: .4rem .85rem; white-space: nowrap; transition: opacity .15s; }
+  .copy-btn:hover { opacity: .85; }
+  .nav-row { display: flex; align-items: center; justify-content: space-between; padding: .5rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: .75rem; padding: .35rem .8rem; transition: color .15s, border-color .15s; }
+  .nav-btn:hover:not(:disabled) { color: var(--text); border-color: var(--gold); } .nav-btn:disabled { opacity: .3; cursor: default; }
+  .nav-counter { font-size: .72rem; color: var(--faint); }
+  ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">05 — Champion &amp; Top Scorer Picks</div>
+    <div class="header-sub">WorldCup 2026 · Architecture Explorer</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <span class="badge badge-react">React App</span>
+    <span class="badge badge-supabase">Supabase</span>
+    <span class="badge badge-db">Database</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchPath('pergroup')">Per-Group Picks</button>
+  <button class="tab-btn" onclick="switchPath('deadline')">Lock Deadline</button>
+  <button class="tab-btn" onclick="switchPath('champion')">Save Champion</button>
+  <button class="tab-btn" onclick="switchPath('scorer')">Save Top Scorer</button>
+  <button class="tab-btn" onclick="switchPath('autoassign')">Auto-Assign</button>
+  <button class="tab-btn" onclick="switchPath('rules')">📋 Rules &amp; SDK</button>
+  <button class="tab-btn" onclick="switchPath('errors')" style="color:#fca5a5">⚠ Error Handling</button>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-label">Steps</div>
+    <div id="step-list"></div>
+    <div class="layer-legend">
+      <div class="layer-legend-title">Layers</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-react-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-react-text)">React App</div><div class="legend-desc">Picks.jsx manages group tabs, candidate lists, save state. activeGroupRef prevents stale closure issues on rapid group switches.</div></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-supabase-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-supabase-text)">Supabase</div><div class="legend-desc">champion_pick and top_scorer_pick: UNIQUE(user_id, group_id). UPSERT on conflict. RLS locks after 2026-06-11T19:00:00Z. Candidates from teams + top_scorer_candidates tables.</div></div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--layer-db-text)"></div><div class="legend-body"><div class="legend-name" style="color:var(--layer-db-text)">Database</div><div class="legend-desc">fn_auto_assign_picks() fires at deadline for missing picks. Points awarded by trigger on final game knockout_winner being set.</div></div></div>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-content" id="detail-content"></div>
+    <div class="nav-row">
+      <button class="nav-btn" id="prev-btn" onclick="prevStep()">← Prev</button>
+      <span class="nav-counter" id="nav-counter"></span>
+      <button class="nav-btn" id="next-btn" onclick="nextStep()">Next →</button>
+    </div>
+    <div class="prompt-bar">
+      <span class="prompt-label">Summary</span>
+      <span class="prompt-text" id="prompt-text"></span>
+      <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+
+  pergroup: {
+    label: 'Per-Group Picks',
+    steps: [
+      {
+        num: 1, label: 'Group tabs', layer: 'react', file: 'src/pages/Picks.jsx',
+        what: 'The Picks page has group selector pill tabs at the top — one pill per group, sorted by joined_at. Switching tabs reloads picks for that group. The selected group is tracked via activeGroupRef (a React ref, not state) to prevent stale closure issues in async loaders — if the user switches groups rapidly, the stale response is discarded.',
+        code: `<span class="code-comment">// Group tabs:</span>
+{groups.<span class="code-fn">map</span>(g => (
+  <span class="code-kw">&lt;button</span> onClick={() => <span class="code-fn">selectGroup</span>(g.id)}
+    className={selectedGroupId === g.id ? <span class="code-str">'active'</span> : <span class="code-str">''</span>}<span class="code-kw">&gt;</span>
+    {g.name}
+  <span class="code-kw">&lt;/button&gt;</span>
+))}
+
+<span class="code-comment">// activeGroupRef prevents stale data:</span>
+<span class="code-kw">if</span> (activeGroupRef.current !== groupId) <span class="code-kw">return</span> <span class="code-comment">// discard stale response</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'user in 3 groups, on "The Lads" tab' },
+          { label: 'OUT', type: 'out', val: 'picks loaded for "The Lads" group' },
+          { label: 'IN',  type: 'in',  val: 'switches to "Work Friends"' },
+          { label: 'OUT', type: 'out', val: 'picks reloaded for "Work Friends"; stale "The Lads" response discarded' },
+        ],
+        db: [
+          { table: 'champion_pick', action: 'SELECT WHERE user_id + group_id' },
+          { table: 'top_scorer_pick', action: 'SELECT WHERE user_id + group_id' }
+        ],
+        state: { 'selectedGroupId': '"theLadsId"', 'savedChampion': '"Brazil"', 'activeGroupRef.current': '"theLadsId"' }
+      },
+      {
+        num: 2, label: 'Independent picks per group', layer: 'supabase', file: 'src/pages/Picks.jsx',
+        what: 'champion_pick and top_scorer_pick both have UNIQUE(user_id, group_id). A user in 3 groups makes 3 completely independent champion picks and 3 independent top scorer picks. Each group\'s picks are scored only in that group\'s leaderboard. The global leaderboard scores each (user × group) row independently using that group\'s specific picks.',
+        code: `<span class="code-comment">// champion_pick schema:</span>
+<span class="code-comment">// user_id uuid, group_id uuid, team text</span>
+<span class="code-comment">// UNIQUE(user_id, group_id)</span>
+
+<span class="code-comment">// User in 3 groups → 3 champion_pick rows:</span>
+<span class="code-comment">// { user_id, group_id: "theLads",     team: "Brazil" }</span>
+<span class="code-comment">// { user_id, group_id: "workFriends", team: "France" }</span>
+<span class="code-comment">// { user_id, group_id: "family",      team: "Argentina" }</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'itayking in 3 groups' },
+          { label: 'OUT', type: 'out', val: 'Brazil for The Lads\nFrance for Work Friends\nArgentina for Family — all independent, all scored separately' },
+        ],
+        db: [{ table: 'champion_pick', action: '3 rows for same user_id, different group_id each' }],
+        state: { 'picks': '{ "theLads": "Brazil", "workFriends": "France", "family": "Argentina" }' }
+      },
+    ]
+  },
+
+  deadline: {
+    label: 'Lock Deadline',
+    steps: [
+      {
+        num: 1, label: 'Deadline: 2026-06-11T19:00Z', layer: 'react', file: 'src/pages/Picks.jsx',
+        what: 'Both champion and top scorer picks lock at 2026-06-11T19:00:00Z — the first game kickoff. The check is `const isLocked = new Date() >= new Date(PICKS_DEADLINE)`. When locked: all pick inputs are hidden, only the saved pick is shown (or "no pick made" if none). A lock badge appears next to section titles.',
+        code: `<span class="code-kw">const</span> PICKS_DEADLINE = <span class="code-str">'2026-06-11T19:00:00Z'</span>
+<span class="code-kw">const</span> isLocked = <span class="code-kw">new</span> <span class="code-fn">Date</span>() >= <span class="code-kw">new</span> <span class="code-fn">Date</span>(PICKS_DEADLINE)
+
+{isLocked ? (
+  savedChampion
+    ? <span class="code-kw">&lt;div</span> className=<span class="code-str">"pk-my-pick-display"</span><span class="code-kw">&gt;</span>{savedChampion}<span class="code-kw">&lt;/div&gt;</span>
+    : <span class="code-kw">&lt;p&gt;</span>No pick made — auto-assigned at tournament start.<span class="code-kw">&lt;/p&gt;</span>
+) : (
+  <span class="code-kw">&lt;div&gt;</span>{<span class="code-comment">/* pick form */</span>}<span class="code-kw">&lt;/div&gt;</span>
+)}`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'now = 2026-06-11T20:00:00Z' },
+          { label: 'OUT', type: 'out', val: 'isLocked=true, form hidden, "🔒 Brazil" shown (or "No pick made — auto-assigned at tournament start.")' },
+        ],
+        db: [],
+        state: { 'isLocked': 'true', 'savedChampion': '"Brazil"' }
+      },
+      {
+        num: 2, label: 'RLS enforces deadline', layer: 'supabase', file: 'RLS policies',
+        what: 'The champion_pick and top_scorer_pick tables have RLS INSERT/UPDATE policies that check now() < \'2026-06-11T19:00:00Z\'. Any attempt to write after the deadline is rejected with error code 42501, even if the client-side check is bypassed via browser dev tools.',
+        code: `<span class="code-comment">-- RLS policy (champion_pick + top_scorer_pick):</span>
+<span class="code-comment">-- CHECK (now() &lt; '2026-06-11T19:00:00Z'::timestamptz)</span>
+
+<span class="code-comment">// Client catches it:</span>
+<span class="code-kw">if</span> (error.code === <span class="code-str">'42501'</span>) {
+  <span class="code-fn">showToast</span>(<span class="code-str">'Picks are locked'</span>, <span class="code-str">'error'</span>)
+}`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'user bypasses UI, sends INSERT after 2026-06-11T19:00Z' },
+          { label: 'ERR', type: 'err', val: 'RLS returns 42501 (permission denied)' },
+          { label: 'OUT', type: 'out', val: 'toast "Picks are locked"' },
+        ],
+        db: [{ table: 'champion_pick / top_scorer_pick', action: 'INSERT/UPDATE rejected by RLS after deadline' }],
+        state: { 'error.code': '"42501"', 'toast': '"Picks are locked"' }
+      },
+    ]
+  },
+
+  champion: {
+    label: 'Save Champion',
+    steps: [
+      {
+        num: 1, label: 'Load team candidates', layer: 'supabase', file: 'src/pages/Picks.jsx',
+        what: 'Teams come from the `teams` DB table (not hardcoded in the client), ordered by group_name then is_tbd. TBD qualifier slots (spots not yet decided) are shown greyed-out and unselectable. Champion odds come from the `champion_odds` table synced by the sync-odds Edge Function (William Hill odds via TheOddsAPI).',
+        code: `<span class="code-kw">const</span> [{ data: t }, { data: p }, { data: o }] = <span class="code-kw">await</span> <span class="code-fn">Promise.all</span>([
+  supabase.<span class="code-fn">from</span>(<span class="code-str">'teams'</span>).<span class="code-fn">select</span>(<span class="code-str">'name, flag_code, group_name, is_tbd'</span>)
+    .<span class="code-fn">order</span>(<span class="code-str">'group_name'</span>).<span class="code-fn">order</span>(<span class="code-str">'is_tbd'</span>),
+  supabase.<span class="code-fn">from</span>(<span class="code-str">'top_scorer_candidates'</span>)
+    .<span class="code-fn">select</span>(<span class="code-str">'name, team_name, flag_code, api_player_id'</span>)
+    .<span class="code-fn">eq</span>(<span class="code-str">'is_active'</span>, <span class="code-kw">true</span>).<span class="code-fn">order</span>(<span class="code-str">'name'</span>),
+  supabase.<span class="code-fn">from</span>(<span class="code-str">'champion_odds'</span>).<span class="code-fn">select</span>(<span class="code-str">'team_name, odds'</span>),
+])`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'page loads' },
+          { label: 'OUT', type: 'out', val: '48 teams listed (42 known + 6 TBD greyed-out), each with flag + group + odds\ne.g. "France 5.5x", "Brazil 6.0x"' },
+        ],
+        db: [
+          { table: 'teams', action: 'SELECT — 48 rows including is_tbd flag' },
+          { table: 'top_scorer_candidates', action: 'SELECT WHERE is_active=true' },
+          { table: 'champion_odds', action: 'SELECT — synced by sync-odds EF' }
+        ],
+        state: { 'dbTeams': '[48 entries]', 'champOdds': '{ "France": 5.5, "Brazil": 6.0, … }' }
+      },
+      {
+        num: 2, label: 'User selects champion', layer: 'react', file: 'src/pages/Picks.jsx',
+        what: 'User clicks a team button to select it. Clicking the same team again deselects (toggle). TBD teams are disabled. A search input filters the list. The Save button is only enabled when a team is selected AND it differs from the already-saved pick (champChanged guard prevents a redundant save).',
+        code: `onClick={() => !t.tbd && <span class="code-fn">setSelChampion</span>(t.name === selChampion ? <span class="code-kw">null</span> : t.name)}
+disabled={t.tbd} <span class="code-comment">// TBD slots unclickable</span>
+
+<span class="code-comment">// Save button guard:</span>
+disabled={!selChampion || !champChanged || saving.champion}
+<span class="code-comment">// champChanged = selChampion !== savedChampion</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'user clicks "Brazil"' },
+          { label: 'OUT', type: 'out', val: 'selChampion="Brazil", Save button enabled' },
+          { label: 'IN',  type: 'in',  val: 'clicks "Brazil" again (toggle off)' },
+          { label: 'OUT', type: 'out', val: 'selChampion=null, Save button disabled' },
+        ],
+        db: [],
+        state: { 'selChampion': '"Brazil"', 'champChanged': 'true', 'saveButton': 'enabled' }
+      },
+      {
+        num: 3, label: 'Champion pick upserted', layer: 'supabase', file: 'src/pages/Picks.jsx',
+        what: 'On save, the champion_pick is upserted with onConflict: \'user_id,group_id\'. If a pick already exists for this user+group, it is updated. The row includes user_id, team, and group_id. points_earned stays 0 until the tournament ends and the final game\'s knockout_winner is set by the sync EF.',
+        code: `<span class="code-kw">const</span> row = { user_id: user.id, team: selChampion }
+<span class="code-kw">if</span> (contextGroupId !== <span class="code-kw">null</span>) row.group_id = contextGroupId
+<span class="code-kw">await</span> supabase.<span class="code-fn">from</span>(<span class="code-str">'champion_pick'</span>)
+  .<span class="code-fn">upsert</span>(row, { onConflict: <span class="code-str">'user_id,group_id'</span> })`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'upsert { user_id, group_id: "theLadsId", team: "Brazil" }' },
+          { label: 'OUT', type: 'out', val: 'champion_pick row { user_id, group_id: "theLadsId", team: "Brazil", points_earned: 0, is_auto: false }' },
+        ],
+        db: [{ table: 'champion_pick', action: 'UPSERT on (user_id, group_id)' }],
+        state: { 'savedChampion': '"Brazil"', 'champChanged': 'false', 'Save button': 'disabled (no change)' }
+      },
+    ]
+  },
+
+  scorer: {
+    label: 'Save Top Scorer',
+    steps: [
+      {
+        num: 1, label: 'Load player candidates', layer: 'supabase', file: 'src/pages/Picks.jsx',
+        what: 'Top scorer candidates come from the `top_scorer_candidates` table (is_active=true). Each entry has: name (display), team_name, flag_code, api_player_id (for matching against actual tournament stats). About 30 star players listed alphabetically. This list is curated manually in the DB — not auto-generated.',
+        code: `supabase.<span class="code-fn">from</span>(<span class="code-str">'top_scorer_candidates'</span>)
+  .<span class="code-fn">select</span>(<span class="code-str">'name, team_name, flag_code, api_player_id'</span>)
+  .<span class="code-fn">eq</span>(<span class="code-str">'is_active'</span>, <span class="code-kw">true</span>)
+  .<span class="code-fn">order</span>(<span class="code-str">'name'</span>)`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'page loads' },
+          { label: 'OUT', type: 'out', val: '~30 players alphabetically:\n"Erling Haaland (Norway)"\n"Kylian Mbappé (France)"\n"Vinicius Jr (Brazil)"…' },
+        ],
+        db: [{ table: 'top_scorer_candidates', action: 'SELECT WHERE is_active=true, ORDER BY name' }],
+        state: { 'dbPlayers': '[~30 entries]' }
+      },
+      {
+        num: 2, label: 'Top scorer pick saved', layer: 'supabase', file: 'src/pages/Picks.jsx',
+        what: 'Same upsert pattern as champion. The row stores player_name (text) and top_scorer_api_id (int, from api-football.com player ID). The API ID is critical — when the EF syncs player stats post-tournament, it matches by api_player_id, not by name (names can differ in spelling across sources). Points are awarded via DB trigger when the final game resolves.',
+        code: `<span class="code-kw">const</span> row = {
+  user_id: user.id,
+  player_name: selPlayer.name,
+  top_scorer_api_id: selPlayer.apiId  <span class="code-comment">// api-football.com ID</span>
+}
+<span class="code-kw">await</span> supabase.<span class="code-fn">from</span>(<span class="code-str">'top_scorer_pick'</span>)
+  .<span class="code-fn">upsert</span>(row, { onConflict: <span class="code-str">'user_id,group_id'</span> })`,
+        example: [
+          { label: 'IN',  type: 'in',  val: "user picks Mbappé (api_player_id: 278)" },
+          { label: 'OUT', type: 'out', val: 'top_scorer_pick { player_name: "Kylian Mbappé", top_scorer_api_id: 278, points_earned: 0, is_auto: false }' },
+          { label: 'NOTE',type: 'note',val: 'api_player_id 278 is used at tournament end to match actual top scorer — not player_name' },
+        ],
+        db: [{ table: 'top_scorer_pick', action: 'UPSERT on (user_id, group_id)' }],
+        state: { 'savedPlayer': '{ player_name: "Kylian Mbappé", api_id: 278 }', 'playerChanged': 'false' }
+      },
+    ]
+  },
+
+  autoassign: {
+    label: 'Auto-Assign',
+    steps: [
+      {
+        num: 1, label: 'fn_auto_assign_picks at deadline', layer: 'db', file: 'supabase/migrations',
+        what: 'At 2026-06-11T19:00:00Z, a pg_cron job fires fn_auto_assign_picks(). It loops over all (user_id, group_id) pairs from group_members. For any pair missing a champion_pick or top_scorer_pick, it inserts a random pick marked is_auto=true. This ensures every user has a pick in every group before the tournament starts.',
+        code: `<span class="code-comment">-- fn_auto_assign_picks():</span>
+<span class="code-comment">-- FOR each (user_id, group_id) IN group_members:</span>
+<span class="code-comment">--   IF no champion_pick for (user,group):</span>
+<span class="code-comment">--     INSERT random team, is_auto=true</span>
+<span class="code-comment">--   IF no top_scorer_pick for (user,group):</span>
+<span class="code-comment">--     INSERT random player, is_auto=true</span>
+<span class="code-comment">-- Cron: fires at 2026-06-11T19:00:00Z exactly</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'deadline reached, user "ron" has no champion pick for "The Lads"' },
+          { label: 'OUT', type: 'out', val: 'champion_pick { user_id: "ron", group_id: "theLads", team: "Germany", is_auto: true } auto-inserted' },
+        ],
+        db: [
+          { table: 'champion_pick', action: 'INSERT with is_auto=true for missing picks' },
+          { table: 'top_scorer_pick', action: 'INSERT with is_auto=true for missing picks' }
+        ],
+        state: { 'ron.champion_pick.theLads': '"Germany" (is_auto=true)', 'coverage': 'all (user,group) pairs guaranteed a pick' }
+      },
+      {
+        num: 2, label: 'Points awarded at tournament end', layer: 'db', file: 'supabase triggers',
+        what: 'Points for champion and top scorer picks are awarded by a DB trigger that fires when the final game\'s knockout_winner is set (done by the football-api-sync EF after the final). The trigger fn_calculate_pick_points() compares champion_pick.team with knockout_winner. For top scorer, it compares top_scorer_api_id with the actual top scorer\'s player ID. Awards 10pt to correct picks.',
+        code: `<span class="code-comment">-- Trigger fires after UPDATE on games</span>
+<span class="code-comment">-- WHERE phase='final' AND knockout_winner IS NOT NULL</span>
+<span class="code-comment">-- fn_calculate_pick_points():</span>
+<span class="code-comment">--   UPDATE champion_pick SET points_earned=10</span>
+<span class="code-comment">--     WHERE team = NEW.knockout_winner</span>
+<span class="code-comment">--   UPDATE top_scorer_pick SET points_earned=10</span>
+<span class="code-comment">--     WHERE top_scorer_api_id IN (actual top scorer from player_tournament_stats)</span>`,
+        example: [
+          { label: 'IN',  type: 'in',  val: 'final game ends, football-api-sync sets knockout_winner = "Spain"' },
+          { label: 'OUT', type: 'out', val: 'all champion_pick rows with team="Spain" get points_earned=10' },
+          { label: 'OUT', type: 'out', val: 'top scorer matched by api_player_id → those top_scorer_pick rows get points_earned=10' },
+          { label: 'NOTE',type: 'note',val: '10pt per correct pick; leaderboard totals update immediately via existing scoring RPCs' },
+        ],
+        db: [
+          { table: 'champion_pick', action: 'UPDATE points_earned=10 WHERE team = knockout_winner' },
+          { table: 'top_scorer_pick', action: 'UPDATE points_earned=10 WHERE api_player_id matches actual scorer' }
+        ],
+        state: { 'champion_pick.points_earned': '10 (if correct)', 'total_points': '+10 on leaderboard' }
+      },
+    ]
+  },
+
+  errors: { label: 'Error Handling', steps: [] }
+}
+
+const ERROR_ROWS = [
+  { section: 'Save Champion / Top Scorer' },
+  { location: 'Picks.jsx', name: '42501 after deadline', desc: 'If user bypasses UI lock and sends INSERT/UPDATE after deadline, RLS returns 42501. Caught and shown as "Picks are locked" toast.', status: 'done', prio: 'done', fix: '' },
+  { location: 'Picks.jsx', name: 'Generic save error', desc: 'Network or DB failure during upsert shows toast "Failed to save — try again".', status: 'done', prio: 'done', fix: '' },
+  { location: 'Picks.jsx', name: 'loadCandidates failure', desc: 'If teams, players, or odds tables are unavailable, the lists are empty and the user sees a blank pick form with no error message.', status: 'missing', prio: 'low', fix: 'Add error state to candidates loading: if any of the 3 parallel fetches fails, show an error with retry instead of silently rendering an empty list.' },
+  { section: 'Group Selection' },
+  { location: 'Picks.jsx', name: 'Groups load error', desc: 'If the group_members SELECT fails, error state with "Try again" button is shown.', status: 'done', prio: 'done', fix: '' },
+  { location: 'Picks.jsx', name: 'Picks load error (per group)', desc: 'If champion_pick or top_scorer_pick SELECT fails for a group, per-group error shown with "Try again" button.', status: 'done', prio: 'done', fix: '' },
+  { location: 'Picks.jsx', name: 'Rapid group switch — stale response', desc: 'If user switches groups fast, a stale API response for an older group could overwrite the current group\'s picks. Mitigated by activeGroupRef check in loadPicks, but not in saveChampion/saveTopScorer.', status: 'missing', prio: 'medium', fix: 'Extend the activeGroupRef check to also guard saveChampion and saveTopScorer so a save triggered on a stale group is discarded.' },
+  { section: 'TBD Teams' },
+  { location: 'Picks.jsx', name: 'TBD teams disabled', desc: 'TBD qualifier slots are rendered with disabled=true and greyed-out styling, so users cannot pick an unknown team.', status: 'done', prio: 'done', fix: '' },
+]
+
+let currentPath = 'pergroup', currentStep = 0
+
+function switchPath(key) {
+  currentPath = key; currentStep = 0
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const keys = ['pergroup','deadline','champion','scorer','autoassign','rules','errors']
+    b.classList.toggle('active', keys[i] === key)
+  })
+  render()
+}
+
+function prevStep() { if(currentStep>0){currentStep--;render()} }
+function nextStep() { const steps=PATHS[currentPath].steps; if(currentStep<steps.length-1){currentStep++;render()} }
+function layerClass(l) { return {landing:'landing',react:'react',supabase:'supabase',db:'db'}[l]||'react' }
+function dotClass(l) { return {landing:'dot-landing',react:'dot-react',supabase:'dot-supabase',db:'dot-db'}[l]||'dot-react' }
+function badgeHtml(l) { const m={landing:['badge-landing','Landing'],react:['badge-react','React'],supabase:['badge-supabase','Supabase'],db:['badge-db','DB']}; const [cls,label]=m[l]||['badge-react','React']; return `<span class="badge ${cls}">${label}</span>` }
+
+function render() {
+  const sidebar=document.querySelector('.sidebar')
+  if(currentPath==='rules'){sidebar.style.display='none';renderRules();document.getElementById('prev-btn').disabled=true;document.getElementById('next-btn').disabled=true;document.getElementById('nav-counter').textContent='Rules & SDK reference';document.getElementById('prompt-text').textContent='Champion & Top Scorer Picks — business rules, sync behaviour, RLS policies, and SDK call patterns.';return}
+  if(currentPath==='errors'){sidebar.style.display='none';renderErrors();document.getElementById('prev-btn').disabled=true;document.getElementById('next-btn').disabled=true;document.getElementById('nav-counter').textContent='';document.getElementById('prompt-text').textContent='Error handling audit for Champion & Top Scorer Picks — save, deadline, group selection, auto-assign.';return}
+  const path=PATHS[currentPath], steps=path.steps
+  sidebar.style.display=''
+  document.getElementById('step-list').innerHTML=steps.map((s,i)=>`<div class="step-item ${i===currentStep?'active':''}" onclick="currentStep=${i};render()"><div class="step-layer-dot ${dotClass(s.layer)}"></div><div class="step-num">${s.num}</div><div class="step-label">${s.label}</div></div>`).join('')
+  const s=steps[currentStep]
+  const flowmap=steps.map((st,i)=>`<div class="fm-node" onclick="currentStep=${i};render()"><div class="fm-box ${layerClass(st.layer)} ${i===currentStep?'current':''}">${st.label.length>12?st.label.slice(0,12)+'…':st.label}</div><div class="fm-num">${st.num}</div></div>${i<steps.length-1?'<div class="fm-arrow">→</div>':''}`).join('')
+  const dbHtml=s.db&&s.db.length?s.db.map(d=>`<div class="db-row"><span class="db-table">${d.table}</span><span class="db-action">${d.action}</span></div>`).join(''):'<div class="db-none">No DB operation at this step</div>'
+  const stateHtml=Object.entries(s.state||{}).map(([k,v])=>`<div class="state-row"><span class="state-key">${k}</span><span class="state-val">${v}</span></div>`).join('')
+  const exHtml=(s.example||[]).map(e=>`<div class="example-row"><span class="example-label ${e.type}">${e.label}</span><span class="example-val">${e.val}</span></div>`).join('')
+  document.getElementById('detail-content').innerHTML=`
+    <div class="step-header"><div class="step-header-num">${s.num}</div><div class="step-header-info"><div class="step-header-title">${s.label}</div><div class="step-header-file">${s.file} &nbsp; ${badgeHtml(s.layer)}</div></div></div>
+    <div class="flowmap-wrap"><div class="flowmap-title">Flow Map — ${path.label}</div><div class="flowmap">${flowmap}</div></div>
+    <div class="card what-card"><div class="card-title">What happens</div><div class="what-text">${s.what.replace(/\n/g,'<br>')}</div></div>
+    <div class="card code-card"><div class="card-title">Key code</div><div class="code-block">${s.code}</div></div>
+    ${exHtml?`<div class="card example-card"><div class="card-title">Example</div>${exHtml}</div>`:''}
+    <div style="display:flex;gap:1rem;width:100%;flex-wrap:wrap"><div class="card db-card"><div class="card-title">DB operation</div><div class="db-op">${dbHtml}</div></div><div class="card state-card"><div class="card-title">State inspector</div><div class="state-grid">${stateHtml}</div></div></div>`
+  document.getElementById('prev-btn').disabled=currentStep===0
+  document.getElementById('next-btn').disabled=currentStep===steps.length-1
+  document.getElementById('nav-counter').textContent=`Step ${currentStep+1} of ${steps.length}`
+  document.getElementById('prompt-text').textContent=`${path.label} · Step ${s.num}: ${s.label} (${s.layer} layer, ${s.file})`
+}
+
+function renderRules() {
+  document.getElementById('detail-content').innerHTML = `
+    <div style="padding:24px;overflow-y:auto;width:100%;height:calc(100vh - 120px);">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px;">
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">📐 Business Logic</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li><code>champion_pick</code> and <code>top_scorer_pick</code> are PER-GROUP: <code>UNIQUE(user_id, group_id)</code> — user in 3 groups makes 3 independent sets of picks</li>
+            <li>Both lock permanently at <code>2026-06-11T19:00:00Z</code> — no changes after this time</li>
+            <li>Champion: pick from 48 teams (6 TBD qualifier slots greyed out until known)</li>
+            <li>Top scorer: pick from 30 hardcoded star player candidates</li>
+            <li>Auto-assign: <code>fn_auto_assign_picks()</code> fires at deadline — inserts random picks for any (user, group) pair missing picks. Marked <code>is_auto = true</code></li>
+            <li>Correct champion: 10pt — triggered when <code>knockout_winner</code> SET on the final game (<code>phase='final'</code>)</li>
+            <li>Correct top scorer: 10pt — same event; matched by <code>player_api_id</code></li>
+            <li>Picks are PRIVATE until <code>2026-06-11T19:00:00Z</code> — then visible to all (SELECT policy opens up)</li>
+            <li><code>activeGroupRef</code> used in Picks.jsx to prevent stale closure issues when switching groups mid-load</li>
+          </ul>
+        </div>
+
+        <div style="background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔄 Sync Rules</h3>
+          <ul style="margin:0;padding-left:20px;color:#ccc;font-size:13px;line-height:1.8;">
+            <li>Picks loaded per-group when user switches group tab — no global cache</li>
+            <li><code>predCtxRef</code> prevents stale prediction context — always reads latest state at save time</li>
+            <li>Auto-assign: pg_cron fires once at <code>2026-06-11T19:00:00Z</code> for ALL (user, group) pairs with missing picks</li>
+            <li>Points trigger: fires when <code>games</code> row with <code>phase='final'</code> gets <code>knockout_winner</code> set (by football-api-sync EF)</li>
+            <li>Champion odds (<code>champion_odds</code> table): fetched on Picks page to show current odds next to each team</li>
+          </ul>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔒 RLS Policies</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="border-bottom:1px solid #333;">
+                <th style="text-align:left;padding:6px 8px;color:#888;">Table</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">Op</th>
+                <th style="text-align:left;padding:6px 8px;color:#888;">USING / WITH CHECK</th>
+              </tr>
+            </thead>
+            <tbody style="color:#ccc;">
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">champion_pick</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">INSERT/UPDATE</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">auth.uid() = user_id AND is_group_member(group_id, auth.uid()) AND now() &lt; '2026-06-11T19:00:00Z'</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">champion_pick</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT (own)</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">auth.uid() = user_id</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">champion_pick</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">SELECT (all, after deadline)</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">now() &gt;= '2026-06-11T19:00:00Z'</td></tr>
+              <tr><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;color:#86efac;font-family:monospace">top_scorer_pick</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;">INSERT/UPDATE/SELECT</td><td style="padding:6px 8px;border-bottom:1px solid #1a1a1a;font-family:monospace;font-size:11px;">same pattern as champion_pick</td></tr>
+              <tr><td style="padding:6px 8px;color:#86efac;font-family:monospace">champion_odds</td><td style="padding:6px 8px;">SELECT</td><td style="padding:6px 8px;font-family:monospace;font-size:11px;">public (no auth required)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="grid-column:1/-1;background:#111;border:1px solid #222;border-radius:8px;padding:20px;">
+          <h3 style="color:#f59e0b;margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🔧 SDK Calls</h3>
+          <pre style="margin:0;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:4px;padding:16px;overflow-x:auto;font-size:12px;line-height:1.6;color:#e2e8f0;">// Load picks for active group
+const { data: champPick } = await supabase
+  .from('champion_pick')
+  .select('team, is_auto')
+  .eq('user_id', user.id)
+  .eq('group_id', groupId)
+  .single()
+
+const { data: tsPick } = await supabase
+  .from('top_scorer_pick')
+  .select('player_api_id, is_auto')
+  .eq('user_id', user.id)
+  .eq('group_id', groupId)
+  .single()
+
+// Save champion pick (upsert)
+await supabase.from('champion_pick').upsert(
+  { user_id: user.id, group_id: groupId, team: selectedTeam },
+  { onConflict: 'user_id,group_id' }
+)
+
+// Save top scorer pick (upsert)
+await supabase.from('top_scorer_pick').upsert(
+  { user_id: user.id, group_id: groupId, player_api_id: playerId },
+  { onConflict: 'user_id,group_id' }
+)
+
+// Load champion odds
+const { data: odds } = await supabase
+  .from('champion_odds')
+  .select('team, odds')
+  .order('odds')</pre>
+        </div>
+
+      </div>
+    </div>`
+}
+
+function renderErrors() {
+  const rows=ERROR_ROWS.map(r=>{if(r.section)return`<tr class="eh-section-row"><td colspan="5">${r.section}</td></tr>`;const sp=r.status==='done'?`<span class="eh-pill pill-ok">Done</span>`:`<span class="eh-pill pill-missing">Missing</span>`;const pp=r.prio==='done'?`<span class="eh-pill prio-done">Resolved</span>`:r.prio==='high'?`<span class="eh-pill prio-high">High</span>`:r.prio==='medium'?`<span class="eh-pill prio-medium">Medium</span>`:`<span class="eh-pill prio-low">Low</span>`;return`<tr><td><span class="eh-location">${r.location}</span></td><td><div class="eh-error-name">${r.name}</div><div class="eh-error-desc">${r.desc}</div></td><td>${sp}</td><td>${r.fix?`<span class="eh-fix">${r.fix}</span>`:'<span style="color:var(--faint)">—</span>'}</td><td>${pp}</td></tr>`}).join('')
+  document.getElementById('detail-content').innerHTML=`<div class="eh-page"><div class="eh-legend"><div class="eh-legend-item"><span class="eh-pill pill-ok">Done</span> handled</div><div class="eh-legend-item"><span class="eh-pill pill-missing">Missing</span> not handled</div><div class="eh-legend-item"><span class="eh-pill prio-high">High</span></div><div class="eh-legend-item"><span class="eh-pill prio-medium">Medium</span></div><div class="eh-legend-item"><span class="eh-pill prio-low">Low</span></div></div><table class="eh-table"><thead><tr><th>Location</th><th>Error / Scenario</th><th>Status</th><th>Fix</th><th>Priority</th></tr></thead><tbody>${rows}</tbody></table></div>`
+}
+
+function copyPrompt() { navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(()=>{const btn=document.querySelector('.copy-btn');btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500)}) }
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')prevStep();if(e.key==='ArrowRight')nextStep()})
+render()
+</script>
+</body>
+</html>
