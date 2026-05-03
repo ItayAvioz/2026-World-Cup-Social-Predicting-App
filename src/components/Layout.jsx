@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import BottomNav from './BottomNav.jsx'
+import FeedbackButton from './FeedbackButton.jsx'
 
 export default function Layout({ title, children, showBack = true, rightSlot, leftSlot }) {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export default function Layout({ title, children, showBack = true, rightSlot, le
         {children}
       </div>
       <BottomNav />
+      <FeedbackButton />
     </div>
   )
 }
