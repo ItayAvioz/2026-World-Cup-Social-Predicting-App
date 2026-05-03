@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
 import { TEAMS } from '../lib/teams.js'
 import Layout from '../components/Layout.jsx'
@@ -56,6 +57,7 @@ function fmtGameDate(dateStr) {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
+  useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'dashboard') }, [])
   const navigate           = useNavigate()
   const { showToast }      = useToast()
   const baseUsername       = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'Player'

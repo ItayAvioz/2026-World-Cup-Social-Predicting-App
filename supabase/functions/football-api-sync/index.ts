@@ -41,6 +41,26 @@ function json(data: unknown, status = 200): Response {
   })
 }
 
+// ─── EF error reporter ────────────────────────────────────────────────────────
+
+async function reportEfError(
+  supabase: ReturnType<typeof createClient>,
+  errorType: 'crash' | 'quota' | 'stats_write',
+  errorMsg: string,
+  context?: Record<string, unknown>
+): Promise<void> {
+  try {
+    await supabase.from('ef_errors').insert({
+      ef_name:    'football-api-sync',
+      error_type: errorType,
+      error_msg:  errorMsg,
+      context:    context ?? null,
+    })
+  } catch (e) {
+    console.error('reportEfError failed:', e instanceof Error ? e.message : e)
+  }
+}
+
 // ─── Team name normalisation ──────────────────────────────────────────────────
 
 const TEAM_ALIASES: Record<string, string> = {
@@ -583,6 +603,7 @@ async function handleSync(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg === 'RATE_LIMIT') {
+      await reportEfError(supabase, 'quota', msg, { game_id, stage })
       await supabase.rpc('fn_schedule_retry_sync', { p_game_id: game_id, p_stage: stage, p_delay_minutes: 10 })
       return json({ status: 'rate_limited_retry_10min', game_id })
     }
@@ -798,7 +819,10 @@ async function writeStats(
 
     console.log(`stats: written game=${game_id} teams=${teamStatsArr.length} players=${rows.length} events=${eventRows.length}`)
   } catch (e) {
-    console.error(`stats: failed game=${game_id}:`, e instanceof Error ? e.message : e)
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`stats: failed game=${game_id}:`, msg)
+    const _sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+    await reportEfError(_sb, 'stats_write', msg, { game_id })
   }
 }
 
@@ -841,6 +865,10 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('football-api-sync error:', msg)
+    try {
+      const _sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+      await reportEfError(_sb, 'crash', msg)
+    } catch { /* best-effort */ }
     return json({ error: msg }, 500)
   }
 })

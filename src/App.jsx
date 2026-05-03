@@ -1,5 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
+import { supabase } from './lib/supabase.js'
+import { useHeartbeat } from './lib/analytics.ts'
 import Dashboard from './pages/Dashboard.jsx'
 import Game      from './pages/Game.jsx'
 import Picks     from './pages/Picks.jsx'
@@ -25,9 +27,16 @@ function AuthGuard({ children }) {
   return children
 }
 
+function AppInner() {
+  const { user } = useAuth()
+  useHeartbeat(supabase, user?.id)
+  return null
+}
+
 export default function App() {
   return (
     <HashRouter>
+      <AppInner />
       <Routes>
         <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
         <Route path="/game/:id"  element={<AuthGuard><Game /></AuthGuard>} />

@@ -204,6 +204,26 @@ async function handleChampion(supabase: ReturnType<typeof createClient>): Promis
   return json({ status: 'done', events: events.length, upserted, skipped_unknown, errors, requests_remaining: remaining })
 }
 
+// ─── EF error reporter ────────────────────────────────────────────────────────
+
+async function reportEfError(
+  errorType: 'crash' | 'quota',
+  errorMsg: string,
+  context?: Record<string, unknown>
+): Promise<void> {
+  try {
+    const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+    await sb.from('ef_errors').insert({
+      ef_name:    'sync-odds',
+      error_type: errorType,
+      error_msg:  errorMsg,
+      context:    context ?? null,
+    })
+  } catch (e) {
+    console.error('reportEfError failed:', e instanceof Error ? e.message : e)
+  }
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -226,6 +246,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('sync-odds error:', msg)
+    await reportEfError('crash', msg, { mode: body.mode })
     return json({ error: msg }, 500)
   }
 })

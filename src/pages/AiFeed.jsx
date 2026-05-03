@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import { logEvent } from '../lib/analytics.ts'
 import Layout from '../components/Layout.jsx'
 
 const TRUNCATE_LIMIT = 300
@@ -46,6 +47,7 @@ export default function AiFeed() {
   const { user }      = useAuth()
   const navigate      = useNavigate()
   const { showToast } = useToast()
+  useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'ai_feed') }, [])
 
   const [groups,         setGroups]         = useState(null)   // null = loading
   const [selectedId,     setSelectedId]     = useState(null)

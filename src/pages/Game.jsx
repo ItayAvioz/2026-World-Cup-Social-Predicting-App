@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import { logEvent } from '../lib/analytics.ts'
 import { TEAMS } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
@@ -54,6 +55,7 @@ export default function Game() {
   const urlGroupId = searchParams.get('group')
   const { user } = useAuth()
   const { showToast } = useToast()
+  useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'game') }, [])
 
   const [game,            setGame]            = useState(null)
   const [myPred,          setMyPred]          = useState(undefined)  // undefined=loading, null=no pick
@@ -214,6 +216,7 @@ export default function Game() {
       else showToast('Failed to save prediction', 'error')
       return
     }
+    logEvent(supabase, user.id, 'prediction_submit', 'game')
     // Update myPred for the resolved group (legacy)
     if (targetGroupId === resolvedGroupId) setMyPred(data)
     // Update allGroupPreds for the edited group

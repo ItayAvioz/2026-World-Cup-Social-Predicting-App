@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
+import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../lib/supabase.js'
@@ -38,6 +39,7 @@ export default function Picks() {
   const { showToast } = useToast()
   const navigate = useNavigate()
   const user = session?.user
+  useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'picks') }, [user?.id])
 
   const isLocked = new Date() >= new Date(PICKS_DEADLINE)
   const activeGroupRef = useRef(null)
@@ -216,6 +218,7 @@ export default function Picks() {
     } else {
       setSavedChampion(selChampion)
       showToast('Champion pick saved!', 'success')
+      logEvent(supabase, user.id, 'pick_submit', 'picks')
     }
   }
 
@@ -234,6 +237,7 @@ export default function Picks() {
     } else {
       setSavedPlayer({ player_name: selPlayer.name })
       showToast('Top scorer pick saved!', 'success')
+      logEvent(supabase, user.id, 'pick_submit', 'picks')
     }
   }
 

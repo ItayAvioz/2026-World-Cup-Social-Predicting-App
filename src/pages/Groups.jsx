@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import { logEvent } from '../lib/analytics.ts'
 import { TEAMS } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
@@ -44,6 +45,7 @@ function computeDist(preds) {
 
 export default function Groups() {
   const { user }       = useAuth()
+  useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'groups') }, [])
   const { showToast }  = useToast()
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
