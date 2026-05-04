@@ -1,6 +1,7 @@
-// nightly-summary v19
+// nightly-summary v20
 // 4-agent Judge LLM system. Runs v11/v12/v13/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
+// v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
 //   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
