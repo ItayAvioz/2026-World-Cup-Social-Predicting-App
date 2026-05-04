@@ -1,7 +1,8 @@
-// nightly-summary v20
+// nightly-summary v22
 // 4-agent Judge LLM system. Runs v11/v12/v13/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
 // v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
+// v22: Judge — expand direction check to cover synonym phrases; add champion-as-team deduction; specific reasoning rule. Prompts — champion confusion guard; v12 direction synonym fix.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
 //   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
@@ -44,6 +45,7 @@ const AGENTS = [
   { slot: 'candidate_2', temperature: 0.5, seed: 43 },
   { slot: 'candidate_3', temperature: 0.4, seed: 44 },
   { slot: 'baseline',    temperature: 0.6, seed: 42 },
+  { slot: 'candidate_4', temperature: 0.6, seed: 42 },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ async function callAgent(
 // ─── Judge call ──────────────────────────────────────────────────────────────
 
 interface JudgeResult {
-  winnerAgent: 1 | 2 | 3 | 4
+  winnerAgent: 1 | 2 | 3 | 4 | 5
   reasoning: string
   scores: Array<{
     agent: number
@@ -127,7 +129,7 @@ interface JudgeResult {
   completionTokens: number
 }
 
-const JUDGE_SYSTEM = `You are a judge evaluating four nightly WhatsApp roast summaries for a World Cup prediction group.
+const JUDGE_SYSTEM = `You are a judge evaluating five nightly WhatsApp roast summaries for a World Cup prediction group.
 Score each on 4 dimensions (0-10 each) and pick one winner.
 
 ACCURACY VERIFICATION - do this first, before scoring:
@@ -136,7 +138,7 @@ For each candidate, check every factual claim against the payload:
   - today.global_top[].pts is the global total across ALL groups - never accept it as a user's today score. If stated as today score -> deduct 3 from accuracy.
   - If the summary claims a user "topped the competition today" but their today_pts = 0 -> deduct 3 from accuracy.
   - The point gap stated between rank 1 and rank 2 must equal leaderboard[0].total_pts - leaderboard[1].total_pts exactly. If wrong -> deduct 3 from accuracy.
-  - If the summary claims "competitors got it right" for a game, verify global_upset=false for that game. If global_upset=true -> deduct 3 from accuracy.
+  - If the summary implies competitors/others predicted correctly for a game (any of: "got it right", "had a field day", "saw it coming", "were correct", "got it", "called it"), verify global_upset=false for that game. If global_upset=true -> deduct 3 from accuracy.
   - Any scoreline stated for a user must appear in their predictions[].preds[].pred. If not found -> deduct 2 from accuracy.
 Multiple errors stack. Start accuracy at 10, apply deductions.
 Hard floor: if final accuracy <= 3, that candidate is disqualified regardless of other scores.
@@ -144,25 +146,26 @@ Hard floor: if final accuracy <= 3, that candidate is disqualified regardless of
 SCORING WEIGHTS:
 - accuracy (45%): verified above - no invented facts; streak = abs(streak); scorelines correct; champion result correct
 - humor (30%): picks used as rivalry fuel when champion played; specific scoreline for worst performer; P4 unique angle with actual numbers (not template phrase); personal not generic
-- compliance (15%): no banned words (journey/remarkable/incredible/exciting); no pronouns he/she/his/her/him; no invented character labels; facts from payload only
+- compliance (15%): no banned words (journey/remarkable/incredible/exciting); no pronouns he/she/his/her/him; no invented character labels; facts from payload only; picks[].champion is a tournament pick — deduct 2 if referenced as a team playing in today's games (game teams are only in games[].home_team / away_team)
 - structure (10%): 6 paragraphs; P6 starts "Tomorrow's danger:"; exact point gap appears; streak referenced in P6
 
 Return valid JSON only:
 {
-  "winner": 1 or 2 or 3 or 4,
-  "reasoning": "one sentence explaining why the winner is best",
+  "winner": 1 or 2 or 3 or 4 or 5,
+  "reasoning": "one sentence naming ONE specific thing the winner did better than the others — not generic phrases like 'most accurate and humorous'",
   "scores": [
     {"agent":1,"accuracy":N,"humor":N,"compliance":N,"structure":N},
     {"agent":2,"accuracy":N,"humor":N,"compliance":N,"structure":N},
     {"agent":3,"accuracy":N,"humor":N,"compliance":N,"structure":N},
-    {"agent":4,"accuracy":N,"humor":N,"compliance":N,"structure":N}
+    {"agent":4,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":5,"accuracy":N,"humor":N,"compliance":N,"structure":N}
   ]
 }`
 
 async function callJudge(
   openai: OpenAI,
   payload: unknown,
-  candidates: Array<{ agent: number; content: string }>,
+  candidates: Array<{ agent: number; slot: string; content: string }>,
 ): Promise<JudgeResult> {
   const candidateBlocks = candidates
     .map(c => `\n\nCANDIDATE ${c.agent} (${c.slot}):\n${c.content}`)
@@ -186,8 +189,8 @@ async function callJudge(
       })
       const raw = res.choices[0]?.message?.content?.trim() ?? '{}'
       const parsed = JSON.parse(raw)
-      const winner = Number(parsed.winner) as 1 | 2 | 3 | 4
-      if (![1, 2, 3, 4].includes(winner)) throw new Error(`invalid winner: ${winner}`)
+      const winner = Number(parsed.winner) as 1 | 2 | 3 | 4 | 5
+      if (![1, 2, 3, 4, 5].includes(winner)) throw new Error(`invalid winner: ${winner}`)
       const scores = (parsed.scores ?? []).map((s: Record<string, number>, i: number) => ({
         agent:      s.agent ?? (i + 1),
         accuracy:   s.accuracy   ?? 0,
@@ -208,16 +211,16 @@ async function callJudge(
       if (attempt === 1) {
         // Fallback: pick agent 1
         return {
-          winnerAgent:      1 as 1 | 2 | 3 | 4,
+          winnerAgent:      1 as 1 | 2 | 3 | 4 | 5,
           reasoning:        'Judge failed — defaulted to agent 1',
-          scores:           [1,2,3,4].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
+          scores:           [1,2,3,4,5].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
           promptTokens:     0,
           completionTokens: 0,
         }
       }
     }
   }
-  return { winnerAgent: 1 as 1 | 2 | 3 | 4, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
+  return { winnerAgent: 1 as 1 | 2 | 3 | 4 | 5, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
 }
 
 // ─── Payload builder (v17) ────────────────────────────────────────────────────
@@ -627,7 +630,7 @@ serve(async (req) => {
     const { data: pRows, error: pErr } = await supabase
       .from('prompt_versions')
       .select('*')
-      .in('agent_slot', ['main', 'candidate_2', 'candidate_3', 'baseline'])
+      .in('agent_slot', ['main', 'candidate_2', 'candidate_3', 'baseline', 'candidate_4'])
       .not('agent_slot', 'is', null)
       .order('version_tag', { ascending: false })
 
@@ -874,7 +877,7 @@ serve(async (req) => {
       }
 
       // 8e. Judge (only when 3 agents ran)
-      let winnerAgent: 1 | 2 | 3 | 4 = 1
+      let winnerAgent: 1 | 2 | 3 | 4 | 5 = 1
       let judgeResult: JudgeResult | null = null
       let judgeRunId: string | null = null
 
