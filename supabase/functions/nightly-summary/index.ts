@@ -1,5 +1,5 @@
 // nightly-summary v22
-// 4-agent Judge LLM system. Runs v11/v12/v13/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
+// 5-agent Judge LLM system. Runs v11/v12/v13/v10B/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
 // v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
 // v22: Judge — expand direction check to cover synonym phrases; add champion-as-team deduction; specific reasoning rule. Prompts — champion confusion guard; v12 direction synonym fix.
