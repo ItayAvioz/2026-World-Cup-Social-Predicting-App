@@ -1,5 +1,6 @@
-// nightly-summary v18
+// nightly-summary v19
 // 4-agent Judge LLM system. Runs v11/v12/v13/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
+// v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
 //   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
@@ -33,7 +34,7 @@ const GROUP_GAP_MS  = 2_000
 const OPENAI_MODEL  = 'gpt-4o-mini'
 const JUDGE_MODEL   = 'gpt-4o'
 const MAX_TOKENS    = 400
-const JUDGE_MAX_TOK = 200
+const JUDGE_MAX_TOK = 350
 const MIN_CONTENT_LEN = 50
 
 // Per-agent parameters
@@ -128,18 +129,27 @@ interface JudgeResult {
 const JUDGE_SYSTEM = `You are a judge evaluating four nightly WhatsApp roast summaries for a World Cup prediction group.
 Score each on 4 dimensions (0-10 each) and pick one winner.
 
-SCORING WEIGHTS:
-- accuracy (45%): No today_exact/total_exact confusion; streak number = abs(streak); no invented facts; scorelines named correctly; champion result correct
-- humor (30%): Picks used as rivalry fuel when champion played; specific scoreline named for worst performer; P4 has unique angle with actual numbers (not template); personal not generic
-- compliance (15%): No banned words (journey/remarkable/incredible/exciting); no pronouns he/she/his/her; no invented character labels; facts from payload only
-- structure (10%): 6 paragraphs; P6 starts "Tomorrow's danger:"; exact point gap between rank 1 and rank 2 appears somewhere; streak referenced in P6
+ACCURACY VERIFICATION - do this first, before scoring:
+For each candidate, check every factual claim against the payload:
+  - Every point value stated for a user must match leaderboard[].today_pts exactly. If wrong -> deduct 3 from accuracy.
+  - today.global_top[].pts is the global total across ALL groups - never accept it as a user's today score. If stated as today score -> deduct 3 from accuracy.
+  - If the summary claims a user "topped the competition today" but their today_pts = 0 -> deduct 3 from accuracy.
+  - The point gap stated between rank 1 and rank 2 must equal leaderboard[0].total_pts - leaderboard[1].total_pts exactly. If wrong -> deduct 3 from accuracy.
+  - If the summary claims "competitors got it right" for a game, verify global_upset=false for that game. If global_upset=true -> deduct 3 from accuracy.
+  - Any scoreline stated for a user must appear in their predictions[].preds[].pred. If not found -> deduct 2 from accuracy.
+Multiple errors stack. Start accuracy at 10, apply deductions.
+Hard floor: if final accuracy <= 3, that candidate is disqualified regardless of other scores.
 
-Hard floor: if accuracy <= 3, that candidate is disqualified regardless of other scores.
+SCORING WEIGHTS:
+- accuracy (45%): verified above - no invented facts; streak = abs(streak); scorelines correct; champion result correct
+- humor (30%): picks used as rivalry fuel when champion played; specific scoreline for worst performer; P4 unique angle with actual numbers (not template phrase); personal not generic
+- compliance (15%): no banned words (journey/remarkable/incredible/exciting); no pronouns he/she/his/her/him; no invented character labels; facts from payload only
+- structure (10%): 6 paragraphs; P6 starts "Tomorrow's danger:"; exact point gap appears; streak referenced in P6
 
 Return valid JSON only:
 {
   "winner": 1 or 2 or 3 or 4,
-  "reasoning": "one sentence",
+  "reasoning": "one sentence explaining why the winner is best",
   "scores": [
     {"agent":1,"accuracy":N,"humor":N,"compliance":N,"structure":N},
     {"agent":2,"accuracy":N,"humor":N,"compliance":N,"structure":N},
