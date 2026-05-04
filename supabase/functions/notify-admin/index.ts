@@ -179,9 +179,10 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
       <h3>Judge LLM (yesterday)</h3>
       <table><tbody>
         ${row('Runs', Number(d.judge_runs) || 0)}
-        ${row('v11-main wins',   Number(d.judge_v11_wins) || 0)}
-        ${row('v12-picks wins',  Number(d.judge_v12_wins) || 0)}
-        ${row('v13-unique wins', Number(d.judge_v13_wins) || 0)}
+        ${row('v11-main wins',      Number(d.judge_v11_wins) || 0)}
+        ${row('v12-picks wins',     Number(d.judge_v12_wins) || 0)}
+        ${row('v13-unique wins',    Number(d.judge_v13_wins) || 0)}
+        ${row('v10-baseline wins',  Number(d.judge_v10_wins) || 0)}
       </tbody></table>
 
       <h3>EF errors (24h) — ${d.ef_errors_count}</h3>

@@ -1,5 +1,5 @@
-// nightly-summary v17
-// 3-agent Judge LLM system. Runs v11/v12/v13 in parallel, judge picks winner, saves to ai_summaries.
+// nightly-summary v18
+// 4-agent Judge LLM system. Runs v11/v12/v13/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
 //   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
@@ -41,6 +41,7 @@ const AGENTS = [
   { slot: 'main',        temperature: 0.6, seed: 42 },
   { slot: 'candidate_2', temperature: 0.5, seed: 43 },
   { slot: 'candidate_3', temperature: 0.4, seed: 44 },
+  { slot: 'baseline',    temperature: 0.6, seed: 42 },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -110,7 +111,7 @@ async function callAgent(
 // ─── Judge call ──────────────────────────────────────────────────────────────
 
 interface JudgeResult {
-  winnerAgent: 1 | 2 | 3
+  winnerAgent: 1 | 2 | 3 | 4
   reasoning: string
   scores: Array<{
     agent: number
@@ -124,7 +125,7 @@ interface JudgeResult {
   completionTokens: number
 }
 
-const JUDGE_SYSTEM = `You are a judge evaluating three nightly WhatsApp roast summaries for a World Cup prediction group.
+const JUDGE_SYSTEM = `You are a judge evaluating four nightly WhatsApp roast summaries for a World Cup prediction group.
 Score each on 4 dimensions (0-10 each) and pick one winner.
 
 SCORING WEIGHTS:
@@ -137,12 +138,13 @@ Hard floor: if accuracy <= 3, that candidate is disqualified regardless of other
 
 Return valid JSON only:
 {
-  "winner": 1 or 2 or 3,
+  "winner": 1 or 2 or 3 or 4,
   "reasoning": "one sentence",
   "scores": [
     {"agent":1,"accuracy":N,"humor":N,"compliance":N,"structure":N},
     {"agent":2,"accuracy":N,"humor":N,"compliance":N,"structure":N},
-    {"agent":3,"accuracy":N,"humor":N,"compliance":N,"structure":N}
+    {"agent":3,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":4,"accuracy":N,"humor":N,"compliance":N,"structure":N}
   ]
 }`
 
@@ -151,7 +153,10 @@ async function callJudge(
   payload: unknown,
   candidates: Array<{ agent: number; content: string }>,
 ): Promise<JudgeResult> {
-  const userMsg = `PAYLOAD:\n${JSON.stringify(payload)}\n\nCANDIDATE 1 (v11-main):\n${candidates[0].content}\n\nCANDIDATE 2 (v12-picks):\n${candidates[1].content}\n\nCANDIDATE 3 (v13-unique):\n${candidates[2].content}`
+  const candidateBlocks = candidates
+    .map(c => `\n\nCANDIDATE ${c.agent} (${c.slot}):\n${c.content}`)
+    .join('')
+  const userMsg = `PAYLOAD:\n${JSON.stringify(payload)}${candidateBlocks}`
 
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await sleep(3000)
@@ -170,8 +175,8 @@ async function callJudge(
       })
       const raw = res.choices[0]?.message?.content?.trim() ?? '{}'
       const parsed = JSON.parse(raw)
-      const winner = Number(parsed.winner) as 1 | 2 | 3
-      if (![1, 2, 3].includes(winner)) throw new Error(`invalid winner: ${winner}`)
+      const winner = Number(parsed.winner) as 1 | 2 | 3 | 4
+      if (![1, 2, 3, 4].includes(winner)) throw new Error(`invalid winner: ${winner}`)
       const scores = (parsed.scores ?? []).map((s: Record<string, number>, i: number) => ({
         agent:      s.agent ?? (i + 1),
         accuracy:   s.accuracy   ?? 0,
@@ -192,16 +197,16 @@ async function callJudge(
       if (attempt === 1) {
         // Fallback: pick agent 1
         return {
-          winnerAgent:      1,
+          winnerAgent:      1 as 1 | 2 | 3 | 4,
           reasoning:        'Judge failed — defaulted to agent 1',
-          scores:           [1,2,3].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
+          scores:           [1,2,3,4].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
           promptTokens:     0,
           completionTokens: 0,
         }
       }
     }
   }
-  return { winnerAgent: 1, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
+  return { winnerAgent: 1 as 1 | 2 | 3 | 4, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
 }
 
 // ─── Payload builder (v17) ────────────────────────────────────────────────────
@@ -611,8 +616,7 @@ serve(async (req) => {
     const { data: pRows, error: pErr } = await supabase
       .from('prompt_versions')
       .select('*')
-      .in('agent_slot', ['main', 'candidate_2', 'candidate_3'])
-      .eq('is_active', false)   // new prompts are is_active=false; old v10 main is is_active=true
+      .in('agent_slot', ['main', 'candidate_2', 'candidate_3', 'baseline'])
       .not('agent_slot', 'is', null)
       .order('version_tag', { ascending: false })
 
@@ -859,11 +863,11 @@ serve(async (req) => {
       }
 
       // 8e. Judge (only when 3 agents ran)
-      let winnerAgent: 1 | 2 | 3 = 1
+      let winnerAgent: 1 | 2 | 3 | 4 = 1
       let judgeResult: JudgeResult | null = null
       let judgeRunId: string | null = null
 
-      if (!testMode && candidates.length === 3) {
+      if (!testMode && candidates.length >= 3) {
         judgeResult = await callJudge(openai, payload, candidates)
         winnerAgent = judgeResult.winnerAgent
 
@@ -921,7 +925,7 @@ serve(async (req) => {
         max_tokens:        MAX_TOKENS,
         seed:              winner.seed,
         ...(judgeRunId    ? { judge_run_id: judgeRunId }   : {}),
-        ...(candidates.length === 3 ? { winner_agent: winnerAgent } : {}),
+        ...(candidates.length >= 3 ? { winner_agent: winnerAgent } : {}),
       }
 
       let { error: upsertErr } = await supabase
