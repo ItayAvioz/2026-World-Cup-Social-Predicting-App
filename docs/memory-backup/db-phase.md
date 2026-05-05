@@ -2,8 +2,8 @@
 name: db-phase
 description: DB build status, migration files, RPCs, schema decisions, test pages — active during DB build & verify phase
 type: project
+originSessionId: 2558683a-5bcd-4860-8faa-5b07a193465b
 ---
-
 ## DB Build Status
 
 | Table | Status | Migration file |
@@ -51,8 +51,9 @@ All DB tables + views ✅ COMPLETE. Migrations 9–26 deployed and verified.
 - `fn_calculate_points()` — trigger on games AFTER UPDATE OF score_home/score_away
 - `fn_calculate_pick_points()` — trigger on games AFTER UPDATE OF knockout_winner; awards champion + top scorer 10pt; resets first (idempotent)
 - `fn_auto_predict_game(game_id)` — inserts CONTRARIAN predictions at kickoff (picks least-popular W/D/L outcome, generates matching score per user; falls back to random if no predictions exist); self-unschedules; logs game_id + outcome + row count to Postgres log. Migration 24+25.
-- `fn_schedule_auto_predictions()` — called once after seed, registers 104 cron jobs ✅ done
-- `fn_schedule_ai_summaries()` — NOT YET CALLED — needs Edge Function URL + service_role_key first
+- `fn_schedule_auto_predictions()` — loops ALL games (no filter), creates/updates `auto-predict-{game_id}` cron at each game's kickoff time. Now called automatically by trigger on INSERT — no manual call needed.
+- `fn_schedule_ai_summaries()` — loops ALL games, creates/updates `ai-summary-{date}` cron 150min after last KO of each day. Now called automatically by trigger on INSERT — no manual call needed.
+- `fn_auto_schedule_game()` + `trg_auto_schedule_game` — AFTER INSERT trigger on games (M68, 2026-05-04). Auto-calls fn_schedule_auto_predictions + fn_schedule_ai_summaries + fn_schedule_game_sync on every game insert. Guards: fn_schedule_game_sync only fires if KO > now() AND api_fixture_id IS NOT NULL. Exception handlers prevent INSERT failure.
 - `team_tournament_stats` VIEW — per team: W/D/L + stat averages (finished games only). SECURITY INVOKER. Public SELECT granted.
 - `player_tournament_stats` VIEW — per player: total goals/assists/cards (sort client-side). SECURITY INVOKER. Public SELECT granted.
 - `leaderboard` VIEW — internal helper for RPCs. SECURITY INVOKER. Public SELECT granted (clients use RPCs, not view directly).

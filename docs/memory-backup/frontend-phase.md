@@ -63,6 +63,7 @@ originSessionId: 160ef209-545c-43fc-b9ae-acdde82d9177
 | `src/components/Modal.jsx` | ✅ DONE |
 | `src/components/GroupSelector.jsx` | ✅ DONE |
 | `src/components/Flag.jsx` | ✅ DONE |
+| `src/components/FeedbackButton.jsx` | ✅ DONE — Hebrew feedback modal, 3-step, screenshot upload, deployed 2026-05-03 |
 
 ## Phase 2 — App Shell
 | File | Status |

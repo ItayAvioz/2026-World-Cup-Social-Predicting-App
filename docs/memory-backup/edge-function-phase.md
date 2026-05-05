@@ -7,12 +7,22 @@ originSessionId: 81b3cce7-9ecd-4e9b-96b5-3ec88d6dcbf9
 ## Status Summary
 - football-api-sync ✅ ACTIVE v24 (2026-04-05)
 - sync-odds ✅ ACTIVE v14 (2026-04-05)
-- nightly-summary ✅ ACTIVE v14 (2026-04-21)
+- nightly-summary ✅ ACTIVE v16 (2026-04-22)
+
+## nightly-summary v16 — Deployed 2026-04-22
+- Step 7d: global rank per (user × group) — sorts by total_points DESC, exact_scores DESC — matches leaderboard RPC exactly
+- exact_scores tracked from predictions where points_earned = 3 (per user × group)
+- RANK() tiebreaker: same pts AND same exact_scores → same rank; otherwise increment
+- Step 8g: writes `display_data: { global_ranks: { username: rank } }` to ai_summaries after upsert
+- display_data is UI-only — never part of input_json/LLM payload
+- Applies to new summaries only (old summaries keep existing display_data)
+
+## nightly-summary v15 — Deployed 2026-04-22
+- Step 7d: global rank per (user × group) — total_points only (no tiebreaker) — superseded by v16
+- Daily standings (AiFeed.jsx): shows ALL group members incl. 0 pts / no predictions
 
 ## nightly-summary v14 — Deployed 2026-04-21
 - Step 7d: all-time global rank per user, deduped by (user_id, game_id), max points per game
-- Step 8g: writes `display_data: { global_ranks: { username: rank } }` to ai_summaries after upsert
-- display_data is UI-only — never part of input_json/LLM payload
 - M57: ai_summaries.display_data jsonb column added
 
 ## nightly-summary v13 — Built, Deployed & Verified 2026-04-12 (live test)
@@ -97,6 +107,13 @@ SELECT LEFT(content, 400) FROM ai_summaries ORDER BY generated_at DESC LIMIT 1;
 ```
 
 ---
+
+## Game Insert Auto-Scheduling — M68 (2026-05-04) ✅
+`trg_auto_schedule_game` AFTER INSERT trigger on `public.games` — deployed M68.
+Automatically calls: fn_schedule_auto_predictions() + fn_schedule_ai_summaries() + fn_schedule_game_sync(NEW.id).
+Guards: fn_schedule_game_sync only fires if `kick_off_time > now()` AND `api_fixture_id IS NOT NULL`.
+Exception handlers: scheduling failure never blocks the INSERT.
+**Knockout games inserted before setup mode**: api_fixture_id is null → fn_schedule_game_sync skipped → call manually after running EF setup mode.
 
 ## football-api-sync v24 — ACTIVE
 
