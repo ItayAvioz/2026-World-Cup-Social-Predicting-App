@@ -205,16 +205,32 @@ export default function Groups() {
     })
   }, [focusGames])
 
-  // ── Pre-fill join from URL or localStorage ─────────────────────────────
+  // ── Auto-join from invite link (URL param or localStorage fallback) ──────
   useEffect(() => {
     const urlCode = searchParams.get('invite')
     const stored  = localStorage.getItem('wc2026_pending_invite')
     const code    = urlCode || stored
-    if (code) {
-      setJoinCode(code.toUpperCase())
-      setJoinOpen(true)
-      if (stored) localStorage.removeItem('wc2026_pending_invite')
-    }
+    if (!code) return
+    if (stored) localStorage.removeItem('wc2026_pending_invite')
+    navigate('/groups', { replace: true }) // clean invite code from URL
+    ;(async () => {
+      const { error } = await supabase.rpc('join_group', { p_invite_code: code.toUpperCase() })
+      if (!error) {
+        showToast('You\'ve joined the group!', 'success')
+        loadGroups()
+      } else if (error.message === 'already_member') {
+        showToast('You\'re already in this group', 'success')
+      } else {
+        let msg = 'Failed to join group'
+        if (error.message === 'group_full')          msg = 'This group is full (max 10 members)'
+        else if (error.message === 'invalid_invite_code') msg = 'Invalid invite code — check and try again'
+        else if (error.message === 'max_groups_reached')  msg = 'You can be in at most 3 groups'
+        else if (error.message === 'tournament_started')  msg = 'Cannot join after tournament starts'
+        showToast(msg, 'error')
+        setJoinCode(code.toUpperCase())
+        setJoinOpen(true) // fallback: open dialog with code pre-filled
+      }
+    })()
   }, [searchParams])
 
   // ── Create group ───────────────────────────────────────────────────────
