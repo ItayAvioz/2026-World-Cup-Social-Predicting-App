@@ -8,7 +8,7 @@ export const TEAMS = [
     schedule:[
       { phase:'group', label:'Group A', date:'Thu, Jun 11', opponent:'South Africa', oppCode:'za', venue:'Estadio Azteca', city:'Mexico City', idt:'22:00', idtLabel:'Jun 11' },
       { phase:'group', label:'Group A', date:'Thu, Jun 18', opponent:'South Korea',  oppCode:'kr', venue:'Estadio Akron',  city:'Guadalajara', idt:'06:00', idtLabel:'Jun 19 ⁺¹' },
-      { phase:'group', label:'Group A', date:'Wed, Jun 24', opponent:'UEFA PO-D TBD', oppCode:null, venue:'Estadio Azteca', city:'Mexico City', idt:'04:00', idtLabel:'Jun 25 ⁺¹' },
+      { phase:'group', label:'Group A', date:'Wed, Jun 24', opponent:'Czech Republic', oppCode:'cz', venue:'Estadio Azteca', city:'Mexico City', idt:'04:00', idtLabel:'Jun 25 ⁺¹' },
       { phase:'knockout', label:'Round of 32', date:'Tue, Jun 30', opponent:'TBD (if advancing)', oppCode:null, venue:'Estadio Azteca', city:'Mexico City', idt:'TBD', idtLabel:'Jun 30' },
     ]
   },
@@ -16,11 +16,13 @@ export const TEAMS = [
     fifaRank:61, best:'Group Stage', times:'3 appearances', lastAchieved:'2010 (as host)', lastWC:'2010 (South Africa) — Group Stage (as host)' },
   { name:'South Korea',  code:'kr', group:'A', conf:'AFC',      host:false, lat:37.6, lng:127.0,
     fifaRank:22, best:'4th Place', times:'1×', lastAchieved:'2002 (Japan/Korea)', lastWC:'2022 (Qatar) — Round of 16' },
+  { name:'Czech Republic', code:'cz', group:'A', conf:'UEFA',   host:false, lat:50.1, lng:14.4,
+    fifaRank:41, best:'Runner-Up (as Czechoslovakia)', times:'2×', lastAchieved:'1962 (Chile)', lastWC:'2006 (Germany) — Group Stage' },
   // GROUP B
   { name:'Canada', code:'ca', group:'B', conf:'CONCACAF', host:true, lat:57.0, lng:-96.0,
     fifaRank:29, best:'Group Stage', times:'2 appearances', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — Group Stage',
     schedule:[
-      { phase:'group', label:'Group B', date:'Fri, Jun 12', opponent:'UEFA PO-A TBD', oppCode:null, venue:'BMO Field',  city:'Toronto',    idt:'22:00', idtLabel:'Jun 12' },
+      { phase:'group', label:'Group B', date:'Fri, Jun 12', opponent:'Bosnia-Herzegovina', oppCode:'ba', venue:'BMO Field',  city:'Toronto',    idt:'22:00', idtLabel:'Jun 12' },
       { phase:'group', label:'Group B', date:'Thu, Jun 18', opponent:'Qatar',          oppCode:'qa', venue:'BC Place',   city:'Vancouver',  idt:'01:00', idtLabel:'Jun 19 ⁺¹' },
       { phase:'group', label:'Group B', date:'Wed, Jun 24', opponent:'Switzerland',    oppCode:'ch', venue:'BC Place',   city:'Vancouver',  idt:'22:00', idtLabel:'Jun 24' },
       { phase:'knockout', label:'Round of 32', date:'Thu, Jul 2', opponent:'TBD (if advancing)', oppCode:null, venue:'BC Place', city:'Vancouver', idt:'TBD', idtLabel:'Jul 2' },
@@ -30,6 +32,8 @@ export const TEAMS = [
     fifaRank:51, best:'Group Stage (host)', times:'1×', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — Group Stage (as host)' },
   { name:'Switzerland', code:'ch', group:'B', conf:'UEFA', host:false, lat:46.9, lng:7.4,
     fifaRank:18, best:'Quarter-Finals', times:'3×', lastAchieved:'1954 (Switzerland)', lastWC:'2022 (Qatar) — Round of 16' },
+  { name:'Bosnia-Herzegovina', code:'ba', group:'B', conf:'UEFA', host:false, lat:43.85, lng:18.35,
+    fifaRank:65, best:'Group Stage', times:'1 appearance', lastAchieved:'2014 (Brazil)', lastWC:'2014 (Brazil) — Group Stage' },
   // GROUP C
   { name:'Brazil',   code:'br', group:'C', conf:'CONMEBOL', host:false, lat:-15.8, lng:-47.9,
     fifaRank:5,  best:'World Champion', times:'5×', lastAchieved:'2002 (Japan/Korea)', lastWC:'2022 (Qatar) — Quarter-Finals' },
@@ -45,7 +49,7 @@ export const TEAMS = [
     schedule:[
       { phase:'group', label:'Group D', date:'Fri, Jun 12', opponent:'Paraguay',       oppCode:'py', venue:'SoFi Stadium', city:'Inglewood, CA', idt:'04:00', idtLabel:'Jun 13 ⁺¹' },
       { phase:'group', label:'Group D', date:'Fri, Jun 19', opponent:'Australia',       oppCode:'au', venue:'Lumen Field',  city:'Seattle',       idt:'22:00', idtLabel:'Jun 19' },
-      { phase:'group', label:'Group D', date:'Thu, Jun 25', opponent:'UEFA PO-C TBD',   oppCode:null, venue:'SoFi Stadium', city:'Inglewood, CA', idt:'05:00', idtLabel:'Jun 26 ⁺¹' },
+      { phase:'group', label:'Group D', date:'Thu, Jun 25', opponent:'Turkey',           oppCode:'tr', venue:'SoFi Stadium', city:'Inglewood, CA', idt:'05:00', idtLabel:'Jun 26 ⁺¹' },
       { phase:'knockout', label:'Round of 32', date:'Sun, Jun 28', opponent:'TBD (if advancing)', oppCode:null, venue:'SoFi Stadium', city:'Inglewood, CA', idt:'TBD', idtLabel:'Jun 28' },
     ]
   },
@@ -53,6 +57,8 @@ export const TEAMS = [
     fifaRank:40, best:'Quarter-Finals', times:'1×', lastAchieved:'2010 (South Africa)', lastWC:'2010 (South Africa) — Quarter-Finals' },
   { name:'Australia', code:'au', group:'D', conf:'AFC',      host:false, lat:-25.3, lng:133.8,
     fifaRank:27, best:'Round of 16', times:'2×', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — Round of 16' },
+  { name:'Turkey',    code:'tr', group:'D', conf:'UEFA',     host:false, lat:39.9, lng:32.85,
+    fifaRank:22, best:'3rd Place', times:'1×', lastAchieved:'2002 (Japan/Korea)', lastWC:'2002 (Japan/Korea) — 3rd Place' },
   // GROUP E
   { name:'Germany',     code:'de', group:'E', conf:'UEFA',     host:false, lat:52.5, lng:13.4,
     fifaRank:10, best:'World Champion', times:'4×', lastAchieved:'2014 (Brazil)', lastWC:'2022 (Qatar) — Group Stage' },
@@ -69,6 +75,8 @@ export const TEAMS = [
     fifaRank:19, best:'Round of 16', times:'4×', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — Round of 16' },
   { name:'Tunisia',     code:'tn', group:'F', conf:'CAF',  host:false, lat:34.0, lng:9.0,
     fifaRank:47, best:'Group Stage', times:'6 appearances', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — Group Stage' },
+  { name:'Sweden',      code:'se', group:'F', conf:'UEFA', host:false, lat:59.3, lng:18.1,
+    fifaRank:38, best:'Runner-Up', times:'1×', lastAchieved:'1958 (Sweden)', lastWC:'2018 (Russia) — Quarter-Finals' },
   // GROUP G
   { name:'Belgium',     code:'be', group:'G', conf:'UEFA', host:false, lat:50.8, lng:4.4,
     fifaRank:9,  best:'3rd Place', times:'1×', lastAchieved:'2018 (Russia)', lastWC:'2022 (Qatar) — Group Stage' },
@@ -94,6 +102,8 @@ export const TEAMS = [
     fifaRank:12, best:'Quarter-Finals', times:'1×', lastAchieved:'2002 (Japan/Korea)', lastWC:'2022 (Qatar) — Round of 16' },
   { name:'Norway',  code:'no', group:'I', conf:'UEFA', host:false, lat:62.0, lng:9.5,
     fifaRank:32, best:'Round of 16', times:'2×', lastAchieved:'1998 (France)', lastWC:'1998 (France) — Round of 16' },
+  { name:'Iraq',    code:'iq', group:'I', conf:'AFC',  host:false, lat:33.3, lng:44.4,
+    fifaRank:57, best:'Group Stage', times:'1 appearance', lastAchieved:'1986 (Mexico)', lastWC:'1986 (Mexico) — Group Stage' },
   // GROUP J
   { name:'Argentina', code:'ar', group:'J', conf:'CONMEBOL', host:false, lat:-31.5, lng:-64.0,
     fifaRank:2,  best:'World Champion', times:'3×', lastAchieved:'2022 (Qatar)', lastWC:'2022 (Qatar) — 🏆 Champion' },
@@ -111,6 +121,8 @@ export const TEAMS = [
     fifaRank:52, best:'First World Cup!', times:'First time', lastAchieved:'2026 (debut)', lastWC:'2026 — First World Cup ever' },
   { name:'Colombia',   code:'co', group:'K', conf:'CONMEBOL', host:false, lat:4.7, lng:-74.1,
     fifaRank:14, best:'Quarter-Finals', times:'1×', lastAchieved:'2014 (Brazil)', lastWC:'2018 (Russia) — Round of 16' },
+  { name:'DR Congo',   code:'cd', group:'K', conf:'CAF',      host:false, lat:-4.3, lng:15.3,
+    fifaRank:46, best:'Group Stage (as Zaire)', times:'1 appearance', lastAchieved:'1974 (West Germany)', lastWC:'1974 (West Germany) — Group Stage (as Zaire)' },
   // GROUP L
   { name:'England', code:'gb-eng', group:'L', conf:'UEFA',     host:false, lat:51.5, lng:-0.1,
     fifaRank:4,  best:'World Champion', times:'1×', lastAchieved:'1966 (England)', lastWC:'2022 (Qatar) — Quarter-Finals' },
@@ -165,17 +177,16 @@ export const TEAM_EXTRA = {
   'hr':     { pop:'3.8M',  wcApps:6,  footballFact:"Reached the top 3 in '98, '18, and '22.",       nonFootballFact:'Invented the necktie (originally called cravat).' },
   'gh':     { pop:'34M',   wcApps:4,  footballFact:'Cruelly denied a semi-final by Suarez in 2010.', nonFootballFact:'First sub-Saharan nation to gain independence.' },
   'pa':     { pop:'4.5M',  wcApps:1,  footballFact:'Debuted in 2018; returning for 2026.',           nonFootballFact:'Only place on Earth to see the sun rise over the Pacific Ocean.' },
+  'cz':     { pop:'10.9M', wcApps:1,  footballFact:'Czechoslovakia were World Cup runners-up twice — losing the 1934 final to Italy and the 1962 final to Brazil. Czech Republic itself has appeared only once before (2006).', nonFootballFact:'Has the highest beer consumption per capita in the world — over 180 litres per person per year.' },
+  'ba':     { pop:'3.2M',  wcApps:1,  footballFact:'Debuted at the 2014 World Cup with Džeko and Pjanić — scored 4 goals but crashed out in the group stage.', nonFootballFact:'Sarajevo hosted the 1984 Winter Olympics; its abandoned bobsled track is now one of the world\'s most famous "modern ruins" and a street-art landmark.' },
+  'tr':     { pop:'88M',   wcApps:2,  footballFact:'Hakan Şükür scored the fastest goal in World Cup history — 10.8 seconds into the 3rd-place play-off vs South Korea at 2002, en route to a historic bronze.', nonFootballFact:'Produces around 70% of the world\'s hazelnuts — essentially powering the global Nutella supply.' },
+  'se':     { pop:'10.5M', wcApps:12, footballFact:'Reached the top three on three occasions: runners-up in 1958 (lost 5-2 to Brazil and 17-year-old Pelé), and 3rd-place finishes in 1950 and 1994.', nonFootballFact:'Invented Bluetooth — and Alfred Nobel, creator of the Nobel Prizes, was Swedish.' },
+  'iq':     { pop:'48M',   wcApps:1,  footballFact:'Won the 2007 AFC Asian Cup in one of sport\'s most emotional moments — uniting a war-torn nation. Ahmed Radhi\'s 1986 WC goal remains the only World Cup goal in Iraqi history.', nonFootballFact:'Home to Mesopotamia, the "Cradle of Civilisation" and the birthplace of writing — cuneiform script dates back to ~3400 BC.' },
+  'cd':     { pop:'116M',  wcApps:1,  footballFact:'Competed as Zaire in 1974 — a player famously booted the ball away mid-free-kick vs Brazil. Conceded 14 goals in 3 games including a 9-0 loss to Yugoslavia. Returning after 52 years.', nonFootballFact:'The Congo River is the deepest river on Earth (over 220m), and the country holds the world\'s second-largest rainforest after the Amazon.' },
 }
 
-// TBD playoff slots per group
-export const TBD = {
-  A:{ note:'UEFA Playoff D', hint:'Denmark / Czechia / N.Macedonia / Ireland' },
-  B:{ note:'UEFA Playoff A', hint:'Italy / N.Ireland / Wales / Bosnia' },
-  D:{ note:'UEFA Playoff C', hint:'Turkey / Romania / Slovakia / Kosovo' },
-  F:{ note:'UEFA Playoff B', hint:'Ukraine / Sweden / Poland / Albania' },
-  I:{ note:'Intercont. PO 2', hint:'Bolivia / Suriname / Iraq' },
-  K:{ note:'Intercont. PO 1', hint:'Jamaica / New Caledonia / DR Congo' },
-}
+// All 48 teams confirmed — no TBD slots remain
+export const TBD = {}
 
 export const flagUrl = (code, w = 40) => `https://flagcdn.com/w${w}/${code}.png`
 
