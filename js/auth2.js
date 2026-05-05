@@ -91,6 +91,7 @@
     _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
 
     localStorage.setItem('wc2026_welcome', username)
+    btn.textContent = '✓ Redirecting…'
     // Pass invite code in URL — Groups.jsx handles the join (with retry for profile race)
     window.location.href = pending
       ? `./app.html#/groups?invite=${encodeURIComponent(pending)}`
