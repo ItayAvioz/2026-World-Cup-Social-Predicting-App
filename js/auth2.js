@@ -87,8 +87,11 @@
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) localStorage.removeItem('wc2026_pending_invite')
 
-    // Fire profile creation in background — redirect immediately, no waiting
-    _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
+    // Await profile creation with 1.5s cap — ensures no pending request when redirect fires
+    await Promise.race([
+      _supabase.rpc('create_profile', { p_username: username }),
+      new Promise(resolve => setTimeout(resolve, 1500))
+    ]).catch(() => {})
 
     localStorage.setItem('wc2026_welcome', username)
     btn.textContent = '✓ Redirecting…'
