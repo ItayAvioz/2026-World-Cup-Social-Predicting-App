@@ -1,0 +1,4 @@
+-- judge_test_anon_access
+-- Applied directly via Supabase MCP on 2026-05-04.
+-- No local SQL — DB is the source of truth for this migration.
+-- Granted anon read access to prompt_versions for judge test script.

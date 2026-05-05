@@ -1,0 +1,5 @@
+-- prompt_fixes_v2
+-- Applied directly via Supabase MCP on 2026-05-04.
+-- No local SQL — DB is the source of truth for this migration.
+-- Intermediate prompt patch (v2 fixes: direction rule, P5 scoreline note, champion guard drafts).
+-- NOTE: subsequently reverted by revert_prompt_fixes_v2 (20260504144115).
