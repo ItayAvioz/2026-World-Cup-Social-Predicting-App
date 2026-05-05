@@ -1,5 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from './context/AuthContext.jsx'
+import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
 import { useHeartbeat } from './lib/analytics.ts'
 import Dashboard from './pages/Dashboard.jsx'
@@ -29,7 +31,18 @@ function AuthGuard({ children }) {
 
 function AppInner() {
   const { user } = useAuth()
+  const { showToast } = useToast()
   useHeartbeat(supabase, user?.id)
+
+  useEffect(() => {
+    if (!user?.id) return
+    const name = localStorage.getItem('wc2026_welcome')
+    if (name) {
+      localStorage.removeItem('wc2026_welcome')
+      showToast(`Welcome to the app, ${name}!`)
+    }
+  }, [user?.id])
+
   return null
 }
 
