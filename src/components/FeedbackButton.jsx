@@ -143,7 +143,7 @@ export default function FeedbackButton() {
                 onChange={e => upd({ screenshotFile: e.target.files?.[0] ?? null, screenshotWarn: false })}
               />
               <span className="feedback-file-btn">
-                {s.screenshotFile ? `📎 ${s.screenshotFile.name}` : '📷 בחר תמונה / צלם'}
+                {s.screenshotFile ? `📎 ${s.screenshotFile.name}` : '📷 בחר תמונה'}
               </span>
             </label>
             {s.screenshotWarn && (
