@@ -1,0 +1,4 @@
+-- Migration: fn_schedule_auto_predict_all_games (applied via MCP 2026-04-22)
+-- Updated fn_schedule_auto_predictions to cover ALL games (no date filter).
+-- Reverted by 20260422172934_revert_fn_schedule_ai_summaries_to_original (M59).
+-- No local SQL — stub for tracking alignment only.
