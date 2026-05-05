@@ -26,9 +26,9 @@
   if (session) {
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) {
-      await _supabase.rpc('join_group', { p_invite_code: pending }).catch(() => {})
       localStorage.removeItem('wc2026_pending_invite')
-      window.location.href = './app.html#/groups'
+      // Pass code in URL — Groups.jsx handles the join with full error feedback
+      window.location.href = `./app.html#/groups?invite=${encodeURIComponent(pending)}`
     } else {
       window.location.href = './app.html#/dashboard'
     }
@@ -84,17 +84,19 @@
       return
     }
 
-    // Fire profile creation + group join in background — never block the redirect
+    // Await profile creation with a 1.5s timeout so Groups.jsx can join immediately
+    // (join_group requires a profile row — AuthContext fallback covers any remaining gap)
+    const profileDone = _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
+    await Promise.race([profileDone, new Promise(r => setTimeout(r, 1500))])
+
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) localStorage.removeItem('wc2026_pending_invite')
-    ;(async () => {
-      await _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
-      if (pending) await _supabase.rpc('join_group', { p_invite_code: pending }).catch(() => {})
-    })()
 
-    // Redirect immediately — AuthContext will handle any profile gaps on load
     localStorage.setItem('wc2026_welcome', username)
-    window.location.href = pending ? './app.html#/groups' : './app.html#/dashboard'
+    // Pass invite code in URL — Groups.jsx handles the join with full error feedback
+    window.location.href = pending
+      ? `./app.html#/groups?invite=${encodeURIComponent(pending)}`
+      : './app.html#/dashboard'
   })
 
   // ── LOGIN ─────────────────────────────────────────────────────
@@ -127,9 +129,9 @@
 
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) {
-      await _supabase.rpc('join_group', { p_invite_code: pending }).catch(() => {})
       localStorage.removeItem('wc2026_pending_invite')
-      window.location.href = './app.html#/groups'
+      // Pass code in URL — Groups.jsx handles the join with full error feedback
+      window.location.href = `./app.html#/groups?invite=${encodeURIComponent(pending)}`
     } else {
       window.location.href = './app.html#/dashboard'
     }
