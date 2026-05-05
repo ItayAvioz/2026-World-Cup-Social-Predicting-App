@@ -73,6 +73,7 @@
 | 67 | (MCP) candidate_4_slot | candidate_4 slot + winner_agent 1–5 + v10B/v11-main-2/v12-picks-2/v13-unique-2 prompts |
 | 68 | 20260504000068_auto_schedule_on_game_insert.sql | trg_auto_schedule_game: AFTER INSERT on games auto-schedules all crons |
 | 69 | 20260505000069_ai_summaries_winner_score.sql | ai_summaries.winner_score + version_tag backfilled into ai_judge_runs.candidates |
+| 70 | 20260505000070_ai_judge_scores_view.sql | ai_judge_scores view: one row per agent per run (group_name, date, slot, version_tag, scores, is_winner) |
 
 ## Edge Functions
 
