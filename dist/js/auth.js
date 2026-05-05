@@ -84,16 +84,14 @@
       return
     }
 
-    // Await profile creation with a 1.5s timeout so Groups.jsx can join immediately
-    // (join_group requires a profile row — AuthContext fallback covers any remaining gap)
-    const profileDone = _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
-    await Promise.race([profileDone, new Promise(r => setTimeout(r, 1500))])
-
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) localStorage.removeItem('wc2026_pending_invite')
 
+    // Fire profile creation in background — redirect immediately, no waiting
+    _supabase.rpc('create_profile', { p_username: username }).catch(() => {})
+
     localStorage.setItem('wc2026_welcome', username)
-    // Pass invite code in URL — Groups.jsx handles the join with full error feedback
+    // Pass invite code in URL — Groups.jsx handles the join (with retry for profile race)
     window.location.href = pending
       ? `./app.html#/groups?invite=${encodeURIComponent(pending)}`
       : './app.html#/dashboard'
