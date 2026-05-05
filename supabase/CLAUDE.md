@@ -72,13 +72,14 @@
 | 66 | (MCP) baseline_slot | baseline slot + v10→baseline + winner_agent 1–4 |
 | 67 | (MCP) candidate_4_slot | candidate_4 slot + winner_agent 1–5 + v10B/v11-main-2/v12-picks-2/v13-unique-2 prompts |
 | 68 | 20260504000068_auto_schedule_on_game_insert.sql | trg_auto_schedule_game: AFTER INSERT on games auto-schedules all crons |
+| 69 | 20260505000069_ai_summaries_winner_score.sql | ai_summaries.winner_score + version_tag backfilled into ai_judge_runs.candidates |
 
 ## Edge Functions
 
 | Function | Version | Status | Notes |
 |---|---|---|---|
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
-| nightly-summary | v22 (Supabase v26) | ✅ ACTIVE | 5-agent parallel + gpt-4o judge |
+| nightly-summary | v23 (Supabase v27) | ✅ ACTIVE | 5-agent parallel + gpt-4o judge; candidates include version_tag; ai_summaries includes winner_score |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v3 | ✅ ACTIVE | Resend gateway, 5 alert types + daily digest |
 
