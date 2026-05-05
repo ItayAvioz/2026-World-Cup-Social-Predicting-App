@@ -1,6 +1,8 @@
 # Supabase — Deployed State
 
-## Migrations (68 deployed)
+## Migrations (72 local files — all deployed)
+
+> **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
 | # | File | Description |
 |---|---|---|
@@ -62,15 +64,19 @@
 | 55 | 20260410000055_prompt_versions_llm_fields.sql | prompt_versions LLM test fields |
 | 56 | 20260412000056_fix_fn_schedule_ai_summaries_body_type.sql | fix net.http_post body ::text bug in fn_schedule_ai_summaries |
 | 57 | 20260421000057_ai_summaries_display_data.sql | ai_summaries.display_data jsonb column |
+| 58 | 20260422172100_fn_schedule_auto_predict_all_games.sql | fn_schedule_auto_predictions to cover ALL games — stub, reverted by M59 |
 | 59 | 20260422000059_revert_fn_schedule_ai_summaries.sql | revert fn_schedule_ai_summaries to correct version |
 | 60 | 20260503000060_feedback.sql | feedback table + RLS + storage bucket |
+| 60b | 20260503082239_feedback_bucket_public.sql | feedback storage bucket made public — stub |
+| 60c | 20260503083901_feedback_view.sql | admin feedback view — stub |
 | 61 | 20260504000061_admin_notifications.sql | ef_errors + app_events + fn_notify_admin + digest cron + notify-admin EF trigger |
-| 62 | (MCP) judge_test_anon_access | anon access for judge LLM test |
-| 63 | (MCP) prompt_fixes_v2 | v11/v12/v13 prompt patches |
-| 64 | (MCP) revert_prompt_fixes_v2 | revert prompt patches |
-| 65 | (MCP) agent_slot + ai_judge_runs | judge LLM schema: agent_slot, ai_judge_runs, ai_summaries judge cols, v11/v12/v13 prompts |
-| 66 | (MCP) baseline_slot | baseline slot + v10→baseline + winner_agent 1–4 |
-| 67 | (MCP) candidate_4_slot | candidate_4 slot + winner_agent 1–5 + v10B/v11-main-2/v12-picks-2/v13-unique-2 prompts |
+| 62 | 20260504000062_judge_llm.sql | ai_judge_runs table + agent_slot on prompt_versions + ai_summaries judge cols + v11/v12/v13 prompts |
+| 62b | 20260504132006_judge_test_anon_access.sql | anon access for judge LLM test — stub |
+| 63 | 20260504000063_judge_v10_baseline.sql | baseline slot + v10→baseline + winner_agent 1–4 |
+| 63b | 20260504134747_prompt_fixes_v2.sql | v11/v12/v13 prompt patches — stub, reverted by M64b |
+| 64 | 20260504000064_prompt_v2.sql | candidate_4 slot + winner_agent 1–5 + v10B/v11-main-2/v12-picks-2/v13-unique-2 prompts |
+| 64b | 20260504144115_revert_prompt_fixes_v2.sql | revert prompt patches — stub |
+| 65 | 20260504000066_prompt_v3.sql | champion confusion guard + v12 direction synonym fix patches |
 | 68 | 20260504000068_auto_schedule_on_game_insert.sql | trg_auto_schedule_game: AFTER INSERT on games auto-schedules all crons |
 | 69 | 20260505000069_ai_summaries_winner_score.sql | ai_summaries.winner_score + version_tag backfilled into ai_judge_runs.candidates |
 | 70 | 20260505000070_ai_judge_scores_view.sql | ai_judge_scores view: one row per agent per run (group_name, date, slot, version_tag, scores, is_winner) |
