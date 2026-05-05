@@ -1,0 +1,3 @@
+-- Migration: feedback_view (applied via MCP 2026-05-03)
+-- Created admin view for feedback table.
+-- No local SQL — stub for tracking alignment only.

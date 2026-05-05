@@ -1,0 +1,3 @@
+-- Migration: feedback_bucket_public (applied via MCP 2026-05-03)
+-- Made the feedback storage bucket public.
+-- No local SQL — stub for tracking alignment only.
