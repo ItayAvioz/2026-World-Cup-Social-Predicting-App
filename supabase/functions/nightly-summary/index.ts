@@ -1,9 +1,10 @@
-// nightly-summary v23
+// nightly-summary v24
 // 5-agent Judge LLM system. Runs v11/v12/v13/v10B/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
 // v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
 // v22: Judge — expand direction check to cover synonym phrases; add champion-as-team deduction; specific reasoning rule. Prompts — champion confusion guard; v12 direction synonym fix.
 // v23: candidates JSONB includes version_tag; ai_summaries includes winner_score.
+// v24: Judge — add today_pts vs total_pts explicit check; reasoning must quote winning line. v13 — ban verbatim "not just this group" opener.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
 //   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
@@ -136,6 +137,7 @@ Score each on 4 dimensions (0-10 each) and pick one winner.
 ACCURACY VERIFICATION - do this first, before scoring:
 For each candidate, check every factual claim against the payload:
   - Every point value stated for a user must match leaderboard[].today_pts exactly. If wrong -> deduct 3 from accuracy.
+  - COMMON ERROR — today_pts vs total_pts: if P1 opens with a number that matches leaderboard[].total_pts (not today_pts) and presents it as today's performance (e.g. "X points today", "scored X today") -> deduct 3 from accuracy. Always cross-check the opening score against today_pts, not total_pts.
   - today.global_top[].pts is the global total across ALL groups - never accept it as a user's today score. If stated as today score -> deduct 3 from accuracy.
   - If the summary claims a user "topped the competition today" but their today_pts = 0 -> deduct 3 from accuracy.
   - The point gap stated between rank 1 and rank 2 must equal leaderboard[0].total_pts - leaderboard[1].total_pts exactly. If wrong -> deduct 3 from accuracy.
@@ -153,7 +155,7 @@ SCORING WEIGHTS:
 Return valid JSON only:
 {
   "winner": 1 or 2 or 3 or 4 or 5,
-  "reasoning": "one sentence naming ONE specific thing the winner did better than the others — not generic phrases like 'most accurate and humorous'",
+  "reasoning": "quote the single most effective line from the winning candidate verbatim (in quotes), then in 3-5 words say why it worked — do not use generic phrases like 'most accurate' or 'better structured'",
   "scores": [
     {"agent":1,"accuracy":N,"humor":N,"compliance":N,"structure":N},
     {"agent":2,"accuracy":N,"humor":N,"compliance":N,"structure":N},

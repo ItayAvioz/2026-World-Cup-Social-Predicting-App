@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (72 local files — all deployed)
+## Migrations (73 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -81,13 +81,14 @@
 | 69 | 20260505000069_ai_summaries_winner_score.sql | ai_summaries.winner_score + version_tag backfilled into ai_judge_runs.candidates |
 | 70 | 20260505000070_ai_judge_scores_view.sql | ai_judge_scores view: one row per agent per run (group_name, date, slot, version_tag, scores, is_winner) |
 | 71 | 20260505000071_backfill_sync_game_crons.sql | one-time backfill: fn_schedule_game_sync for all existing future games with api_fixture_id (M68 covers new inserts) |
+| 72 | 20260506000072_v13_template_opener_fix.sql | v13-unique-2 prompt: ban verbatim "not just this group" opener in GLOBAL TOP RULE + quality check |
 
 ## Edge Functions
 
 | Function | Version | Status | Notes |
 |---|---|---|---|
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
-| nightly-summary | v23 (Supabase v27) | ✅ ACTIVE | 5-agent parallel + gpt-4o judge; candidates include version_tag; ai_summaries includes winner_score |
+| nightly-summary | v24 (Supabase v28) | ✅ ACTIVE | Judge: today_pts vs total_pts explicit check; reasoning must quote winning line. v13: ban verbatim "not just this group" opener. |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v3 | ✅ ACTIVE | Resend gateway, 5 alert types + daily digest |
 
