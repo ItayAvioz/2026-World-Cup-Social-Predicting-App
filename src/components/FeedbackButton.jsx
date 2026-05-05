@@ -139,7 +139,6 @@ export default function FeedbackButton() {
               <input
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="feedback-file-input"
                 onChange={e => upd({ screenshotFile: e.target.files?.[0] ?? null, screenshotWarn: false })}
               />
