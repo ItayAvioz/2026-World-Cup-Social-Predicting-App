@@ -9,3 +9,10 @@ node_modules/
 
 # Vite cache
 .vite/
+
+# Local secrets (never commit)
+.env.local
+test/.env.local
+
+# Claude Code local settings (may contain API keys in allowed commands)
+.claude/settings.local.json
