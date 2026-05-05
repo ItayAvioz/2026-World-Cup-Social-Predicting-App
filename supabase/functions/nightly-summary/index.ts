@@ -1,9 +1,11 @@
-// nightly-summary v16
-// Generates AI-powered nightly summaries per qualifying group using OpenAI gpt-4o-mini.
-// Triggered by pg_cron 150min after last kickoff of the day.
+// nightly-summary v23
+// 5-agent Judge LLM system. Runs v11/v12/v13/v10B/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
+// v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
+// v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
+// v22: Judge — expand direction check to cover synonym phrases; add champion-as-team deduction; specific reasoning rule. Prompts — champion confusion guard; v12 direction synonym fix.
+// v23: candidates JSONB includes version_tag; ai_summaries includes winner_score.
 // POST body: { date: "YYYY-MM-DD", version_id?: "uuid", model?: "gpt-4o-mini" }
-//   version_id → TEST MODE: uses that prompt version and writes test results back
-//   model → TEST MODE ONLY: override the OpenAI model (defaults to OPENAI_MODEL constant)
+//   version_id → TEST MODE: uses that prompt version as agent 1 only (no judge), writes test results back
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -30,14 +32,22 @@ const FALLBACK_MSG =
   'Our AI analyst called in sick today (probably still recovering from that last-minute equalizer). ' +
   'Summary coming tomorrow — in the meantime, check the leaderboard and start arguing with your group.'
 
-const TIMEOUT_MS = 120_000   // abort group loop at 120s (EF hard limit is 150s)
-const GROUP_GAP_MS = 2_000   // sequential gap between groups (rate limiting)
-const OPENAI_MODEL = 'gpt-4o-mini'
-const MAX_TOKENS = 400
-const TEMPERATURE = 0.6
-const TOP_P = 1
-const SEED = 42
+const TIMEOUT_MS    = 120_000
+const GROUP_GAP_MS  = 2_000
+const OPENAI_MODEL  = 'gpt-4o-mini'
+const JUDGE_MODEL   = 'gpt-4o'
+const MAX_TOKENS    = 400
+const JUDGE_MAX_TOK = 350
 const MIN_CONTENT_LEN = 50
+
+// Per-agent parameters
+const AGENTS = [
+  { slot: 'main',        temperature: 0.6, seed: 42 },
+  { slot: 'candidate_2', temperature: 0.5, seed: 43 },
+  { slot: 'candidate_3', temperature: 0.4, seed: 44 },
+  { slot: 'baseline',    temperature: 0.6, seed: 42 },
+  { slot: 'candidate_4', temperature: 0.6, seed: 42 },
+]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,13 +68,19 @@ function nextUTCDay(date: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-// ─── OpenAI call with retry ───────────────────────────────────────────────────
+function outcomeDir(home: number, away: number): 'home_win' | 'draw' | 'away_win' {
+  return home > away ? 'home_win' : home < away ? 'away_win' : 'draw'
+}
 
-async function callOpenAI(
+// ─── OpenAI agent call ───────────────────────────────────────────────────────
+
+async function callAgent(
   openai: OpenAI,
   systemPrompt: string,
   userMessage: string,
   model: string,
+  temperature: number,
+  seed: number,
 ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await sleep(5000)
@@ -76,28 +92,138 @@ async function callOpenAI(
           { role: 'user',   content: userMessage },
         ],
         max_tokens:  MAX_TOKENS,
-        temperature: TEMPERATURE,
-        top_p:       TOP_P,
-        seed:        SEED,
+        temperature,
+        top_p:       1,
+        seed,
       })
       const content = res.choices[0]?.message?.content?.trim() ?? ''
       if (content.length >= MIN_CONTENT_LEN) {
         return {
           content,
-          promptTokens: res.usage?.prompt_tokens ?? 0,
-          completionTokens: res.usage?.completion_tokens ?? 0,
+          promptTokens:     res.usage?.prompt_tokens      ?? 0,
+          completionTokens: res.usage?.completion_tokens  ?? 0,
         }
       }
-      console.warn(`[openai] response too short (${content.length} chars), attempt ${attempt + 1}`)
+      console.warn(`[agent] response too short (${content.length} chars), attempt ${attempt + 1}`)
     } catch (err: unknown) {
-      console.error(`[openai] error attempt ${attempt + 1}:`, (err as Error)?.message)
+      console.error(`[agent] error attempt ${attempt + 1}:`, (err as Error)?.message)
       if (attempt === 1) throw err
     }
   }
   return { content: FALLBACK_MSG, promptTokens: 0, completionTokens: 0 }
 }
 
-// ─── Payload builder ─────────────────────────────────────────────────────────
+// ─── Judge call ──────────────────────────────────────────────────────────────
+
+interface JudgeResult {
+  winnerAgent: 1 | 2 | 3 | 4 | 5
+  reasoning: string
+  scores: Array<{
+    agent: number
+    accuracy: number
+    humor: number
+    compliance: number
+    structure: number
+    total: number
+  }>
+  promptTokens: number
+  completionTokens: number
+}
+
+const JUDGE_SYSTEM = `You are a judge evaluating five nightly WhatsApp roast summaries for a World Cup prediction group.
+Score each on 4 dimensions (0-10 each) and pick one winner.
+
+ACCURACY VERIFICATION - do this first, before scoring:
+For each candidate, check every factual claim against the payload:
+  - Every point value stated for a user must match leaderboard[].today_pts exactly. If wrong -> deduct 3 from accuracy.
+  - today.global_top[].pts is the global total across ALL groups - never accept it as a user's today score. If stated as today score -> deduct 3 from accuracy.
+  - If the summary claims a user "topped the competition today" but their today_pts = 0 -> deduct 3 from accuracy.
+  - The point gap stated between rank 1 and rank 2 must equal leaderboard[0].total_pts - leaderboard[1].total_pts exactly. If wrong -> deduct 3 from accuracy.
+  - If the summary implies competitors/others predicted correctly for a game (any of: "got it right", "had a field day", "saw it coming", "were correct", "got it", "called it"), verify global_upset=false for that game. If global_upset=true -> deduct 3 from accuracy.
+  - Any scoreline stated for a user must appear in their predictions[].preds[].pred. If not found -> deduct 2 from accuracy.
+Multiple errors stack. Start accuracy at 10, apply deductions.
+Hard floor: if final accuracy <= 3, that candidate is disqualified regardless of other scores.
+
+SCORING WEIGHTS:
+- accuracy (45%): verified above - no invented facts; streak = abs(streak); scorelines correct; champion result correct
+- humor (30%): picks used as rivalry fuel when champion played; specific scoreline for worst performer; P4 unique angle with actual numbers (not template phrase); personal not generic
+- compliance (15%): no banned words (journey/remarkable/incredible/exciting); no pronouns he/she/his/her/him; no invented character labels; facts from payload only; picks[].champion is a tournament pick — deduct 2 if referenced as a team playing in today's games (game teams are only in games[].home_team / away_team)
+- structure (10%): 6 paragraphs; P6 starts "Tomorrow's danger:"; exact point gap appears; streak referenced in P6
+
+Return valid JSON only:
+{
+  "winner": 1 or 2 or 3 or 4 or 5,
+  "reasoning": "one sentence naming ONE specific thing the winner did better than the others — not generic phrases like 'most accurate and humorous'",
+  "scores": [
+    {"agent":1,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":2,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":3,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":4,"accuracy":N,"humor":N,"compliance":N,"structure":N},
+    {"agent":5,"accuracy":N,"humor":N,"compliance":N,"structure":N}
+  ]
+}`
+
+async function callJudge(
+  openai: OpenAI,
+  payload: unknown,
+  candidates: Array<{ agent: number; slot: string; content: string }>,
+): Promise<JudgeResult> {
+  const candidateBlocks = candidates
+    .map(c => `\n\nCANDIDATE ${c.agent} (${c.slot}):\n${c.content}`)
+    .join('')
+  const userMsg = `PAYLOAD:\n${JSON.stringify(payload)}${candidateBlocks}`
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await sleep(3000)
+    try {
+      const res = await openai.chat.completions.create({
+        model:       JUDGE_MODEL,
+        messages: [
+          { role: 'system', content: JUDGE_SYSTEM },
+          { role: 'user',   content: userMsg },
+        ],
+        max_tokens:  JUDGE_MAX_TOK,
+        temperature: 0.1,
+        top_p:       1,
+        seed:        1,
+        response_format: { type: 'json_object' },
+      })
+      const raw = res.choices[0]?.message?.content?.trim() ?? '{}'
+      const parsed = JSON.parse(raw)
+      const winner = Number(parsed.winner) as 1 | 2 | 3 | 4 | 5
+      if (![1, 2, 3, 4, 5].includes(winner)) throw new Error(`invalid winner: ${winner}`)
+      const scores = (parsed.scores ?? []).map((s: Record<string, number>, i: number) => ({
+        agent:      s.agent ?? (i + 1),
+        accuracy:   s.accuracy   ?? 0,
+        humor:      s.humor      ?? 0,
+        compliance: s.compliance ?? 0,
+        structure:  s.structure  ?? 0,
+        total:      Math.round((s.accuracy * 45 + s.humor * 30 + s.compliance * 15 + s.structure * 10) / 100 * 10) / 10,
+      }))
+      return {
+        winnerAgent:      winner,
+        reasoning:        String(parsed.reasoning ?? ''),
+        scores,
+        promptTokens:     res.usage?.prompt_tokens     ?? 0,
+        completionTokens: res.usage?.completion_tokens ?? 0,
+      }
+    } catch (err: unknown) {
+      console.error(`[judge] error attempt ${attempt + 1}:`, (err as Error)?.message)
+      if (attempt === 1) {
+        return {
+          winnerAgent:      1 as 1 | 2 | 3 | 4 | 5,
+          reasoning:        'Judge failed — defaulted to agent 1',
+          scores:           [1,2,3,4,5].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
+          promptTokens:     0,
+          completionTokens: 0,
+        }
+      }
+    }
+  }
+  return { winnerAgent: 1 as 1 | 2 | 3 | 4 | 5, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
+}
+
+// ─── Payload builder (v17) ────────────────────────────────────────────────────
 
 interface Game {
   id: string
@@ -120,7 +246,7 @@ interface GoalEvent {
 interface ChampPick   { user_id: string; team: string }
 interface TsrPick     { user_id: string; player_name: string }
 // deno-lint-ignore no-explicit-any
-type GroupSummaryData = any   // jsonb from get_group_summary_data RPC
+type GroupSummaryData = any
 // deno-lint-ignore no-explicit-any
 type GlobalDist = any
 
@@ -135,24 +261,24 @@ function buildGroupPayload(opts: {
   tsrPicks: TsrPick[]
   statsReady: boolean
   globalSortedUsers: Array<{ uid: string; user: string; pts: number; all_auto: boolean }>
+  globalRankByUserGroup: Record<string, Record<string, number>>
+  groupId: string
 }) {
   const { groupName, date, groupData, finishedGames, globalDistMap,
-          goalScorerMap, champPicks, tsrPicks, statsReady, globalSortedUsers } = opts
+          goalScorerMap, champPicks, tsrPicks, statsReady, globalSortedUsers,
+          globalRankByUserGroup, groupId } = opts
 
-  // Map game by "TeamA|TeamB" → game object (for matching groupData.games)
   const gameByKey: Record<string, Game> = {}
   for (const g of finishedGames) {
     gameByKey[`${g.team_home}|${g.team_away}`] = g
   }
 
-  // champion and top-scorer pick maps: user_id → value
   const champMap: Record<string, string> = {}
   for (const cp of champPicks) champMap[cp.user_id] = cp.team
 
   const tsrMap: Record<string, string> = {}
   for (const tp of tsrPicks) tsrMap[tp.user_id] = tp.player_name
 
-  // Player goals today (non-own-goal events only)
   const playerGoalsToday: Record<string, number> = {}
   if (statsReady) {
     for (const events of Object.values(goalScorerMap)) {
@@ -164,86 +290,93 @@ function buildGroupPayload(opts: {
     }
   }
 
-  // Per-member today points (sum of today's predictions)
   const memberTodayPts: Record<string, number> = {}
+  const memberTodayExact: Record<string, number> = {}
   // deno-lint-ignore no-explicit-any
   for (const m of (groupData.members ?? []) as any[]) {
-    let pts = 0
+    let pts = 0; let exact = 0
     // deno-lint-ignore no-explicit-any
-    for (const p of (m.predictions ?? []) as any[]) pts += (p.points ?? 0)
-    memberTodayPts[m.username] = pts
+    for (const p of (m.predictions ?? []) as any[]) {
+      pts += (p.points ?? 0)
+      if ((p.points ?? 0) === 3) exact++
+    }
+    memberTodayPts[m.username]   = pts
+    memberTodayExact[m.username] = exact
   }
 
-  // Group-level prediction distribution per game
   const grpDistByGameId: Record<string, { home: number; draw: number; away: number; n: number; scores: Record<string, number> }> = {}
   // deno-lint-ignore no-explicit-any
   for (const game of (groupData.games ?? []) as any[]) {
     const fg = gameByKey[`${game.team_home}|${game.team_away}`]
     if (!fg) continue
-    const dist: { home: number; draw: number; away: number; n: number; scores: Record<string, number> } = { home: 0, draw: 0, away: 0, n: 0, scores: {} }
+    const dist = { home: 0, draw: 0, away: 0, n: 0, scores: {} as Record<string, number> }
     // deno-lint-ignore no-explicit-any
     for (const m of (groupData.members ?? []) as any[]) {
       // deno-lint-ignore no-explicit-any
       const pred = (m.predictions ?? []).find((p: any) => p.game_id === fg.id)
       if (!pred) continue
       dist.n++
-      if      (pred.pred_home > pred.pred_away) dist.home++
+      if      (pred.pred_home > pred.pred_away)  dist.home++
       else if (pred.pred_home === pred.pred_away) dist.draw++
-      else    dist.away++
+      else                                        dist.away++
       const sk = `${pred.pred_home}-${pred.pred_away}`
       dist.scores[sk] = (dist.scores[sk] ?? 0) + 1
     }
     grpDistByGameId[fg.id] = dist
   }
 
-  // Group member IDs (for in_group flag in today block)
   // deno-lint-ignore no-explicit-any
-  const groupMemberSet = new Set<string>((groupData.members ?? [] as any[]).map((m: any) => m.user_id as string))
+  const groupMemberSet = new Set<string>((groupData.members ?? []).map((m: any) => m.user_id as string))
 
-  // ── Leaderboard ──
+  const champTeamResult: Record<string, { played: boolean; result: 'win' | 'draw' | 'loss' }> = {}
+  for (const fg of finishedGames) {
+    const result = outcomeDir(fg.score_home, fg.score_away)
+    champTeamResult[fg.team_home] = {
+      played: true,
+      result: result === 'home_win' ? 'win' : result === 'draw' ? 'draw' : 'loss',
+    }
+    champTeamResult[fg.team_away] = {
+      played: true,
+      result: result === 'away_win' ? 'win' : result === 'draw' ? 'draw' : 'loss',
+    }
+  }
+
   // deno-lint-ignore no-explicit-any
   const leaderboard = (groupData.leaderboard ?? [] as any[]).map((row: any) => {
     // deno-lint-ignore no-explicit-any
     const member = (groupData.members ?? []).find((m: any) => m.username === row.username)
+    const uid = member?.user_id as string | undefined
     return {
-      rank:      row.group_rank,
-      user:      row.username,
-      total_pts: row.total_points,
-      exact:     row.exact_scores,
-      today_pts: memberTodayPts[row.username] ?? 0,
-      streak:    member?.current_streak ?? 0,
+      group_rank:   row.group_rank,
+      global_rank:  uid ? (globalRankByUserGroup[uid]?.[groupId] ?? null) : null,
+      user:         row.username,
+      total_pts:    row.total_points,
+      total_exact:  row.exact_scores,
+      today_exact:  memberTodayExact[row.username] ?? 0,
+      today_pts:    memberTodayPts[row.username]   ?? 0,
+      streak:       member?.current_streak ?? 0,
     }
   })
 
-  // ── Games ──
   // deno-lint-ignore no-explicit-any
   const games = (groupData.games ?? [] as any[]).map((game: any) => {
-    const fg = gameByKey[`${game.team_home}|${game.team_away}`]
+    const fg     = gameByKey[`${game.team_home}|${game.team_away}`]
     const gameId = fg?.id
 
-    // Goal scorers
     const scorers: string[] = []
     if (statsReady && gameId && goalScorerMap[gameId]) {
       for (const ev of goalScorerMap[gameId]) {
-        const min = ev.minute_extra
-          ? `${ev.minute}+${ev.minute_extra}'`
-          : `${ev.minute}'`
-        const type = ev.detail === 'Penalty'  ? '(pen)'
-                   : ev.detail === 'Own Goal' ? '(og)'
-                   : ''
+        const min  = ev.minute_extra ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
+        const type = ev.detail === 'Penalty' ? '(pen)' : ev.detail === 'Own Goal' ? '(og)' : ''
         scorers.push(`${ev.player_name ?? 'Unknown'} ${min}${type}`.trim())
       }
     }
 
-    // Global distribution
-    const gd = gameId ? (globalDistMap[gameId] ?? null) : null
+    const gd      = gameId ? (globalDistMap[gameId] ?? null) : null
     const gdTotal = gd?.total ?? 0
+    const grp     = gameId ? (grpDistByGameId[gameId] ?? null) : null
+    const grpN    = grp?.n ?? 0
 
-    // Group distribution
-    const grp  = gameId ? (grpDistByGameId[gameId] ?? null) : null
-    const grpN = grp?.n ?? 0
-
-    // group_exact_n: how many members predicted exact score
     let groupExactN = 0
     if (fg) {
       // deno-lint-ignore no-explicit-any
@@ -254,49 +387,82 @@ function buildGroupPayload(opts: {
       }
     }
 
-    // upset: result direction went against majority group prediction
-    let upset = false
+    let groupUpset = false
     if (fg && grp && grpN > 0) {
-      const resultDir = fg.score_home > fg.score_away ? 'home'
-                      : fg.score_home < fg.score_away ? 'away'
-                      : 'draw'
-      const majorityDir = grp.home >= grp.draw && grp.home >= grp.away ? 'home'
-                        : grp.away > grp.draw && grp.away > grp.home   ? 'away'
+      const resultDir   = outcomeDir(fg.score_home, fg.score_away)
+      const majorityDir = grp.home >= grp.draw && grp.home >= grp.away ? 'home_win'
+                        : grp.away > grp.draw && grp.away > grp.home   ? 'away_win'
                         : 'draw'
-      upset = resultDir !== majorityDir
+      groupUpset = resultDir !== majorityDir
     }
 
-    return {
-      match:       `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away}`,
-      phase_label: PHASE_LABELS[game.phase] ?? game.phase,
-      group_exact_n: groupExactN,
-      upset,
-      scorers: statsReady ? scorers : null,
-      dist_group: grpN > 0 ? (() => {
-        const sc = grp!.scores
-        const topScoreKey = Object.keys(sc).sort((a, b) => sc[b] - sc[a])[0] ?? null
-        return {
-          home_pct:    Math.round((grp!.home / grpN) * 100),
-          draw_pct:    Math.round((grp!.draw / grpN) * 100),
-          away_pct:    Math.round((grp!.away / grpN) * 100),
-          n:           grpN,
-          top_score:   topScoreKey,
-          top_score_n: topScoreKey ? sc[topScoreKey] : null,
+    let globalUpset = false
+    if (fg && gdTotal > 0) {
+      const resultDir   = outcomeDir(fg.score_home, fg.score_away)
+      const majorityDir = gd.home_win >= gd.draw && gd.home_win >= gd.away_win ? 'home_win'
+                        : gd.away_win > gd.draw && gd.away_win > gd.home_win   ? 'away_win'
+                        : 'draw'
+      globalUpset = resultDir !== majorityDir
+    }
+
+    let distGlobal: Record<string, unknown> | null = null
+    if (gdTotal > 0) {
+      const topScore   = gd.top_scores?.[0]?.score ?? null
+      const topScoreN  = gd.top_scores?.[0]?.count ?? null
+      const topScore2N = gd.top_scores?.[1]?.count ?? null
+      const tied       = topScoreN !== null && topScore2N !== null && topScoreN === topScore2N
+
+      const groupOnTopScore: string[] = []
+      if (topScore && !tied && fg) {
+        // deno-lint-ignore no-explicit-any
+        for (const m of (groupData.members ?? []) as any[]) {
+          // deno-lint-ignore no-explicit-any
+          const pred = (m.predictions ?? []).find((p: any) => p.game_id === fg.id)
+          if (pred) {
+            const predStr = `${pred.pred_home}-${pred.pred_away}`
+            if (predStr === topScore) groupOnTopScore.push(m.username)
+          }
         }
-      })() : null,
-      dist_global: gdTotal > 0 ? {
-        home_pct:    Math.round((gd.home_win / gdTotal) * 100),
-        draw_pct:    Math.round((gd.draw     / gdTotal) * 100),
-        away_pct:    Math.round((gd.away_win / gdTotal) * 100),
-        n:           gdTotal,
-        top_score:   gd.top_scores?.[0]?.score ?? null,
-        top_score_n: gd.top_scores?.[0]?.count ?? null,
-        exact_hits:  gd.exact_count ?? 0,
+      }
+
+      distGlobal = {
+        home_pct:           Math.round((gd.home_win / gdTotal) * 100),
+        draw_pct:           Math.round((gd.draw     / gdTotal) * 100),
+        away_pct:           Math.round((gd.away_win / gdTotal) * 100),
+        n:                  gdTotal,
+        exact_hits:         gd.exact_count ?? 0,
+        top_score:          topScore,
+        top_score_n:        topScoreN,
+        top_score_tied:     tied,
+        group_on_top_score: groupOnTopScore,
+      }
+    }
+
+    const result = fg ? outcomeDir(fg.score_home, fg.score_away) : null
+
+    return {
+      match:          `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away}`,
+      home_team:      game.team_home,
+      away_team:      game.team_away,
+      home_score:     game.score_home,
+      away_score:     game.score_away,
+      result,
+      phase_label:    PHASE_LABELS[game.phase] ?? game.phase,
+      group_exact_n:  groupExactN,
+      global_exact_n: gd ? (gd.exact_count ?? 0) : 0,
+      group_upset:    groupUpset,
+      global_upset:   globalUpset,
+      scorers:        statsReady ? scorers : null,
+      dist_group:     grpN > 0 ? {
+        home_pct: Math.round((grp!.home / grpN) * 100),
+        draw_pct: Math.round((grp!.draw / grpN) * 100),
+        away_pct: Math.round((grp!.away / grpN) * 100),
+        n:        grpN,
       } : null,
+      dist_global: distGlobal,
     }
   })
 
-  // ── Per-member predictions ──
   // deno-lint-ignore no-explicit-any
   const predictions = (groupData.members ?? [] as any[]).map((m: any) => ({
     user:      m.username,
@@ -307,30 +473,53 @@ function buildGroupPayload(opts: {
       const matchStr = fg
         ? `${fg.team_home} ${fg.score_home}-${fg.score_away} ${fg.team_away}`
         : p.game_id
+      const actualResult = fg ? outcomeDir(fg.score_home, fg.score_away) : null
+      const predResult   = outcomeDir(p.pred_home, p.pred_away)
+      const isExact      = fg
+        ? (p.pred_home === fg.score_home && p.pred_away === fg.score_away)
+        : false
       return {
-        game: matchStr,
-        pred: `${p.pred_home}-${p.pred_away}`,
-        pts:  p.points,
-        auto: p.is_auto,
+        game:        matchStr,
+        result:      actualResult,
+        pred:        `${p.pred_home}-${p.pred_away}`,
+        pred_result: predResult,
+        pts:         p.points,
+        exact:       isExact,
+        auto:        p.is_auto,
       }
     }),
   }))
 
-  // ── Picks ──
   // deno-lint-ignore no-explicit-any
-  const picks = (groupData.members ?? [] as any[]).map((m: any) => {
+  const picksRaw = (groupData.members ?? [] as any[]).map((m: any) => {
     const champion  = champMap[m.user_id] ?? null
     const topScorer = tsrMap[m.user_id]   ?? null
+
+    const champInfo        = champion ? champTeamResult[champion] : null
+    const champPlayedToday = champInfo?.played ?? false
+    const champResult      = champPlayedToday ? champInfo!.result : undefined
+
     const scorerGoals = (statsReady && topScorer)
       ? (playerGoalsToday[topScorer] ?? 0)
       : null
-    return {
-      user:               m.username,
+
+    const pick: Record<string, unknown> = {
+      user:                   m.username,
       champion,
-      top_scorer:         topScorer,
-      scorer_goals_today: scorerGoals,
+      top_scorer:             topScorer,
+      scorer_goals_today:     scorerGoals,
+      scorer_total_goals:     null,
+      scorer_tournament_rank: null,
     }
+    if (champion) {
+      pick.champion_played_today = champPlayedToday
+      if (champPlayedToday) pick.champion_result = champResult
+    }
+    return pick
   })
+
+  const anyPickSet = picksRaw.some(p => p.champion !== null || p.top_scorer !== null)
+  const picks = anyPickSet ? picksRaw : undefined
 
   return {
     group: groupName,
@@ -347,7 +536,7 @@ function buildGroupPayload(opts: {
     },
     games,
     predictions,
-    picks,
+    ...(picks ? { picks } : {}),
   }
 }
 
@@ -358,33 +547,30 @@ serve(async (req) => {
 
   const startMs = Date.now()
 
-  // 1. Parse body
   let date: string
   let versionId: string | undefined
   let modelOverride: string | undefined
   try {
-    const body = await req.json()
+    const body    = await req.json()
     date          = body.date
     versionId     = body.version_id
-    modelOverride = body.model   // test mode only — ignored in production runs
+    modelOverride = body.model
     if (!date) return json({ error: 'date required' }, 400)
   } catch {
     return json({ error: 'invalid JSON body' }, 400)
   }
 
-  const testMode      = !!versionId
+  const testMode       = !!versionId
   const effectiveModel = (testMode && modelOverride) ? modelOverride : OPENAI_MODEL
 
-  // Create clients inside handler (not module scope)
-  const srk = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, srk)
+  const srk      = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabase  = createClient(Deno.env.get('SUPABASE_URL')!, srk)
   const openaiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('AI_Summary_GPT_Key') || ''
-  const openai   = new OpenAI({ apiKey: openaiKey })
+  const openai    = new OpenAI({ apiKey: openaiKey })
 
   const dayStart = `${date}T00:00:00Z`
   const dayEnd   = `${nextUTCDay(date)}T00:00:00Z`
 
-  // 3. Fetch today's games
   const { data: allGames, error: gamesErr } = await supabase
     .from('games')
     .select('id, team_home, team_away, score_home, score_away, phase')
@@ -398,47 +584,53 @@ serve(async (req) => {
 
   const finishedGames = (allGames ?? []).filter(g => g.score_home !== null) as Game[]
 
-  // Guard A1: no finished games
-  if (finishedGames.length === 0) {
-    return json({ reason: 'no_games_today', processed: 0 })
-  }
-
-  // Guard A3: not all games finished
+  if (finishedGames.length === 0) return json({ reason: 'no_games_today', processed: 0 })
   if (finishedGames.length < (allGames ?? []).length) {
-    return json({
-      reason:   'games_not_finished',
-      finished: finishedGames.length,
-      total:    allGames!.length,
-    })
+    return json({ reason: 'games_not_finished', finished: finishedGames.length, total: allGames!.length })
   }
 
   const gameIds = finishedGames.map(g => g.id)
 
-  // 4. Soft check: stats synced?
   const { count: statsCount } = await supabase
     .from('game_player_stats')
     .select('*', { count: 'exact', head: true })
     .in('game_id', gameIds)
   const statsReady = (statsCount ?? 0) > 0
 
-  // 5. Get prompt
-  const promptQuery = supabase.from('prompt_versions').select('*')
-  const { data: promptRow, error: promptErr } = await (
-    testMode
-      ? promptQuery.eq('id', versionId!).single()
-      : promptQuery.eq('is_active', true).single()
-  )
+  let agentPrompts: Array<{ slot: string; promptRow: Record<string, unknown> }> = []
 
-  if (promptErr || !promptRow) {
-    console.error('[prompt] not found:', promptErr?.message)
-    return json({ error: 'no_active_prompt' }, 500)
+  if (testMode) {
+    const { data: pRow, error: pErr } = await supabase
+      .from('prompt_versions').select('*').eq('id', versionId!).single()
+    if (pErr || !pRow) return json({ error: 'no_prompt_for_version_id' }, 500)
+    agentPrompts = [{ slot: 'main', promptRow: pRow }]
+  } else {
+    const { data: pRows, error: pErr } = await supabase
+      .from('prompt_versions')
+      .select('*')
+      .in('agent_slot', ['main', 'candidate_2', 'candidate_3', 'baseline', 'candidate_4'])
+      .not('agent_slot', 'is', null)
+      .order('version_tag', { ascending: false })
+
+    if (pErr || !pRows || pRows.length === 0) {
+      console.warn('[prompt] no agent_slot prompts found, falling back to active prompt')
+      const { data: fallbackRow, error: fbErr } = await supabase
+        .from('prompt_versions').select('*').eq('is_active', true).single()
+      if (fbErr || !fallbackRow) return json({ error: 'no_active_prompt' }, 500)
+      agentPrompts = [{ slot: 'main', promptRow: fallbackRow }]
+    } else {
+      const seen = new Set<string>()
+      for (const row of pRows) {
+        const slot = row.agent_slot as string
+        if (!seen.has(slot)) {
+          seen.add(slot)
+          agentPrompts.push({ slot, promptRow: row })
+        }
+      }
+    }
   }
 
-  // 6. Qualifying groups: ≥3 active members
-  const { data: allGroups } = await supabase
-    .from('groups')
-    .select('id, name')
-
+  const { data: allGroups } = await supabase.from('groups').select('id, name')
   const qualifyingGroups: { id: string; name: string }[] = []
   for (const g of allGroups ?? []) {
     const { count } = await supabase
@@ -448,14 +640,8 @@ serve(async (req) => {
       .eq('is_inactive', false)
     if ((count ?? 0) >= 3) qualifyingGroups.push(g)
   }
+  if (qualifyingGroups.length === 0) return json({ reason: 'no_qualifying_groups', processed: 0 })
 
-  if (qualifyingGroups.length === 0) {
-    return json({ reason: 'no_qualifying_groups', processed: 0 })
-  }
-
-  // 7. Shared data — fetched ONCE, reused per group
-
-  // 7a. Goal scorers
   const goalScorerMap: Record<string, GoalEvent[]> = {}
   if (statsReady) {
     const { data: events } = await supabase
@@ -470,17 +656,12 @@ serve(async (req) => {
     }
   }
 
-  // 7b. Global prediction distributions (one RPC call per game)
   const globalDistMap: Record<string, GlobalDist> = {}
   for (const game of finishedGames) {
-    const { data: dist } = await supabase.rpc('get_game_prediction_distribution', {
-      p_game_id: game.id,
-    })
+    const { data: dist } = await supabase.rpc('get_game_prediction_distribution', { p_game_id: game.id })
     if (dist) globalDistMap[game.id] = dist
   }
 
-  // 7c. Global today's points per user (aggregated across all groups for ranking)
-  // Two queries: predictions first, then resolve usernames (avoids FK join issues)
   const { data: globalPreds } = await supabase
     .from('predictions')
     .select('user_id, game_id, points_earned, is_auto')
@@ -492,23 +673,16 @@ serve(async (req) => {
   for (const p of (globalPreds ?? []) as any[]) {
     const uid = p.user_id as string
     const gid = p.game_id as string
-    if (!globalUserAgg[uid]) {
-      globalUserAgg[uid] = { uid, gamesPts: {}, predCount: 0, autoCount: 0 }
-    }
-    // Take max pts per game per user (handles users in multiple groups)
+    if (!globalUserAgg[uid]) globalUserAgg[uid] = { uid, gamesPts: {}, predCount: 0, autoCount: 0 }
     globalUserAgg[uid].gamesPts[gid] = Math.max(globalUserAgg[uid].gamesPts[gid] ?? 0, p.points_earned ?? 0)
     globalUserAgg[uid].predCount++
     if (p.is_auto) globalUserAgg[uid].autoCount++
   }
 
-  // Resolve usernames with a separate profiles query
   const globalUids = Object.keys(globalUserAgg)
   const usernameMap: Record<string, string> = {}
   if (globalUids.length > 0) {
-    const { data: profileRows } = await supabase
-      .from('profiles')
-      .select('id, username')
-      .in('id', globalUids)
+    const { data: profileRows } = await supabase.from('profiles').select('id, username').in('id', globalUids)
     for (const pr of (profileRows ?? []) as { id: string; username: string }[]) {
       usernameMap[pr.id] = pr.username
     }
@@ -523,7 +697,6 @@ serve(async (req) => {
     }))
     .sort((a, b) => b.pts - a.pts)
 
-  // 7d. Global rank per (user × group) — same basis as global leaderboard (for display_data only, never sent to LLM)
   const [{ data: predTotals }, { data: champTotals }, { data: tsrTotals }] = await Promise.all([
     supabase.from('predictions').select('user_id, group_id, points_earned')
       .not('points_earned', 'is', null).not('group_id', 'is', null),
@@ -533,9 +706,9 @@ serve(async (req) => {
       .not('points_earned', 'is', null),
   ])
 
-  const userGroupPts: Record<string, Record<string, number>> = {}
+  const userGroupPts:   Record<string, Record<string, number>> = {}
   const userGroupExact: Record<string, Record<string, number>> = {}
-  // deno-lint-ignore no-explicit-any
+
   function addUGPts(uid: string, gid: string, pts: number) {
     if (!userGroupPts[uid]) userGroupPts[uid] = {}
     userGroupPts[uid][gid] = (userGroupPts[uid][gid] ?? 0) + pts
@@ -554,101 +727,191 @@ serve(async (req) => {
   for (const p of (tsrTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
 
   const allUGPairs = Object.entries(userGroupPts).flatMap(([uid, groups]) =>
-    Object.entries(groups).map(([gid, pts]) => ({
-      uid, gid, pts,
-      exact: userGroupExact[uid]?.[gid] ?? 0,
-    }))
+    Object.entries(groups).map(([gid, pts]) => ({ uid, gid, pts, exact: userGroupExact[uid]?.[gid] ?? 0 }))
   ).sort((a, b) => b.pts - a.pts || b.exact - a.exact)
 
   const globalRankByUserGroup: Record<string, Record<string, number>> = {}
   let ugRank = 1
   for (let ri = 0; ri < allUGPairs.length; ri++) {
-    if (ri > 0 && (allUGPairs[ri].pts !== allUGPairs[ri - 1].pts || allUGPairs[ri].exact !== allUGPairs[ri - 1].exact)) ugRank = ri + 1
+    if (ri > 0 && (allUGPairs[ri].pts !== allUGPairs[ri-1].pts || allUGPairs[ri].exact !== allUGPairs[ri-1].exact)) ugRank = ri + 1
     const { uid, gid } = allUGPairs[ri]
     if (!globalRankByUserGroup[uid]) globalRankByUserGroup[uid] = {}
     globalRankByUserGroup[uid][gid] = ugRank
   }
 
-  // 8. Process each group sequentially
-  let processed = 0
-  let skipped   = 0
+  let processed = 0; let skipped = 0
   const errors: string[] = []
 
   for (let i = 0; i < qualifyingGroups.length; i++) {
-    // Timeout guard
     if (Date.now() - startMs > TIMEOUT_MS) {
-      console.warn(`[timeout] stopping at group index ${i} after ${Date.now() - startMs}ms`)
+      console.warn(`[timeout] stopping at group index ${i}`)
       errors.push(`timeout: only processed ${processed}/${qualifyingGroups.length} groups`)
       break
     }
-
     if (i > 0) await sleep(GROUP_GAP_MS)
 
     const group = qualifyingGroups[i]
     console.log(`[group] processing: ${group.name} (${group.id})`)
 
     try {
-      // 8a. Group summary data (leaderboard + predictions + streaks)
       const { data: groupData, error: gdErr } = await supabase.rpc('get_group_summary_data', {
         p_group_id: group.id,
         p_date:     date,
       })
-
       if (gdErr || !groupData) {
         console.error(`[group] get_group_summary_data failed for ${group.name}:`, gdErr?.message)
-        skipped++
-        errors.push(`${group.name}: group data unavailable`)
-        continue
+        skipped++; errors.push(`${group.name}: group data unavailable`); continue
       }
 
-      // 8b. Champion + top scorer picks for this group
       const [{ data: champPicks }, { data: tsrPicks }] = await Promise.all([
         supabase.from('champion_pick').select('user_id, team').eq('group_id', group.id),
         supabase.from('top_scorer_pick').select('user_id, player_name').eq('group_id', group.id),
       ])
 
-      // 8c. Build compact JSON payload
       const payload = buildGroupPayload({
-        groupName:         group.name,
+        groupName:            group.name,
         date,
         groupData,
         finishedGames,
         globalDistMap,
         goalScorerMap,
-        champPicks:        (champPicks ?? []) as ChampPick[],
-        tsrPicks:          (tsrPicks  ?? []) as TsrPick[],
+        champPicks:           (champPicks ?? []) as ChampPick[],
+        tsrPicks:             (tsrPicks   ?? []) as TsrPick[],
         statsReady,
         globalSortedUsers,
+        globalRankByUserGroup,
+        groupId:              group.id,
       })
 
-      // 8d. Render user message
-      const userMessage = promptRow.user_prompt_template
-        .replace('{{group_name}}', group.name)
-        .replace('{{group_json}}', JSON.stringify(payload))
+      // 8d. Run agents — candidates now include version_tag
+      let candidates: Array<{
+        agent: number; slot: string; content: string; model: string
+        prompt_tokens: number; completion_tokens: number
+        temperature: number; seed: number; char_len: number
+        prompt_version_id: string; version_tag: string
+      }>
 
-      // 8e. Call OpenAI
-      const { content, promptTokens, completionTokens } = await callOpenAI(
-        openai,
-        promptRow.system_prompt,
-        userMessage,
-        effectiveModel,
-      )
+      if (testMode || agentPrompts.length === 1) {
+        const ap = agentPrompts[0]
+        const agentCfg = AGENTS[0]
+        const userMsg  = (ap.promptRow.user_prompt_template as string)
+          .replace('{{group_name}}', group.name)
+          .replace('{{group_json}}', JSON.stringify(payload))
+        const result = await callAgent(
+          openai, ap.promptRow.system_prompt as string, userMsg,
+          effectiveModel, agentCfg.temperature, agentCfg.seed,
+        )
+        candidates = [{
+          agent: 1, slot: ap.slot, content: result.content, model: effectiveModel,
+          prompt_tokens: result.promptTokens, completion_tokens: result.completionTokens,
+          temperature: agentCfg.temperature, seed: agentCfg.seed, char_len: result.content.length,
+          prompt_version_id: ap.promptRow.id as string,
+          version_tag:       ap.promptRow.version_tag as string,
+        }]
+      } else {
+        const agentResults = await Promise.all(
+          agentPrompts.map((ap, idx) => {
+            const agentCfg = AGENTS.find(a => a.slot === ap.slot) ?? AGENTS[idx] ?? AGENTS[0]
+            const userMsg  = (ap.promptRow.user_prompt_template as string)
+              .replace('{{group_name}}', group.name)
+              .replace('{{group_json}}', JSON.stringify(payload))
+            return callAgent(
+              openai, ap.promptRow.system_prompt as string, userMsg,
+              effectiveModel, agentCfg.temperature, agentCfg.seed,
+            ).then(r => ({
+              agent:             idx + 1,
+              slot:              ap.slot,
+              ...r,
+              temperature:       agentCfg.temperature,
+              seed:              agentCfg.seed,
+              prompt_version_id: ap.promptRow.id as string,
+              version_tag:       ap.promptRow.version_tag as string,
+            }))
+          })
+        )
+        candidates = agentResults.map(r => ({
+          agent:             r.agent,
+          slot:              r.slot,
+          content:           r.content,
+          model:             effectiveModel,
+          prompt_tokens:     r.promptTokens,
+          completion_tokens: r.completionTokens,
+          temperature:       r.temperature,
+          seed:              r.seed,
+          char_len:          r.content.length,
+          prompt_version_id: r.prompt_version_id,
+          version_tag:       r.version_tag,
+        }))
+      }
 
-      // 8f. Upsert to ai_summaries
+      // 8e. Judge
+      let winnerAgent: 1 | 2 | 3 | 4 | 5 = 1
+      let judgeResult: JudgeResult | null = null
+      let judgeRunId: string | null = null
+
+      if (!testMode && candidates.length >= 3) {
+        judgeResult = await callJudge(openai, payload, candidates)
+        winnerAgent = judgeResult.winnerAgent
+
+        const candidatesJsonb = candidates.map((c, idx) => ({
+          agent:             c.agent,
+          slot:              c.slot,
+          prompt_version_id: c.prompt_version_id,
+          version_tag:       c.version_tag,
+          content:           c.content,
+          model:             c.model,
+          prompt_tokens:     c.prompt_tokens,
+          completion_tokens: c.completion_tokens,
+          temperature:       c.temperature,
+          seed:              c.seed,
+          char_len:          c.char_len,
+          ...(judgeResult!.scores[idx] ?? {}),
+        }))
+
+        const { data: judgeRun, error: jrErr } = await supabase
+          .from('ai_judge_runs')
+          .upsert({
+            group_id:                group.id,
+            date,
+            candidates:              candidatesJsonb,
+            winner_agent:            winnerAgent,
+            judge_reasoning:         judgeResult.reasoning,
+            judge_model:             JUDGE_MODEL,
+            judge_prompt_tokens:     judgeResult.promptTokens,
+            judge_completion_tokens: judgeResult.completionTokens,
+          }, { onConflict: 'group_id,date' })
+          .select('id')
+          .single()
+
+        if (!jrErr && judgeRun) judgeRunId = judgeRun.id
+        else console.warn(`[judge_run] insert failed for ${group.name}:`, jrErr?.message)
+      }
+
+      // 8f. Upsert winning summary — now includes winner_score
+      const winner = candidates.find(c => c.agent === winnerAgent) ?? candidates[0]
+      const winnerPromptRow = agentPrompts.find(ap => ap.slot === winner.slot)?.promptRow
+        ?? agentPrompts[0].promptRow
+      const winnerScore = judgeResult
+        ? (judgeResult.scores.find(s => s.agent === winnerAgent)?.total ?? null)
+        : null
+
       const summary = {
         group_id:          group.id,
         date,
-        content,
+        content:           winner.content,
         games_count:       finishedGames.length,
         model:             effectiveModel,
-        prompt_tokens:     promptTokens     || null,
-        completion_tokens: completionTokens || null,
-        prompt_version_id: promptRow.id,
+        prompt_tokens:     winner.prompt_tokens  || null,
+        completion_tokens: winner.completion_tokens || null,
+        prompt_version_id: winnerPromptRow.id as string,
         input_json:        payload,
-        temperature:       TEMPERATURE,
-        top_p:             TOP_P,
+        temperature:       winner.temperature,
+        top_p:             1,
         max_tokens:        MAX_TOKENS,
-        seed:              SEED,
+        seed:              winner.seed,
+        ...(judgeRunId    ? { judge_run_id:   judgeRunId   } : {}),
+        ...(candidates.length >= 3 ? { winner_agent: winnerAgent } : {}),
+        ...(winnerScore !== null    ? { winner_score: winnerScore } : {}),
       }
 
       let { error: upsertErr } = await supabase
@@ -656,7 +919,6 @@ serve(async (req) => {
         .upsert(summary, { onConflict: 'group_id,date' })
 
       if (upsertErr) {
-        // One retry
         const { error: retryErr } = await supabase
           .from('ai_summaries')
           .upsert(summary, { onConflict: 'group_id,date' })
@@ -664,20 +926,15 @@ serve(async (req) => {
       }
 
       if (upsertErr) {
-        // D1: write to failed_summaries and continue
         console.error(`[upsert] failed for ${group.name}:`, upsertErr.message)
         await supabase.from('failed_summaries').insert({
-          group_id:  group.id,
-          date,
-          content,
-          error_msg: upsertErr.message,
+          group_id: group.id, date, content: winner.content, error_msg: upsertErr.message,
         })
         errors.push(`${group.name}: upsert failed → failed_summaries`)
-        skipped++
-        continue
+        skipped++; continue
       }
 
-      // 8g. Write display_data — global ranks per member for this group (UI-only, never part of LLM payload)
+      // 8g. Write display_data (global ranks per member)
       const globalRanks: Record<string, number> = {}
       // deno-lint-ignore no-explicit-any
       for (const m of (groupData.members ?? []) as any[]) {
@@ -690,32 +947,31 @@ serve(async (req) => {
         .eq('group_id', group.id)
         .eq('date', date)
 
-      // 8h. Test mode: write results back to prompt_versions row
+      // 8h. Test mode: write results back
       if (testMode) {
         await supabase
           .from('prompt_versions')
           .update({
-            test_input:        payload,
-            test_output:       content,
-            test_model:        effectiveModel,
-            test_tokens_in:    promptTokens,
-            test_tokens_out:   completionTokens,
-            test_temperature:  TEMPERATURE,
-            test_top_p:        TOP_P,
-            test_max_tokens:   MAX_TOKENS,
-            test_seed:         SEED,
-            tested_at:         new Date().toISOString(),
+            test_input:       payload,
+            test_output:      winner.content,
+            test_model:       effectiveModel,
+            test_tokens_in:   winner.prompt_tokens,
+            test_tokens_out:  winner.completion_tokens,
+            test_temperature: winner.temperature,
+            test_top_p:       1,
+            test_max_tokens:  MAX_TOKENS,
+            test_seed:        winner.seed,
+            tested_at:        new Date().toISOString(),
           })
           .eq('id', versionId!)
       }
 
-      console.log(`[group] done: ${group.name} (${content.length} chars, ${promptTokens}+${completionTokens} tokens)`)
+      console.log(`[group] done: ${group.name} (agent ${winnerAgent}, score ${winnerScore}, ${winner.content.length} chars)`)
       processed++
 
     } catch (err: unknown) {
       console.error(`[group] unexpected error for ${group.name}:`, (err as Error)?.message)
-      skipped++
-      errors.push(`${group.name}: ${(err as Error)?.message ?? 'unknown error'}`)
+      skipped++; errors.push(`${group.name}: ${(err as Error)?.message ?? 'unknown error'}`)
     }
   }
 
@@ -724,6 +980,7 @@ serve(async (req) => {
     skipped,
     total_groups:  qualifyingGroups.length,
     test_mode:     testMode,
+    agent_count:   agentPrompts.length,
     errors,
     elapsed_ms:    Date.now() - startMs,
   })
