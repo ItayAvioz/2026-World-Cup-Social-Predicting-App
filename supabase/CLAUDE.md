@@ -116,4 +116,4 @@
 
 - Verify custom Resend domain — currently sending from onboarding@resend.dev (may go to spam). Update FROM_ADDRESS in notify-admin EF once domain verified.
 - Clean up test data: "The Legends" group + test games/fake scores.
-- Merge PR #1 (Judge LLM feature/judge-llm branch).
+- ✅ PR #1 merged (2026-05-05) — feature/judge-llm fully merged into main.
