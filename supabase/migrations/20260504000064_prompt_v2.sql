@@ -1307,7 +1307,7 @@ BEGIN
   INTO v_ef_count, v_ef_list FROM public.ef_errors WHERE created_at >= now() - interval '24 hours';
 
   WITH session_durations AS (
-    SELECT user_id, session_id, EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) AS seconds
+    SELECT user_id, session_id, COUNT(*) * 15.0 AS seconds
     FROM public.app_events WHERE event_type = 'heartbeat' AND created_at >= v_start AND created_at < v_end
     GROUP BY user_id, session_id HAVING COUNT(*) >= 2
   ), user_totals AS (
