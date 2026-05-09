@@ -1,4 +1,5 @@
-// nightly-summary v24
+// nightly-summary v25
+// v25: Accept group_id in body — single-group mode (per-group cron, Option B). No group_id = legacy loop (manual/test).
 // 5-agent Judge LLM system. Runs v11/v12/v13/v10B/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
 // v20: Prompt fine-tuning — pronoun "him" ban (all 3), v12 P4 "struggling" ban + hard check, v11 structure fixes (6-para rule, P6 no match data, P5 late-drama removed).
@@ -552,11 +553,13 @@ serve(async (req) => {
   let date: string
   let versionId: string | undefined
   let modelOverride: string | undefined
+  let singleGroupId: string | undefined
   try {
     const body    = await req.json()
     date          = body.date
     versionId     = body.version_id
     modelOverride = body.model
+    singleGroupId = body.group_id
     if (!date) return json({ error: 'date required' }, 400)
   } catch {
     return json({ error: 'invalid JSON body' }, 400)
@@ -632,17 +635,26 @@ serve(async (req) => {
     }
   }
 
-  const { data: allGroups } = await supabase.from('groups').select('id, name')
-  const qualifyingGroups: { id: string; name: string }[] = []
-  for (const g of allGroups ?? []) {
-    const { count } = await supabase
-      .from('group_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('group_id', g.id)
-      .eq('is_inactive', false)
-    if ((count ?? 0) >= 3) qualifyingGroups.push(g)
+  let qualifyingGroups: { id: string; name: string }[]
+
+  if (singleGroupId) {
+    const { data: grp, error: grpErr } = await supabase
+      .from('groups').select('id, name').eq('id', singleGroupId).single()
+    if (grpErr || !grp) return json({ error: 'group_not_found', group_id: singleGroupId }, 404)
+    qualifyingGroups = [grp]
+  } else {
+    const { data: allGroups } = await supabase.from('groups').select('id, name')
+    qualifyingGroups = []
+    for (const g of allGroups ?? []) {
+      const { count } = await supabase
+        .from('group_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('group_id', g.id)
+        .eq('is_inactive', false)
+      if ((count ?? 0) >= 3) qualifyingGroups.push(g)
+    }
+    if (qualifyingGroups.length === 0) return json({ reason: 'no_qualifying_groups', processed: 0 })
   }
-  if (qualifyingGroups.length === 0) return json({ reason: 'no_qualifying_groups', processed: 0 })
 
   const goalScorerMap: Record<string, GoalEvent[]> = {}
   if (statsReady) {
