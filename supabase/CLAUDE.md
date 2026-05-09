@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (73 local files — all deployed)
+## Migrations (74 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -82,13 +82,14 @@
 | 70 | 20260505000070_ai_judge_scores_view.sql | ai_judge_scores view: one row per agent per run (group_name, date, slot, version_tag, scores, is_winner) |
 | 71 | 20260505000071_backfill_sync_game_crons.sql | one-time backfill: fn_schedule_game_sync for all existing future games with api_fixture_id (M68 covers new inserts) |
 | 72 | 20260506000072_v13_template_opener_fix.sql | v13-unique-2 prompt: ban verbatim "not just this group" opener in GLOBAL TOP RULE + quality check |
+| 73 | 20260510000073_fn_schedule_ai_summaries_per_group.sql | fn_schedule_ai_summaries: one cron per qualifying group per date (Option B fix for 120s timeout) |
 
 ## Edge Functions
 
 | Function | Version | Status | Notes |
 |---|---|---|---|
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
-| nightly-summary | v24 (Supabase v28) | ✅ ACTIVE | Judge: today_pts vs total_pts explicit check; reasoning must quote winning line. v13: ban verbatim "not just this group" opener. |
+| nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v3 | ✅ ACTIVE | Resend gateway, 5 alert types + daily digest |
 
@@ -102,7 +103,7 @@
 | auto-predict-{game_id} | at each game's KO | fn_auto_predict_game for users who didn't submit |
 | verify-game-{game_id} | KO-30min | Verify API kick-off time matches DB |
 | sync-game-{game_id} | KO+120min | Write score + stats (football-api-sync mode=sync) |
-| ai-summary-{date} | last_KO+150min | Nightly AI summary per group |
+| ai-summary-{date}-{group_id[:8]} | last_KO+110min | Nightly AI summary — one job per qualifying group per date (M73) |
 
 ## Auto-Scheduling (M68 — 2026-05-04)
 
