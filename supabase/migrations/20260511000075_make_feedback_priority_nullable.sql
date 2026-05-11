@@ -1,0 +1,1 @@
+ALTER TABLE feedback ALTER COLUMN priority DROP NOT NULL;
