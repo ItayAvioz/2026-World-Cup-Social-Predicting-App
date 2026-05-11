@@ -50,6 +50,18 @@
 
   let isLogin = false
 
+  function switchToLogin() {
+    isLogin = true
+    formRegister.style.display = 'none'
+    formLogin.style.display    = ''
+    toggleText.textContent     = "Don't have an account? "
+    toggleLink.textContent     = 'Sign Up'
+    formSub.textContent        = 'Sign in to continue predicting'
+  }
+
+  const navLoginBtn = document.getElementById('nav-login-btn')
+  if (navLoginBtn) navLoginBtn.addEventListener('click', () => switchToLogin())
+
   toggleLink.addEventListener('click', e => {
     e.preventDefault()
     isLogin = !isLogin
