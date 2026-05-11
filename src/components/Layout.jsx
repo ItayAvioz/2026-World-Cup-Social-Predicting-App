@@ -15,7 +15,7 @@ export default function Layout({ title, children, showBack = true, rightSlot, le
           : <div className="nav-spacer" />
         )}
         <div className="nav-logo">⚽ WC2026</div>
-        {rightSlot ?? <div className="nav-spacer" />}
+        {rightSlot ?? <a href="./index.html" className="nav-home-link" title="Landing page">🏠</a>}
       </nav>
       <div className="page-body">
         {children}

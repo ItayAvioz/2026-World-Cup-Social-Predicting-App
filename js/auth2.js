@@ -27,11 +27,17 @@
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) {
       localStorage.removeItem('wc2026_pending_invite')
-      // Pass code in URL — Groups.jsx handles the join with full error feedback
       window.location.href = `./app.html?v=${Date.now()}#/groups?invite=${encodeURIComponent(pending)}`
-    } else {
-      window.location.href = `./app.html?v=${Date.now()}#/dashboard`
+      return
     }
+    // Logged-in user browsing landing page — hide auth form
+    const reg = document.getElementById('register-section')
+    if (reg) reg.style.display = 'none'
+    // Replace Login/Sign Up nav buttons with Back to App link
+    const navLinks = document.querySelector('.nav-links')
+    if (navLinks) navLinks.innerHTML = '<a href="./app.html#/dashboard" class="btn btn-gold">← Back to App</a>'
+    // Hide "Join the Game" hero button
+    document.querySelectorAll('a[href="#register-section"]').forEach(el => { el.style.display = 'none' })
     return
   }
 

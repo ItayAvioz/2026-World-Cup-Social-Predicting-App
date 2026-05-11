@@ -365,6 +365,10 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .page-nav-signout { background:none; border:1px solid var(--border); color:var(--muted); font-size:.72rem; cursor:pointer; padding:.3rem .75rem; min-height:40px; border-radius:6px; font-family:'Inter',sans-serif; transition:all .15s; white-space:nowrap; }
 .page-nav-signout:hover { border-color:var(--accent); color:var(--accent); }
 .btn-nav-sm { font-size:.72rem; padding:.3rem .75rem; min-height:40px; border-radius:6px; font-weight:600; }
+.nav-home-link { font-size:1.1rem; min-width:40px; min-height:40px; display:flex; align-items:center; justify-content:center; border-radius:6px; transition:background .15s; }
+.nav-home-link:hover { background:rgba(255,255,255,.06); }
+.dash-nav-right { display:flex; align-items:center; gap:.25rem; }
+@media(max-width:768px) { .dash-nav-right .nav-home-link { display:none; } }
 
 /* DASHBOARD — HERO */
 .dash-hero { background:radial-gradient(ellipse 160% 140% at 40% 0%, #1f0e00 0%, #0f0800 40%, var(--bg) 72%); padding:1.2rem 1.4rem; border-bottom:1px solid var(--border); position:relative; overflow:hidden; display:flex; flex-direction:column; gap:.5rem; }

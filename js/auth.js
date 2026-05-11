@@ -27,10 +27,17 @@
     const pending = localStorage.getItem('wc2026_pending_invite')
     if (pending) {
       localStorage.removeItem('wc2026_pending_invite')
-      // Pass code in URL — Groups.jsx handles the join with full error feedback
       window.location.href = `./app.html#/groups?invite=${encodeURIComponent(pending)}`
-    } else {
-      window.location.href = './app.html#/dashboard'
+      return
+    }
+    // Logged-in user viewing landing page — hide auth form, show back button
+    const reg = document.getElementById('register-section')
+    if (reg) {
+      reg.style.display = 'none'
+      const btn = document.createElement('div')
+      btn.style.cssText = 'text-align:center;padding:2rem 1rem;'
+      btn.innerHTML = '<a href="./app.html#/dashboard" class="btn btn-gold btn-lg">← Back to App</a>'
+      reg.parentNode.insertBefore(btn, reg)
     }
     return
   }

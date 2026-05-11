@@ -750,6 +750,13 @@ export default function Dashboard() {
 
         <div className="prof-divider" />
 
+        {/* Landing page */}
+        <div className="prof-section">
+          <a href="./index.html" className="btn btn-outline btn-full" style={{display:'block',textAlign:'center'}}>🏠 View Landing Page</a>
+        </div>
+
+        <div className="prof-divider" />
+
         {/* Sign out */}
         <div className="prof-section">
           <button className="btn btn-outline btn-full" onClick={signOut}>Sign out</button>
