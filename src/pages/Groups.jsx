@@ -460,6 +460,7 @@ export default function Groups() {
                     <div key={label} className="grp-stats-block">
                       <div className="grp-stats-title">{label}</div>
                       <div className="grp-dist">
+                        <div className="grp-dist-section-label">Predictions Distribution</div>
                         <div className="grp-dist-bar">
                           <div className="grp-dist-home" style={{ width: '50%' }} />
                           <div className="grp-dist-draw" style={{ width: '30%' }} />
@@ -470,7 +471,8 @@ export default function Groups() {
                           <span className="grp-dist-label grp-dist-label--draw">⚖️ —%</span>
                           <span className="grp-dist-label grp-dist-label--away">✈️ —%</span>
                         </div>
-                        <div className="grp-dist-bar grp-dist-bar--goals" style={{ marginTop: '.5rem' }}>
+                        <div className="grp-dist-section-label" style={{ marginTop:'.6rem' }}>Goals Distribution</div>
+                        <div className="grp-dist-bar grp-dist-bar--goals">
                           <div className="grp-dist-g01" style={{ width: '35%' }} />
                           <div className="grp-dist-g23" style={{ width: '45%' }} />
                           <div className="grp-dist-g4p" style={{ width: '20%' }} />
@@ -763,6 +765,7 @@ export default function Groups() {
                                 <div key={label} className="grp-stats-block">
                                   <div className="grp-stats-title">{label}</div>
                                   <div className="grp-dist">
+                                    <div className="grp-dist-section-label">Predictions Distribution</div>
                                     <div className="grp-dist-bar">
                                       <div className="grp-dist-home" style={{ width: dist ? `${dist.homePct}%` : '50%' }} />
                                       <div className="grp-dist-draw" style={{ width: dist ? `${dist.drawPct}%` : '30%' }} />
@@ -773,7 +776,8 @@ export default function Groups() {
                                       <span className="grp-dist-label grp-dist-label--draw">⚖️ {dist ? `${dist.draws} (${dist.drawPct}%)` : '—%'}</span>
                                       <span className="grp-dist-label grp-dist-label--away">✈️ {dist ? `${dist.awayWins} (${dist.awayPct}%)` : '—%'}</span>
                                     </div>
-                                    <div className="grp-dist-bar grp-dist-bar--goals" style={{ marginTop: '.5rem' }}>
+                                    <div className="grp-dist-section-label" style={{ marginTop:'.6rem' }}>Goals Distribution</div>
+                                    <div className="grp-dist-bar grp-dist-bar--goals">
                                       <div className="grp-dist-g01" style={{ width: dist ? `${dist.g01Pct}%` : '35%' }} />
                                       <div className="grp-dist-g23" style={{ width: dist ? `${dist.g23Pct}%` : '45%' }} />
                                       <div className="grp-dist-g4p" style={{ width: dist ? `${dist.g4pPct}%` : '20%' }} />

@@ -762,17 +762,19 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 
 /* ── W/D/L + goals distribution ── */
 .grp-dist { }
-.grp-dist-bar { display:flex; height:8px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,.06); margin-bottom:.5rem; min-width:100%; }
-.grp-dist-home { background:var(--green); transition:width .4s; }
-.grp-dist-draw { background:rgba(136,136,136,.6); transition:width .4s; }
-.grp-dist-away { background:var(--blue); transition:width .4s; }
+.grp-dist-bar { display:flex; height:11px; border-radius:4px; overflow:hidden; background:rgba(255,255,255,.06); margin-bottom:.5rem; min-width:100%; }
+.grp-dist-home { background:#999; transition:width .4s; }
+.grp-dist-draw { background:var(--accent); transition:width .4s; }
+.grp-dist-away { background:var(--text); transition:width .4s; }
 .grp-dist-labels { display:flex; justify-content:space-between; gap:.25rem; margin-bottom:.5rem; flex-wrap:wrap; }
-.grp-dist-label { font-size:.68rem; color:var(--muted); }
-.grp-dist-label--home { color:var(--green); }
-.grp-dist-label--away { color:var(--blue); }
-.grp-dist-stats { display:flex; justify-content:space-between; align-items:center; font-size:.72rem; color:var(--muted); padding-top:.4rem; border-top:1px solid rgba(255,255,255,.05); }
+.grp-dist-label { font-size:.78rem; color:#bbb; }
+.grp-dist-label--home { color:#aaa; }
+.grp-dist-label--draw { color:var(--accent); }
+.grp-dist-label--away { color:var(--text); }
+.grp-dist-section-label { font-size:.62rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:.35rem; }
+.grp-dist-stats { display:flex; justify-content:space-between; align-items:center; font-size:.75rem; color:var(--muted); padding-top:.4rem; border-top:1px solid rgba(255,255,255,.05); }
 .grp-dist-stats strong { color:var(--text); }
-.grp-dist-total { font-size:.68rem; }
+.grp-dist-total { font-size:.75rem; }
 
 /* ── Desktop: wider card layout ── */
 @media(min-width:769px) {
@@ -796,20 +798,20 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .grp-tpl-flag { width:28px; height:20px; background:rgba(255,255,255,.1); border-radius:3px; flex-shrink:0; }
 
 /* ── Dual stats block (Group vs Global) ── */
-.grp-stats-dual { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.75rem; }
-.grp-stats-block { background:rgba(255,255,255,.03); border-radius:8px; padding:.75rem; }
-.grp-stats-title { font-size:.68rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:.5rem; }
+.grp-stats-dual { display:flex; flex-direction:column; gap:.75rem; margin-top:.75rem; }
+.grp-stats-block { background:rgba(255,255,255,.03); border-radius:8px; padding:1rem; }
+.grp-stats-title { font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:.6rem; }
 
 /* ── Game venue line ── */
 .grp-ng-venue { font-size:.65rem; color:var(--muted); margin-top:.2rem; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 
 /* ── Goals distribution bar ── */
-.grp-dist-g01 { background: var(--muted); border-radius: 3px 0 0 3px; height: 100%; }
+.grp-dist-g01 { background: #999; border-radius: 3px 0 0 3px; height: 100%; }
 .grp-dist-g23 { background: var(--accent); height: 100%; }
-.grp-dist-g4p { background: #e74c3c; border-radius: 0 3px 3px 0; height: 100%; }
-.grp-dist-label--g01 { color: var(--muted); }
+.grp-dist-g4p { background: var(--text); border-radius: 0 3px 3px 0; height: 100%; }
+.grp-dist-label--g01 { color: #aaa; }
 .grp-dist-label--g23 { color: var(--accent); }
-.grp-dist-label--g4p { color: #e74c3c; }
+.grp-dist-label--g4p { color: var(--text); }
 
 /* ── Leaderboard top scorer column ── */
 .lb-top-scorer { font-size:.72rem; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
