@@ -127,7 +127,8 @@ async function handleProbe(body: Record<string, unknown>): Promise<Response> {
 // non-qualified long-shot nations (Sweden, Turkey, etc.) which are skipped.
 
 const ODDS_TEAM_NAME_MAP: Record<string, string> = {
-  'USA': 'United States',
+  'USA':                  'United States',
+  'Bosnia & Herzegovina': 'Bosnia-Herzegovina',
 }
 
 async function handleChampion(supabase: ReturnType<typeof createClient>): Promise<Response> {

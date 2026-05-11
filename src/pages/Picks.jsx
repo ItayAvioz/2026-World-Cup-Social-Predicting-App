@@ -71,6 +71,7 @@ export default function Picks() {
   const [saving, setSaving]               = useState({ champion: false, topScorer: false })
   const [champSearch, setChampSearch]     = useState('')
   const [search, setSearch]               = useState('')
+  const [playerTeamFilter, setPlayerTeamFilter] = useState('')
 
   // ── Predictions tab state ─────────────────────────────────────
   const [games, setGames]             = useState([])
@@ -199,6 +200,7 @@ export default function Picks() {
     setSelectedGroupId(id)
     setChampSearch('')
     setSearch('')
+    setPlayerTeamFilter('')
   }
 
   // ── Picks save handlers ───────────────────────────────────────
@@ -369,13 +371,18 @@ export default function Picks() {
     )
   }, [champSearch, allTeams])
 
+  const playerTeams = useMemo(() => (
+    [...new Set(dbPlayers.map(p => p.team))].sort()
+  ), [dbPlayers])
+
   const filteredPlayers = useMemo(() => {
+    let list = playerTeamFilter
+      ? dbPlayers.filter(p => p.team === playerTeamFilter)
+      : dbPlayers
     const q = search.toLowerCase()
-    if (!q) return dbPlayers
-    return dbPlayers.filter(p =>
-      p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)
-    )
-  }, [search, dbPlayers])
+    if (q) list = list.filter(p => p.name.toLowerCase().includes(q))
+    return list
+  }, [search, playerTeamFilter, dbPlayers])
 
   const gamesByPhase = useMemo(() => {
     const map = {}
@@ -660,11 +667,30 @@ export default function Picks() {
                           <input
                             className="pk-player-search"
                             type="text"
-                            placeholder="Search player or team…"
+                            placeholder="Search player…"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             aria-label="Search top scorer candidates"
                           />
+                          <div className="pk-group-tabs" style={{ marginBottom:'.5rem' }}>
+                            <button
+                              className={`pk-group-tab${!playerTeamFilter ? ' pk-group-tab--active' : ''}`}
+                              onClick={() => setPlayerTeamFilter('')}
+                            >All</button>
+                            {playerTeams.map(t => {
+                              const code = dbTeams.find(d => d.name === t)?.flag_code ?? null
+                              return (
+                                <button
+                                  key={t}
+                                  className={`pk-group-tab${playerTeamFilter === t ? ' pk-group-tab--active' : ''}`}
+                                  onClick={() => setPlayerTeamFilter(playerTeamFilter === t ? '' : t)}
+                                >
+                                  {code && <FlagImg name={t} code={code} className="pk-player-flag" style={{ marginRight:4, verticalAlign:'middle' }} />}
+                                  {t}
+                                </button>
+                              )
+                            })}
+                          </div>
                           <div className="pk-player-list" role="listbox" aria-label="Top scorer candidates">
                             {filteredPlayers.length === 0 ? (
                               <p style={{ color:'var(--muted)', fontSize:'.85rem', padding:'.5rem .7rem' }}>
