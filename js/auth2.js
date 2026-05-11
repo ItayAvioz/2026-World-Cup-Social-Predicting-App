@@ -28,9 +28,9 @@
     if (pending) {
       localStorage.removeItem('wc2026_pending_invite')
       // Pass code in URL — Groups.jsx handles the join with full error feedback
-      window.location.href = `./app.html#/groups?invite=${encodeURIComponent(pending)}`
+      window.location.href = `./app.html?v=${Date.now()}#/groups?invite=${encodeURIComponent(pending)}`
     } else {
-      window.location.href = './app.html#/dashboard'
+      window.location.href = `./app.html?v=${Date.now()}#/dashboard`
     }
     return
   }
@@ -133,9 +133,9 @@
     if (pending) {
       localStorage.removeItem('wc2026_pending_invite')
       // Pass code in URL — Groups.jsx handles the join with full error feedback
-      window.location.href = `./app.html#/groups?invite=${encodeURIComponent(pending)}`
+      window.location.href = `./app.html?v=${Date.now()}#/groups?invite=${encodeURIComponent(pending)}`
     } else {
-      window.location.href = './app.html#/dashboard'
+      window.location.href = `./app.html?v=${Date.now()}#/dashboard`
     }
   })
 })()

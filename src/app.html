@@ -12,7 +12,11 @@
 <body>
   <div id="root"></div>
   <script>
-    if (location.protocol === 'file:') {
+    if (!crypto.randomUUID) {
+      crypto.randomUUID = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+        (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16))
+    }
+if (location.protocol === 'file:') {
       document.getElementById('root').innerHTML =
         '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:1rem;color:#f0f0f0;background:#0a0a0a;font-family:Inter,sans-serif;text-align:center;padding:2rem">' +
         '<p style="font-size:1.1rem;margin:0">⚠️ App cannot run from a local file</p>' +

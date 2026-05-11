@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -54,8 +54,6 @@ export default function Groups() {
   const [selectedGroupId, setSelectedGroupId] = useState(null)
   const [loading,         setLoading]         = useState(true)
   const [error,           setError]           = useState(null)
-  const [manage,          setManage]          = useState(null) // group id with manage section open
-
   const selectGroup = id => { sessionStorage.setItem('groups_tab', id); setSelectedGroupId(id) }
 
   // Modal states
@@ -70,10 +68,6 @@ export default function Groups() {
   const [joinError,  setJoinError]  = useState('')
   const [renameName, setRenameName] = useState('')
   const [submitting, setSubmitting] = useState(false)
-
-  // Confirm inactive
-  const [confirmId, setConfirmId] = useState(null)
-  const confirmTimer              = useRef(null)
 
   // Per-group leaderboards
   const [leaderboards, setLeaderboards] = useState({})
@@ -304,26 +298,6 @@ export default function Groups() {
     loadGroups()
   }
 
-  // ── Toggle inactive (confirm step) ────────────────────────────────────
-  const handleToggleInactive = async (groupId, memberId, current) => {
-    if (confirmId !== memberId) {
-      setConfirmId(memberId)
-      clearTimeout(confirmTimer.current)
-      confirmTimer.current = setTimeout(() => setConfirmId(null), 3000)
-      return
-    }
-    clearTimeout(confirmTimer.current)
-    setConfirmId(null)
-    const { error: e } = await supabase
-      .from('group_members')
-      .update({ is_inactive: !current })
-      .eq('group_id', groupId)
-      .eq('user_id', memberId)
-    if (e) { showToast(e.message || 'Failed to update member', 'error'); return }
-    showToast(current ? 'Member reactivated' : 'Member marked inactive', 'success')
-    loadGroups()
-  }
-
   // ── Copy invite link ───────────────────────────────────────────────────
   const copyInvite = async code => {
     const base = window.location.href.replace(/app\.html.*$/, '')
@@ -408,7 +382,6 @@ export default function Groups() {
                 <div className="grp-card-actions">
                   <button className="btn btn-outline btn-xs" disabled>🔗 Invite</button>
                   <button className="btn btn-outline btn-xs" disabled>✏️ Rename</button>
-                  <button className="btn btn-outline btn-xs grp-toggle-btn" disabled>Manage ▾</button>
                 </div>
               </div>
 
@@ -544,7 +517,6 @@ export default function Groups() {
               const lbRowsRaw    = leaderboards[group.id] ?? []
               const lbError      = lbErrors[group.id] ?? null
               const memberIds    = new Set(members.map(m => m.user_id))
-              const isManageOpen = manage === group.id
 
               // If leaderboard RPC returned rows, use them.
               // If RPC failed, show error. If empty (pre-tournament), build placeholder from members.
@@ -595,13 +567,6 @@ export default function Groups() {
                           </button>
                         )
                       )}
-                      <button
-                        className={`btn btn-outline btn-xs grp-toggle-btn${isManageOpen ? ' active' : ''}`}
-                        onClick={() => setManage(isManageOpen ? null : group.id)}
-                        aria-expanded={isManageOpen}
-                      >
-                        {isManageOpen ? 'Close ▴' : 'Manage ▾'}
-                      </button>
                     </div>
                   </div>
 
@@ -866,55 +831,6 @@ export default function Groups() {
                       })
                     )}
                   </div>
-
-                  {/* ── Manage members (collapsible) ── */}
-                  {isManageOpen && (
-                    <div className="grp-members-list">
-                      {members.length === 0 ? (
-                        <p className="grp-members-empty">No members yet.</p>
-                      ) : (
-                        members.map(m => {
-                          const uname     = m.profiles?.username ?? 'Unknown'
-                          const isMe      = m.user_id === user?.id
-                          const isCap     = m.user_id === group.created_by
-                          const canToggle = isCaptain && !isMe
-                          const isPending = confirmId === m.user_id
-                          return (
-                            <div
-                              key={m.user_id}
-                              className={`grp-member-row${m.is_inactive ? ' grp-member-inactive' : ''}`}
-                            >
-                              <div className="grp-member-info">
-                                <span className="grp-member-name">
-                                  {uname}
-                                  {isMe  && <span className="grp-member-you"> (you)</span>}
-                                  {isCap && <span className="grp-member-cap"> 👑</span>}
-                                </span>
-                                {m.is_inactive && <span className="grp-inactive-tag">Inactive</span>}
-                              </div>
-                              {canToggle && (
-                                <button
-                                  className={`btn btn-xs grp-inactive-btn${m.is_inactive ? ' grp-inactive-btn--on' : ''}${isPending ? ' grp-inactive-btn--confirm' : ''}`}
-                                  onClick={() => handleToggleInactive(group.id, m.user_id, m.is_inactive)}
-                                  title="Mark as inactive if this member has stopped playing."
-                                >
-                                  {isPending ? 'Sure?' : m.is_inactive ? 'Reactivate' : 'Set Inactive'}
-                                </button>
-                              )}
-                            </div>
-                          )
-                        })
-                      )}
-                      {isCaptain && (
-                        <p className="grp-inactive-hint">
-                          💡 <strong>Set Inactive</strong> — member still earns auto-predict points but appears dimmed on the leaderboard.
-                        </p>
-                      )}
-                      <p className="grp-members-note">
-                        Members are permanent. To remove a member or delete the group, contact the admin.
-                      </p>
-                    </div>
-                  )}
 
                 </div>
               )
