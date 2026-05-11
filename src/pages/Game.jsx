@@ -64,9 +64,8 @@ export default function Game() {
   const [gameEvents,      setGameEvents]      = useState([])
   const [loading,         setLoading]         = useState(true)
   const [error,           setError]           = useState(null)
-  const [predInput,       setPredInput]       = useState({ home:'', away:'' })
-  const [editingGroupId,  setEditingGroupId]  = useState(null)  // which group is being edited
-  const [submitting,      setSubmitting]      = useState(false)
+  const [groupInputs,      setGroupInputs]      = useState({}) // { [groupId|'ungrouped']: { home, away } }
+  const [submittingGroups, setSubmittingGroups] = useState({})
   // resolvedGroupId: undefined=still resolving, string=group UUID, null=ungrouped user (valid)
   const [resolvedGroupId, setResolvedGroupId] = useState(undefined)
   const [allGroups,       setAllGroups]       = useState([])   // [{ id, name }]
@@ -102,6 +101,24 @@ export default function Game() {
     if (!gameId || !user || resolvedGroupId === undefined) return
     loadGame()
   }, [gameId, user, resolvedGroupId])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setGroupInputs(prev => ({
+      ...prev,
+      ungrouped: myPred ? { home: String(myPred.pred_home), away: String(myPred.pred_away) } : (prev.ungrouped ?? { home:'', away:'' })
+    }))
+  }, [myPred])
+
+  useEffect(() => {
+    if (allGroupPreds.length === 0) return
+    setGroupInputs(prev => {
+      const next = { ...prev }
+      for (const { groupId, pred } of allGroupPreds) {
+        if (!(groupId in next)) next[groupId] = pred ? { home: String(pred.pred_home), away: String(pred.pred_away) } : { home:'', away:'' }
+      }
+      return next
+    })
+  }, [allGroupPreds])
 
   async function loadGame() {
     setLoading(true)
@@ -191,40 +208,34 @@ export default function Game() {
 
   }
 
-  async function submitPred(e) {
+  async function submitGroupPred(e, groupId) {
     e.preventDefault()
-    const h = parseInt(predInput.home, 10)
-    const a = parseInt(predInput.away, 10)
+    const key = groupId ?? 'ungrouped'
+    const input = groupInputs[key] ?? {}
+    const h = parseInt(input.home, 10)
+    const a = parseInt(input.away, 10)
     if (isNaN(h) || isNaN(a) || h < 0 || a < 0) {
       showToast('Enter a valid score (0 or more for each team)', 'error')
       return
     }
-    const targetGroupId = editingGroupId ?? resolvedGroupId
-    if (targetGroupId === undefined) return
-    setSubmitting(true)
+    setSubmittingGroups(s => ({ ...s, [key]: true }))
     const { data, error: err } = await supabase
       .from('predictions')
       .upsert(
-        { user_id: user.id, game_id: gameId, group_id: targetGroupId, pred_home: h, pred_away: a },
+        { user_id: user.id, game_id: gameId, group_id: groupId, pred_home: h, pred_away: a },
         { onConflict: 'user_id,game_id,group_id' }
       )
       .select('pred_home, pred_away, is_auto, updated_at, points_earned, group_id')
       .single()
-    setSubmitting(false)
+    setSubmittingGroups(s => ({ ...s, [key]: false }))
     if (err) {
       if (err.code === '42501') showToast('Predictions are locked for this game', 'error')
       else showToast('Failed to save prediction', 'error')
       return
     }
     logEvent(supabase, user.id, 'prediction_submit', 'game')
-    // Update myPred for the resolved group (legacy)
-    if (targetGroupId === resolvedGroupId) setMyPred(data)
-    // Update allGroupPreds for the edited group
-    setAllGroupPreds(prev => prev.map(gp =>
-      gp.groupId === targetGroupId ? { ...gp, pred: data } : gp
-    ))
-    setEditingGroupId(null)
-    setPredInput({ home:'', away:'' })
+    if (groupId === resolvedGroupId) setMyPred(data)
+    setAllGroupPreds(prev => prev.map(gp => gp.groupId === groupId ? { ...gp, pred: data } : gp))
     showToast('Prediction saved!')
   }
 
@@ -272,8 +283,6 @@ export default function Game() {
   const homeStats = teamStats.find(s => s.team === game.team_home) ?? null
   const awayStats = teamStats.find(s => s.team === game.team_away) ?? null
   const pLabel = pointsLabel(myPred, game)
-
-  const showForm = editingGroupId !== null || (!myPred && !pastKO)
 
   return (
     <Layout title={`${game.team_home} vs ${game.team_away}`}>
@@ -335,78 +344,103 @@ export default function Game() {
             {allGroupPreds.length > 0 ? (
               <div className="gm-all-group-preds">
                 {allGroupPreds.map(({ groupId, groupName, pred }) => {
-                  const isResolved = groupId === resolvedGroupId
                   const gPLabel = pointsLabel(pred, game)
+                  const input = groupInputs[groupId] ?? { home:'', away:'' }
+                  const isSaving = !!submittingGroups[groupId]
                   return (
                     <div key={groupId} className="gm-header-pred">
                       <div className="gm-pred-group-name">{groupName}</div>
-                      {pred ? (
+                      {finished ? (
                         <>
+                          {pred && (
+                            <div className="gm-header-pred-main">
+                              <span className="gm-my-pick-score">{pred.pred_home}–{pred.pred_away}</span>
+                              <span className="gm-my-pick-label">Your pick</span>
+                              {pred.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
+                            </div>
+                          )}
+                          {gPLabel && <span className={`gm-header-pred-result ${gPLabel.cls}`}>{gPLabel.text}</span>}
+                        </>
+                      ) : pastKO ? (
+                        pred ? (
                           <div className="gm-header-pred-main">
                             <span className="gm-my-pick-score">{pred.pred_home}–{pred.pred_away}</span>
                             <span className="gm-my-pick-label">Your pick</span>
                             {pred.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
                           </div>
-                          {finished ? (
-                            gPLabel && <span className={`gm-header-pred-result ${gPLabel.cls}`}>{gPLabel.text}</span>
-                          ) : pastKO ? (
-                            <span className="gm-locked-msg">🔒 Locked</span>
-                          ) : (
-                            editingGroupId !== groupId && (
-                              <button
-                                className="btn btn-outline"
-                                style={{ fontSize:'.75rem', padding:'4px 12px', minHeight:'unset' }}
-                                onClick={() => { setPredInput({ home: String(pred.pred_home), away: String(pred.pred_away) }); setEditingGroupId(groupId) }}
-                              >
-                                ✏️ Edit
-                              </button>
-                            )
-                          )}
-                        </>
-                      ) : pastKO ? (
-                        <span className="gm-locked-msg">🔒 No prediction submitted</span>
-                      ) : (
-                        editingGroupId !== groupId && (
-                          <button
-                            className="btn btn-outline"
-                            style={{ fontSize:'.75rem', padding:'4px 12px', minHeight:'unset' }}
-                            onClick={() => { setPredInput({ home:'', away:'' }); setEditingGroupId(groupId) }}
-                          >
-                            ⚽ Predict
-                          </button>
+                        ) : (
+                          <span className="gm-locked-msg">🔒 No prediction submitted</span>
                         )
+                      ) : (
+                        <form onSubmit={e => submitGroupPred(e, groupId)} className="gm-pred-form" style={{ width:'100%' }}>
+                          <div className="gm-predict-row" style={{ marginBottom:'.4rem' }}>
+                            <span className="gm-predict-team">{game.team_home}</span>
+                            <div className="gm-predict-inputs">
+                              <input type="number" min="0" max="20" inputMode="numeric" className="gm-input"
+                                value={input.home}
+                                onChange={e => setGroupInputs(p => ({ ...p, [groupId]: { ...p[groupId], home: e.target.value } }))}
+                                placeholder="0" aria-label={`${game.team_home} goals`} required />
+                              <span className="gm-input-sep">–</span>
+                              <input type="number" min="0" max="20" inputMode="numeric" className="gm-input"
+                                value={input.away}
+                                onChange={e => setGroupInputs(p => ({ ...p, [groupId]: { ...p[groupId], away: e.target.value } }))}
+                                placeholder="0" aria-label={`${game.team_away} goals`} required />
+                            </div>
+                            <span className="gm-predict-team">{game.team_away}</span>
+                          </div>
+                          <button type="submit" className="btn btn-gold btn-full" disabled={isSaving} style={{ minHeight:'44px' }}>
+                            {isSaving ? 'Saving…' : pred ? '✏️ Update' : '⚽ Predict'}
+                          </button>
+                        </form>
                       )}
                     </div>
                   )
                 })}
               </div>
-            ) : myPred !== undefined && (myPred || pastKO) && (
+            ) : myPred !== undefined && (
               <div className="gm-header-pred">
-                {myPred ? (
+                {finished ? (
                   <>
+                    {myPred && (
+                      <div className="gm-header-pred-main">
+                        <span className="gm-my-pick-score">{myPred.pred_home}–{myPred.pred_away}</span>
+                        <span className="gm-my-pick-label">Your pick</span>
+                        {myPred.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
+                      </div>
+                    )}
+                    {pLabel && <span className={`gm-header-pred-result ${pLabel.cls}`}>{pLabel.text}</span>}
+                  </>
+                ) : pastKO ? (
+                  myPred ? (
                     <div className="gm-header-pred-main">
                       <span className="gm-my-pick-score">{myPred.pred_home}–{myPred.pred_away}</span>
                       <span className="gm-my-pick-label">Your pick</span>
                       {myPred.is_auto && <span className="grp-auto-badge">⚡ Auto</span>}
                     </div>
-                    {finished ? (
-                      pLabel && <span className={`gm-header-pred-result ${pLabel.cls}`}>{pLabel.text}</span>
-                    ) : pastKO ? (
-                      <span className="gm-locked-msg">🔒 Locked</span>
-                    ) : (
-                      editingGroupId === null && (
-                        <button
-                          className="btn btn-outline"
-                          style={{ fontSize:'.75rem', padding:'4px 12px', minHeight:'unset' }}
-                          onClick={() => { setPredInput({ home: String(myPred.pred_home), away: String(myPred.pred_away) }); setEditingGroupId(resolvedGroupId) }}
-                        >
-                          ✏️ Edit
-                        </button>
-                      )
-                    )}
-                  </>
+                  ) : (
+                    <span className="gm-locked-msg">🔒 No prediction submitted</span>
+                  )
                 ) : (
-                  <span className="gm-locked-msg">🔒 No prediction submitted</span>
+                  <form onSubmit={e => submitGroupPred(e, resolvedGroupId)} className="gm-pred-form" style={{ width:'100%' }}>
+                    <div className="gm-predict-row" style={{ marginBottom:'.4rem' }}>
+                      <span className="gm-predict-team">{game.team_home}</span>
+                      <div className="gm-predict-inputs">
+                        <input type="number" min="0" max="20" inputMode="numeric" className="gm-input"
+                          value={groupInputs.ungrouped?.home ?? ''}
+                          onChange={e => setGroupInputs(p => ({ ...p, ungrouped: { ...p.ungrouped, home: e.target.value } }))}
+                          placeholder="0" aria-label={`${game.team_home} goals`} required />
+                        <span className="gm-input-sep">–</span>
+                        <input type="number" min="0" max="20" inputMode="numeric" className="gm-input"
+                          value={groupInputs.ungrouped?.away ?? ''}
+                          onChange={e => setGroupInputs(p => ({ ...p, ungrouped: { ...p.ungrouped, away: e.target.value } }))}
+                          placeholder="0" aria-label={`${game.team_away} goals`} required />
+                      </div>
+                      <span className="gm-predict-team">{game.team_away}</span>
+                    </div>
+                    <button type="submit" className="btn btn-gold btn-full" disabled={!!submittingGroups.ungrouped} style={{ minHeight:'44px' }}>
+                      {submittingGroups.ungrouped ? 'Saving…' : myPred ? '✏️ Update' : '⚽ Predict'}
+                    </button>
+                  </form>
                 )}
               </div>
             )}
@@ -483,74 +517,6 @@ export default function Game() {
             </div>
           )
         })()}
-
-        {/* ── Prediction Entry (form only, pre-KO) ──────────────── */}
-        {!pastKO && (editingGroupId !== null || (allGroupPreds.length === 0 && !myPred)) && (
-          <div className="gm-section">
-            <div className="gm-section-head">
-              <span className="gm-section-label">
-                Your Prediction
-                {editingGroupId && allGroups.length > 1 && (
-                  <span className="gm-pred-form-group">
-                    {allGroups.find(g => g.id === editingGroupId)?.name}
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="gm-section-body">
-              <form onSubmit={submitPred}>
-                <div className="gm-predict-row">
-                  <span className="gm-predict-team">{game.team_home}</span>
-                  <div className="gm-predict-inputs">
-                    <input
-                      type="number"
-                      min="0"
-                      max="20"
-                      inputMode="numeric"
-                      className="gm-input"
-                      value={predInput.home}
-                      onChange={e => setPredInput(p => ({ ...p, home: e.target.value }))}
-                      placeholder="0"
-                      aria-label={`${game.team_home} goals`}
-                      required
-                    />
-                    <span className="gm-input-sep">–</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="20"
-                      inputMode="numeric"
-                      className="gm-input"
-                      value={predInput.away}
-                      onChange={e => setPredInput(p => ({ ...p, away: e.target.value }))}
-                      placeholder="0"
-                      aria-label={`${game.team_away} goals`}
-                      required
-                    />
-                  </div>
-                  <span className="gm-predict-team">{game.team_away}</span>
-                </div>
-                <div className="gm-predict-actions">
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    style={{ minHeight:'48px' }}
-                    onClick={() => { setEditingGroupId(null); setPredInput({ home:'', away:'' }) }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-gold btn-full"
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Saving…' : '⚽ Predict'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
 
         {/* ── Odds (pre-KO) ──────────────────────────────────────── */}
         {!pastKO && (
