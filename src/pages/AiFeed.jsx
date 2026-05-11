@@ -447,23 +447,29 @@ export default function AiFeed() {
                           <div className="af-daily-loading">No data for this summary</div>
                         ) : (
                           <>
-                            <table>
+                            <table style={{ tableLayout:'fixed', width:'100%' }}>
+                              <colgroup>
+                                <col style={{ width:'40%' }} />
+                                <col style={{ width:'20%' }} />
+                                <col style={{ width:'20%' }} />
+                                {globalRanks && <col style={{ width:'20%' }} />}
+                              </colgroup>
                               <thead>
                                 <tr>
+                                  <th style={{ textAlign:'left' }}>Player</th>
+                                  <th>Pts</th>
                                   <th>Grp</th>
-                                  <th>Player</th>
-                                  <th>Total pts</th>
                                   {globalRanks && <th>Global</th>}
                                 </tr>
                               </thead>
                               <tbody>
                                 {lb.map((row, i) => (
                                   <tr key={row.user} className={i === 0 ? 'af-daily-top' : ''}>
-                                    <td>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}</td>
-                                    <td>{row.user}</td>
+                                    <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>{row.user}</td>
                                     <td className="af-daily-pts">{row.total_pts}</td>
+                                    <td style={{ color:'var(--muted)', fontSize:'.8rem' }}>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `#${row.rank}`}</td>
                                     {globalRanks && (
-                                      <td style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>
+                                      <td style={{ color: 'var(--muted)', fontSize: '.8rem' }}>
                                         {globalRanks[row.user] != null ? `#${globalRanks[row.user]}` : '—'}
                                       </td>
                                     )}
