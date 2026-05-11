@@ -604,7 +604,40 @@ export default function Game() {
         {!pastKO && (
           <div className="gm-section">
             <div className="gm-section-head">
-              <span className="gm-section-label">Tournament Avg</span>
+              <span className="gm-section-label">Tournament Teams Record</span>
+            </div>
+            <div className="gm-section-body" style={{ padding:'.75rem 1rem' }}>
+              <div className="gm-gstat-row" style={{ borderBottom:'none' }}>
+                <span className="gm-gstat-val">
+                  <span className="gm-form">
+                    {(teamForm[game.team_home] ?? []).length > 0
+                      ? (teamForm[game.team_home] ?? []).map((r, i) => (
+                          <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
+                        ))
+                      : <span style={{ color:'var(--muted)', fontSize:'.78rem' }}>—</span>
+                    }
+                  </span>
+                </span>
+                <span className="gm-gstat-label">Record<br/><span style={{fontSize:'9px',opacity:.6}}>oldest → latest</span></span>
+                <span className="gm-gstat-val gm-gstat-val--right">
+                  <span className="gm-form" style={{ justifyContent:'flex-end' }}>
+                    {(teamForm[game.team_away] ?? []).length > 0
+                      ? (teamForm[game.team_away] ?? []).map((r, i) => (
+                          <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
+                        ))
+                      : <span style={{ color:'var(--muted)', fontSize:'.78rem' }}>—</span>
+                    }
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!pastKO && (
+          <div className="gm-section">
+            <div className="gm-section-head">
+              <span className="gm-section-label">Tournament Avg Stats</span>
             </div>
             <div className="gm-section-body" style={{ paddingBottom:'.75rem' }}>
               <div className="gm-gstat-head">
@@ -623,38 +656,19 @@ export default function Game() {
                 )
                 return (
                   <>
-                    <div className="gm-gstat-row" key="Record">
-                      <span className="gm-gstat-val">
-                        <span className="gm-form">
-                          {(teamForm[game.team_home] ?? []).map((r, i) => (
-                            <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
-                          ))}
-                        </span>
-                      </span>
-                      <span className="gm-gstat-label">Record</span>
-                      <span className="gm-gstat-val gm-gstat-val--right">
-                        <span className="gm-form">
-                          {(teamForm[game.team_away] ?? []).map((r, i) => (
-                            <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
-                          ))}
-                        </span>
-                      </span>
-                    </div>
-                    {sr('Goals',
-                      h ? `${h.avg_goals_scored ?? '—'} / ${h.avg_goals_conceded ?? '—'}` : null,
-                      a ? `${a.avg_goals_scored ?? '—'} / ${a.avg_goals_conceded ?? '—'}` : null
-                    )}
-                    {sr('Possession',
+                    {sr('Goals Scored avg', h?.avg_goals_scored ?? null, a?.avg_goals_scored ?? null)}
+                    {sr('Goals Conceded avg', h?.avg_goals_conceded ?? null, a?.avg_goals_conceded ?? null)}
+                    {sr('Possession avg',
                       h?.avg_possession != null ? `${h.avg_possession}%` : null,
                       a?.avg_possession != null ? `${a.avg_possession}%` : null
                     )}
-                    {sr('Shots', h?.avg_shots_total, a?.avg_shots_total)}
-                    {sr('On Target', h?.avg_shots_on_target, a?.avg_shots_on_target)}
-                    {sr('Corners', h?.avg_corners, a?.avg_corners)}
-                    {sr('Fouls', h?.avg_fouls, a?.avg_fouls)}
-                    {sr('🟨 Yellow Cards', h?.avg_yellow_cards, a?.avg_yellow_cards)}
-                    {sr('🟥 Red Cards', h?.avg_red_cards, a?.avg_red_cards)}
-                    {sr('Offsides', h?.avg_offsides, a?.avg_offsides)}
+                    {sr('Shots avg', h?.avg_shots_total, a?.avg_shots_total)}
+                    {sr('On Target avg', h?.avg_shots_on_target, a?.avg_shots_on_target)}
+                    {sr('Corners avg', h?.avg_corners, a?.avg_corners)}
+                    {sr('Fouls avg', h?.avg_fouls, a?.avg_fouls)}
+                    {sr('🟨 Yellow Cards avg', h?.avg_yellow_cards, a?.avg_yellow_cards)}
+                    {sr('🟥 Red Cards avg', h?.avg_red_cards, a?.avg_red_cards)}
+                    {sr('Offsides avg', h?.avg_offsides, a?.avg_offsides)}
                   </>
                 )
               })()}
