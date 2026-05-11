@@ -29,7 +29,7 @@ export default function FeedbackButton() {
   const handleClose = () => setS(INITIAL)
 
   const handleSubmit = async () => {
-    if (!s.message.trim() || !s.priority) return
+    if (!s.message.trim()) return
     upd({ submitting: true, screenshotWarn: false })
 
     let screenshotPath = null
@@ -154,7 +154,7 @@ export default function FeedbackButton() {
               className="btn btn-gold btn-full"
               style={{ marginTop: '1.2rem' }}
               onClick={handleSubmit}
-              disabled={s.submitting || !s.message.trim() || !s.priority}
+              disabled={s.submitting || !s.message.trim()}
             >
               {s.submitting ? 'שולח...' : 'שלח פידבק'}
             </button>
