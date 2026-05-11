@@ -238,7 +238,7 @@ export default function AiFeed() {
     const globalRanks = summary.display_data?.global_ranks ?? null
     if (!lb.length) return
     const lines = lb.map(row => {
-      const medal = row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `${row.rank}.`
+      const medal = row.group_rank === 1 ? '🥇' : row.group_rank === 2 ? '🥈' : row.group_rank === 3 ? '🥉' : `#${row.group_rank ?? '?'}`
       const global = globalRanks?.[row.user] != null ? ` (Global #${globalRanks[row.user]})` : ''
       return `${medal} ${row.user} — ${row.total_pts}pt${global}`
     })
@@ -467,7 +467,7 @@ export default function AiFeed() {
                                   <tr key={row.user} className={i === 0 ? 'af-daily-top' : ''}>
                                     <td style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>{row.user}</td>
                                     <td className="af-daily-pts">{row.total_pts}</td>
-                                    <td style={{ color:'var(--muted)', fontSize:'.8rem' }}>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank ? `#${row.rank}` : '—'}</td>
+                                    <td style={{ color:'var(--muted)', fontSize:'.8rem' }}>{row.group_rank === 1 ? '🥇' : row.group_rank === 2 ? '🥈' : row.group_rank === 3 ? '🥉' : row.group_rank ? `#${row.group_rank}` : '—'}</td>
                                     {globalRanks && (
                                       <td style={{ color: 'var(--muted)', fontSize: '.8rem' }}>
                                         {globalRanks[row.user] != null ? `#${globalRanks[row.user]}` : '—'}
