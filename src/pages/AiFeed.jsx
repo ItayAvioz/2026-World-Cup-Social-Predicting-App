@@ -195,14 +195,12 @@ export default function AiFeed() {
     else localStorage.removeItem('af_rx_' + summaryId)
   }
 
-  function shareCard(summary, groupName) {
-    const text = `${groupName} · ${fmtSummaryDate(summary.date)}\n\n${summary.content}\n\n— WC2026`
+  function shareText(text) {
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
       window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
       return
     }
-    // desktop — clipboard
     try {
       navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'))
     } catch (_) {
@@ -219,6 +217,32 @@ export default function AiFeed() {
         showToast('Could not copy', 'error')
       }
     }
+  }
+
+  function shareCard(summary, groupName) {
+    shareText(`${groupName} · ${fmtSummaryDate(summary.date)}\n\n${summary.content}\n\n— WC2026`)
+  }
+
+  function shareDailyStandings(summaryId, groupName, date) {
+    const rows = dailyData[summaryId]?.rows ?? []
+    if (!rows.length) return
+    const lines = rows.map((r, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
+      return `${medal} ${r.username} — ${r.pts}pt`
+    })
+    shareText(`${groupName} · ${fmtSummaryDate(date)}\n📊 Day Standings\n\n${lines.join('\n')}\n\n— WC2026`)
+  }
+
+  function shareTotalStandings(summary, groupName) {
+    const lb = summary.input_json?.leaderboard ?? []
+    const globalRanks = summary.display_data?.global_ranks ?? null
+    if (!lb.length) return
+    const lines = lb.map(row => {
+      const medal = row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : `${row.rank}.`
+      const global = globalRanks?.[row.user] != null ? ` (Global #${globalRanks[row.user]})` : ''
+      return `${medal} ${row.user} — ${row.total_pts}pt${global}`
+    })
+    shareText(`${groupName} · ${fmtSummaryDate(summary.date)}\n🏆 Total Standings\n\n${lines.join('\n')}\n\n— WC2026`)
   }
 
   function isNew(summary) {
@@ -388,20 +412,25 @@ export default function AiFeed() {
                         <div className="af-daily-loading">Loading…</div>
                       )}
                       {!dailyData[s.id]?.loading && dailyData[s.id]?.rows?.length > 0 && (
-                        <table>
-                          <thead>
-                            <tr><th>#</th><th>Player</th><th>Pts today</th></tr>
-                          </thead>
-                          <tbody>
-                            {dailyData[s.id].rows.map((row, i) => (
-                              <tr key={row.username} className={i === 0 ? 'af-daily-top' : ''}>
-                                <td>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
-                                <td>{row.username}</td>
-                                <td className="af-daily-pts">{row.pts}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <>
+                          <table>
+                            <thead>
+                              <tr><th>#</th><th>Player</th><th>Pts today</th></tr>
+                            </thead>
+                            <tbody>
+                              {dailyData[s.id].rows.map((row, i) => (
+                                <tr key={row.username} className={i === 0 ? 'af-daily-top' : ''}>
+                                  <td>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                                  <td>{row.username}</td>
+                                  <td className="af-daily-pts">{row.pts}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="af-table-share-row">
+                            <button className="af-share-btn" onClick={() => shareDailyStandings(s.id, selectedGroup?.name ?? 'Group', s.date)}>↗ Share</button>
+                          </div>
+                        </>
                       )}
                       {!dailyData[s.id]?.loading && !dailyData[s.id]?.rows?.length && (
                         <div className="af-daily-loading">No data yet</div>
@@ -417,30 +446,35 @@ export default function AiFeed() {
                         {lb.length === 0 ? (
                           <div className="af-daily-loading">No data for this summary</div>
                         ) : (
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Grp</th>
-                                <th>Player</th>
-                                <th>Total pts</th>
-                                {globalRanks && <th>Global</th>}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {lb.map((row, i) => (
-                                <tr key={row.user} className={i === 0 ? 'af-daily-top' : ''}>
-                                  <td>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}</td>
-                                  <td>{row.user}</td>
-                                  <td className="af-daily-pts">{row.total_pts}</td>
-                                  {globalRanks && (
-                                    <td style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>
-                                      {globalRanks[row.user] != null ? `#${globalRanks[row.user]}` : '—'}
-                                    </td>
-                                  )}
+                          <>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Grp</th>
+                                  <th>Player</th>
+                                  <th>Total pts</th>
+                                  {globalRanks && <th>Global</th>}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {lb.map((row, i) => (
+                                  <tr key={row.user} className={i === 0 ? 'af-daily-top' : ''}>
+                                    <td>{row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank}</td>
+                                    <td>{row.user}</td>
+                                    <td className="af-daily-pts">{row.total_pts}</td>
+                                    {globalRanks && (
+                                      <td style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>
+                                        {globalRanks[row.user] != null ? `#${globalRanks[row.user]}` : '—'}
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <div className="af-table-share-row">
+                              <button className="af-share-btn" onClick={() => shareTotalStandings(s, selectedGroup?.name ?? 'Group')}>↗ Share</button>
+                            </div>
+                          </>
                         )}
                       </div>
                     )

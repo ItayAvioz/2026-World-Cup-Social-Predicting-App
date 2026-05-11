@@ -310,6 +310,46 @@ export default function Groups() {
     }
   }
 
+  function shareText(text) {
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+    if (isMobile) {
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+      return
+    }
+    try {
+      navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'))
+    } catch (_) {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.cssText = 'position:fixed;opacity:0'
+        document.body.appendChild(ta)
+        ta.focus(); ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+        showToast('Copied to clipboard!')
+      } catch (_2) {
+        showToast('Could not copy', 'error')
+      }
+    }
+  }
+
+  function shareGroupBoard(groupName, rows) {
+    if (!rows.length) return
+    const lines = rows.map(r => {
+      const medal = MEDAL[r.group_rank] ?? `#${r.group_rank}`
+      const champ = r.champion_team ? ` 🏆${r.champion_team}` : ''
+      return `${medal} ${r.username}${champ} — ${r.total_points ?? 0}pt`
+    })
+    shareText(`${groupName}\n🏆 Group Board\n\n${lines.join('\n')}\n\n— WC2026`)
+  }
+
+  function shareGamePredictions(groupName, game, preds) {
+    if (!preds.length) return
+    const lines = preds.map(p => `${p.profiles?.username ?? '—'}: ${p.pred_home}–${p.pred_away}${p.is_auto ? ' ⚡' : ''}`)
+    shareText(`${groupName} · ${game.team_home} vs ${game.team_away}\n⚽ Predictions\n\n${lines.join('\n')}\n\n— WC2026`)
+  }
+
   const canRename     = new Date() < RENAME_DEADLINE
   const myGroupCount  = groups.length
   const canCreateMore = myGroupCount < 3
@@ -574,7 +614,12 @@ export default function Groups() {
 
                   {/* ── Leaderboard ── */}
                   <div className="grp-section">
-                    <div className="grp-section-label">Group Board</div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div className="grp-section-label" style={{ marginBottom:0 }}>Group Board</div>
+                      {lbRows.length > 0 && (
+                        <button className="af-share-btn" style={{ fontSize:'.75rem' }} onClick={() => shareGroupBoard(group.name, lbRows)}>↗ Share</button>
+                      )}
+                    </div>
                     {lbLoading ? (
                       <div className="dash-skeleton grp-section-skeleton" />
                     ) : lbError ? (
@@ -795,8 +840,11 @@ export default function Groups() {
                               )
                               return (
                                 <div className="grp-section" style={{ marginTop: '.5rem' }}>
-                                  <div className="grp-section-label" style={{ borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: '.75rem' }}>
-                                    Game Prediction · Results
+                                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: '.75rem' }}>
+                                    <div className="grp-section-label" style={{ marginBottom:0 }}>Game Prediction · Results</div>
+                                    {focusPastKO && gameGroupPreds.length > 0 && (
+                                      <button className="af-share-btn" style={{ fontSize:'.75rem' }} onClick={() => shareGamePredictions(group.name, game, gameGroupPreds)}>↗ Share</button>
+                                    )}
                                   </div>
                                   {!focusPastKO ? (
                                     <div className="grp-preds-list">
