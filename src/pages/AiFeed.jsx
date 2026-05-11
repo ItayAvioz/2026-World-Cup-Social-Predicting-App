@@ -19,7 +19,7 @@ function fmtSummaryDate(dateStr) {
 function fmtGeneratedAt(iso) {
   const d = new Date(iso)
   return (
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) +
     ' · ' +
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   )

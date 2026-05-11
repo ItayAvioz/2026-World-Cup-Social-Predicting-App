@@ -30,7 +30,7 @@ function FlagImg({ name, code, className }) {
 function fmtKickoff(dt) {
   const d = new Date(dt)
   const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
   return `${date} · ${time}`
 }
 

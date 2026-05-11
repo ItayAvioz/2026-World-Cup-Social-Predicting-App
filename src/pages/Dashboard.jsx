@@ -13,7 +13,7 @@ const KICKOFF_TIME     = new Date('2026-06-11T19:00:00Z')
 const FINAL_DATE       = new Date('2026-07-19T19:00:00Z')
 const TOTAL_GAMES      = 104
 const FINAL_DATE_LABEL = FINAL_DATE.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Jerusalem' })
-const FINAL_TIME_LABEL = FINAL_DATE.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' }) + ' IL'
+const FINAL_TIME_LABEL = FINAL_DATE.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jerusalem' }) + ' IL'
 const TEAM_CODE    = Object.fromEntries(TEAMS.filter(t => t.code).map(t => [t.name, t.code]))
 const MEDAL        = { 1: '🥇', 2: '🥈', 3: '🥉' }
 const pad          = n => String(n).padStart(2, '0')
@@ -44,7 +44,7 @@ function calcClock(nextGames) {
 }
 
 function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function fmtGameDate(dateStr) {

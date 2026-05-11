@@ -33,12 +33,12 @@ const PHASE_LABEL = {
 function fmtKickoff(iso) {
   const d = new Date(iso)
   const date = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', timeZone:'Asia/Jerusalem' })
-  const time = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Jerusalem' })
+  const time = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Jerusalem' })
   return `${date} · ${time} IDT`
 }
 
 function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Jerusalem' }) + ' IDT'
+  return new Date(iso).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Jerusalem' }) + ' IDT'
 }
 
 
