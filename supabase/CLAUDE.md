@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (74 local files — all deployed)
+## Migrations (75 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -83,6 +83,7 @@
 | 71 | 20260505000071_backfill_sync_game_crons.sql | one-time backfill: fn_schedule_game_sync for all existing future games with api_fixture_id (M68 covers new inserts) |
 | 72 | 20260506000072_v13_template_opener_fix.sql | v13-unique-2 prompt: ban verbatim "not just this group" opener in GLOBAL TOP RULE + quality check |
 | 73 | 20260510000073_fn_schedule_ai_summaries_per_group.sql | fn_schedule_ai_summaries: one cron per qualifying group per date (Option B fix for 120s timeout) |
+| 74 | 20260512000074_fix_fn_schedule_ai_summaries_body_cast.sql | fix fn_schedule_ai_summaries: remove ::text cast from net.http_post body (M73 re-introduced M56 bug) |
 
 ## Edge Functions
 
