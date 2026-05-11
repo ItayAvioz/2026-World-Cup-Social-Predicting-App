@@ -72,6 +72,7 @@ export default function Picks() {
   const [champSearch, setChampSearch]     = useState('')
   const [search, setSearch]               = useState('')
   const [playerTeamFilter, setPlayerTeamFilter] = useState('')
+  const pillRowRef = useRef(null)
 
   // ── Predictions tab state ─────────────────────────────────────
   const [games, setGames]             = useState([])
@@ -672,24 +673,30 @@ export default function Picks() {
                             onChange={e => setSearch(e.target.value)}
                             aria-label="Search top scorer candidates"
                           />
-                          <div className="pk-group-tabs" style={{ marginBottom:'.5rem' }}>
-                            <button
-                              className={`pk-group-tab${!playerTeamFilter ? ' pk-group-tab--active' : ''}`}
-                              onClick={() => setPlayerTeamFilter('')}
-                            >All</button>
-                            {playerTeams.map(t => {
-                              const code = dbTeams.find(d => d.name === t)?.flag_code ?? null
-                              return (
-                                <button
-                                  key={t}
-                                  className={`pk-group-tab${playerTeamFilter === t ? ' pk-group-tab--active' : ''}`}
-                                  onClick={() => setPlayerTeamFilter(playerTeamFilter === t ? '' : t)}
-                                >
-                                  {code && <FlagImg name={t} code={code} className="pk-player-flag" style={{ marginRight:4, verticalAlign:'middle' }} />}
-                                  {t}
-                                </button>
-                              )
-                            })}
+                          <div className="pk-pills-wrap">
+                            <button className="pk-pills-arrow pk-pills-arrow--left" aria-hidden="true" tabIndex={-1}
+                              onClick={() => pillRowRef.current?.scrollBy({ left: -200, behavior: 'smooth' })}>‹</button>
+                            <div className="pk-group-tabs" style={{ marginBottom:'.5rem' }} ref={pillRowRef}>
+                              <button
+                                className={`pk-group-tab${!playerTeamFilter ? ' pk-group-tab--active' : ''}`}
+                                onClick={() => setPlayerTeamFilter('')}
+                              >All</button>
+                              {playerTeams.map(t => {
+                                const code = dbTeams.find(d => d.name === t)?.flag_code ?? null
+                                return (
+                                  <button
+                                    key={t}
+                                    className={`pk-group-tab${playerTeamFilter === t ? ' pk-group-tab--active' : ''}`}
+                                    onClick={() => setPlayerTeamFilter(playerTeamFilter === t ? '' : t)}
+                                  >
+                                    {code && <FlagImg name={t} code={code} className="pk-player-flag" style={{ marginRight:4, verticalAlign:'middle' }} />}
+                                    {t}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <button className="pk-pills-arrow pk-pills-arrow--right" aria-hidden="true" tabIndex={-1}
+                              onClick={() => pillRowRef.current?.scrollBy({ left: 200, behavior: 'smooth' })}>›</button>
                           </div>
                           <div className="pk-player-list" role="listbox" aria-label="Top scorer candidates">
                             {filteredPlayers.length === 0 ? (
