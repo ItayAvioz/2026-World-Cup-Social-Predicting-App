@@ -306,6 +306,7 @@ export default function Groups() {
   }
 
   function shareText(text) {
+    if (user?.id) logEvent(supabase, user.id, 'share_click', 'groups')
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
       window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')

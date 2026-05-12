@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export type EventType = 'page_view' | 'prediction_submit' | 'pick_submit' | 'heartbeat'
+export type EventType = 'page_view' | 'prediction_submit' | 'pick_submit' | 'heartbeat' | 'share_click'
 
 function getSessionId(): string {
   let id = sessionStorage.getItem('wc_session_id')

@@ -196,6 +196,7 @@ export default function AiFeed() {
   }
 
   function shareText(text) {
+    if (user?.id) logEvent(supabase, user.id, 'share_click', 'ai_feed')
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
       window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')

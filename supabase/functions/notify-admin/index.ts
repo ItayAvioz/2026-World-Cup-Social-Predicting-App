@@ -101,22 +101,39 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
   const games = (d.games as Array<Record<string, unknown>> ?? [])
   const gameRows = games.length > 0
     ? games.map(g => {
-        const total   = Number(g.total_preds)  || 0
-        const exact   = Number(g.exact)        || 0
-        const correct = Number(g.correct_outcome) || 0
-        const auto    = Number(g.auto_preds)   || 0
-        const exactPct   = total ? Math.round(exact   / total * 100) : 0
-        const correctPct = total ? Math.round(correct / total * 100) : 0
-        const autoPct    = total ? Math.round(auto    / total * 100) : 0
+        const total   = Number(g.total_preds)         || 0
+        const manual  = Number(g.manual_preds)        || 0
+        const auto    = Number(g.auto_preds)          || 0
+        const exact   = Number(g.exact_total)         || 0
+        const correct = Number(g.correct_outcome_total) || 0
+        const wrong   = total - exact - correct
+        const autoEx  = Number(g.auto_exact)          || 0
+        const autoCor = Number(g.auto_correct)        || 0
+
+        const pct = (n: number, d: number) => d ? Math.round(n / d * 100) : 0
+        const autoGot = (autoEx > 0 || autoCor > 0)
+          ? `✓ ${autoEx} exact · ${autoCor} W/D/L`
+          : '✗ none'
+
         return `<tr>
-          <td>${g.team_home} ${g.score_home}–${g.score_away} ${g.team_away}</td>
-          <td>${total} preds</td>
-          <td>Exact: ${exact} (${exactPct}%)</td>
-          <td>W/D/L: ${correct} (${correctPct}%)</td>
-          <td>Auto: ${auto} (${autoPct}%)</td>
+          <td colspan="2" style="padding:8px 6px 2px;font-weight:bold;border-top:1px solid #eee">
+            ${g.team_home} ${g.score_home}–${g.score_away} ${g.team_away}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:2px 6px;color:#555">Preds</td>
+          <td style="padding:2px 6px">${total} total · Manual: ${manual} (${pct(manual,total)}%) · Auto: ${auto} (${pct(auto,total)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:2px 6px;color:#555">Outcomes</td>
+          <td style="padding:2px 6px">Exact: ${exact} (${pct(exact,total)}%) · W/D/L: ${correct} (${pct(correct,total)}%) · Wrong: ${wrong} (${pct(wrong,total)}%)</td>
+        </tr>
+        <tr>
+          <td style="padding:2px 6px 8px;color:#555">Auto got</td>
+          <td style="padding:2px 6px 8px;color:${autoEx > 0 || autoCor > 0 ? 'green' : '#888'}">${autoGot}</td>
         </tr>`
       }).join('')
-    : `<tr><td colspan="5" style="color:#888">No finished games yesterday</td></tr>`
+    : `<tr><td colspan="2" style="color:#888;padding:8px">No finished games yesterday</td></tr>`
 
   // ef errors list
   const efErrors = (d.ef_errors_list as Array<Record<string, unknown>> ?? [])
@@ -133,7 +150,7 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
   const avgLabel = avgSecs > 0 ? `${avgMins} min ${avgRem} sec` : '—'
 
   const peakHour = d.peak_hour !== null && d.peak_hour !== undefined
-    ? `${String(d.peak_hour).padStart(2, '0')}:00–${String(Number(d.peak_hour) + 1).padStart(2, '0')}:00 UTC (${d.peak_active_users} active)`
+    ? `${String(d.peak_hour).padStart(2, '0')}:00–${String(Number(d.peak_hour) + 1).padStart(2, '0')}:00 IL (${d.peak_active_users} active)`
     : '—'
 
   const row = (label: string, value: unknown) =>
@@ -145,10 +162,7 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
       <h2>WorldCup 2026 — Daily digest (${d.digest_date})</h2>
 
       <h3>Games yesterday</h3>
-      <table cellpadding="6" style="border-collapse:collapse;width:100%">
-        <thead><tr style="background:#f0f0f0">
-          <th>Match</th><th>Predictions</th><th>Exact</th><th>W/D/L</th><th>Auto</th>
-        </tr></thead>
+      <table cellpadding="0" style="border-collapse:collapse;width:100%">
         <tbody>${gameRows}</tbody>
       </table>
 
@@ -173,16 +187,18 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
         ${row('Peak hour',       peakHour)}
         ${row('Predictions',     d.prediction_actions)}
         ${row('Pick submits',    d.pick_actions)}
+        ${row('Share clicks',    d.share_clicks)}
         ${row('Page views',      d.page_views)}
       </tbody></table>
 
       <h3>Judge LLM (yesterday)</h3>
       <table><tbody>
-        ${row('Runs', Number(d.judge_runs) || 0)}
-        ${row('v11-main wins',      Number(d.judge_v11_wins) || 0)}
-        ${row('v12-picks wins',     Number(d.judge_v12_wins) || 0)}
-        ${row('v13-unique wins',    Number(d.judge_v13_wins) || 0)}
-        ${row('v10-baseline wins',  Number(d.judge_v10_wins) || 0)}
+        ${row('Runs',              Number(d.judge_runs)      || 0)}
+        ${row('v11-main wins',     Number(d.judge_v11_wins)  || 0)}
+        ${row('v12-picks wins',    Number(d.judge_v12_wins)  || 0)}
+        ${row('v13-unique wins',   Number(d.judge_v13_wins)  || 0)}
+        ${row('v10-baseline wins', Number(d.judge_v10_wins)  || 0)}
+        ${row('v10B wins',         Number(d.judge_v10b_wins) || 0)}
       </tbody></table>
 
       <h3>EF errors (24h) — ${d.ef_errors_count}</h3>
