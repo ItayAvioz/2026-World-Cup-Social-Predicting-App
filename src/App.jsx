@@ -9,6 +9,7 @@ import Game      from './pages/Game.jsx'
 import Picks     from './pages/Picks.jsx'
 import Groups    from './pages/Groups.jsx'
 import AiFeed    from './pages/AiFeed.jsx'
+import Trivia    from './pages/Trivia.jsx'
 
 function AuthGuard({ children }) {
   const { session, loading } = useAuth()
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/picks"     element={<AuthGuard><Picks /></AuthGuard>} />
         <Route path="/groups"    element={<AuthGuard><Groups /></AuthGuard>} />
         <Route path="/ai-feed"   element={<AuthGuard><AiFeed /></AuthGuard>} />
+        <Route path="/trivia"    element={<AuthGuard><Trivia /></AuthGuard>} />
         <Route path="*"          element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </HashRouter>

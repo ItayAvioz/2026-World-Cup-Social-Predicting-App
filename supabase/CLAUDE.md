@@ -85,6 +85,10 @@
 | 73 | 20260510000073_fn_schedule_ai_summaries_per_group.sql | fn_schedule_ai_summaries: one cron per qualifying group per date (Option B fix for 120s timeout) |
 | 74 | 20260512000074_fix_fn_schedule_ai_summaries_body_cast.sql | fix fn_schedule_ai_summaries: remove ::text cast from net.http_post body (M73 re-introduced M56 bug) |
 | 76 | 20260512000076_daily_digest_enhanced_stats.sql | fn_daily_admin_digest: per-game manual/auto split + auto_exact/auto_correct, outcomes from total, share_click tracking, peak hour in Israel time, v10B wins |
+| 77 | 20260512000077_trivia_schema.sql | trivia_questions + trivia_answers tables + RLS |
+| 78 | 20260512000078_trivia_rpc.sql | submit_trivia_answer SECURITY DEFINER RPC |
+| 79 | 20260512000079_leaderboard_trivia.sql | leaderboard + trivia points — **DEFERRED: apply after tournament ends** |
+| 80 | 20260512000080_trivia_questions_seed.sql | 40 trivia questions seeded — Jun 11–Jul 20, 22:00 Israel time (19:00 UTC) |
 
 ## Edge Functions
 
