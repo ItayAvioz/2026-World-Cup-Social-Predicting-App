@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (75 local files — all deployed)
+## Migrations (76 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -84,6 +84,7 @@
 | 72 | 20260506000072_v13_template_opener_fix.sql | v13-unique-2 prompt: ban verbatim "not just this group" opener in GLOBAL TOP RULE + quality check |
 | 73 | 20260510000073_fn_schedule_ai_summaries_per_group.sql | fn_schedule_ai_summaries: one cron per qualifying group per date (Option B fix for 120s timeout) |
 | 74 | 20260512000074_fix_fn_schedule_ai_summaries_body_cast.sql | fix fn_schedule_ai_summaries: remove ::text cast from net.http_post body (M73 re-introduced M56 bug) |
+| 76 | 20260512000076_daily_digest_enhanced_stats.sql | fn_daily_admin_digest: per-game manual/auto split + auto_exact/auto_correct, outcomes from total, share_click tracking, peak hour in Israel time, v10B wins |
 
 ## Edge Functions
 
@@ -92,7 +93,7 @@
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
-| notify-admin | v3 | ✅ ACTIVE | Resend gateway, 5 alert types + daily digest |
+| notify-admin | v4 | ✅ ACTIVE | Enhanced daily digest: per-game manual/auto/outcomes/auto-got, share clicks, IL peak hour, v10B wins |
 
 ## Key pg_cron Jobs
 
