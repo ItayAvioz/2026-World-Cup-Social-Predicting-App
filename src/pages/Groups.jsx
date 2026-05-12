@@ -298,11 +298,21 @@ export default function Groups() {
     loadGroups()
   }
 
-  // ── Invite via WhatsApp ────────────────────────────────────────────────
-  const copyInvite = code => {
+  // ── Invite: WhatsApp on mobile, copy link on desktop ──────────────────
+  const copyInvite = async code => {
     const link = `https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/index.html?invite=${code}`
-    const text = `Join my World Cup 2026 predictions group! 🏆\n${link}`
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+    if (isMobile) {
+      const text = `Join my World Cup 2026 predictions group! 🏆\n${link}`
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+    } else {
+      try {
+        await navigator.clipboard.writeText(link)
+        showToast('Invite link copied!', 'success')
+      } catch {
+        showToast('Copy failed — code: ' + code, 'error')
+      }
+    }
   }
 
   function shareText(text) {
