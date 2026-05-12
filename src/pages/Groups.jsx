@@ -298,16 +298,11 @@ export default function Groups() {
     loadGroups()
   }
 
-  // ── Copy invite link ───────────────────────────────────────────────────
-  const copyInvite = async code => {
-    const base = window.location.href.replace(/app\.html.*$/, '')
-    const link = `${base}index.html?invite=${code}`
-    try {
-      await navigator.clipboard.writeText(link)
-      showToast('Invite link copied!', 'success')
-    } catch {
-      showToast('Copy failed — code: ' + code, 'error')
-    }
+  // ── Invite via WhatsApp ────────────────────────────────────────────────
+  const copyInvite = code => {
+    const link = `https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/index.html?invite=${code}`
+    const text = `Join my World Cup 2026 predictions group! 🏆\n${link}`
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
   }
 
   function shareText(text) {
