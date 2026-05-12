@@ -93,7 +93,7 @@
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
-| notify-admin | v4 | ✅ ACTIVE | Enhanced daily digest: per-game manual/auto/outcomes/auto-got, share clicks, IL peak hour, v10B wins |
+| notify-admin | v5 | ✅ ACTIVE | v5: fix W/D/L double-count bug (correct_outcome includes exact); v4: enhanced digest per-game manual/auto/outcomes/auto-got, share clicks, IL peak hour, v10B wins |
 
 ## Key pg_cron Jobs
 
