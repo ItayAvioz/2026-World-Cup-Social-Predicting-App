@@ -106,7 +106,8 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
         const auto    = Number(g.auto_preds)          || 0
         const exact   = Number(g.exact_total)         || 0
         const correct = Number(g.correct_outcome_total) || 0
-        const wrong   = total - exact - correct
+        const wdlOnly = correct - exact              // outcome correct but not exact (no double-count)
+        const wrong   = total - correct              // wrong outcome (correct already includes exact)
         const autoEx  = Number(g.auto_exact)          || 0
         const autoCor = Number(g.auto_correct)        || 0
 
@@ -126,7 +127,7 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
         </tr>
         <tr>
           <td style="padding:2px 6px;color:#555">Outcomes</td>
-          <td style="padding:2px 6px">Exact: ${exact} (${pct(exact,total)}%) · W/D/L: ${correct} (${pct(correct,total)}%) · Wrong: ${wrong} (${pct(wrong,total)}%)</td>
+          <td style="padding:2px 6px">Exact: ${exact} (${pct(exact,total)}%) · W/D/L: ${wdlOnly} (${pct(wdlOnly,total)}%) · Wrong: ${wrong} (${pct(wrong,total)}%)</td>
         </tr>
         <tr>
           <td style="padding:2px 6px 8px;color:#555">Auto got</td>
