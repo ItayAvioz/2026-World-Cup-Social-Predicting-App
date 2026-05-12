@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -46,8 +46,10 @@ function computeDist(preds) {
 export default function Groups() {
   const { user }       = useAuth()
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'groups') }, [])
+  useEffect(() => { if (location.state?.openCreate) setCreateOpen(true) }, [])
   const { showToast }  = useToast()
   const navigate       = useNavigate()
+  const location       = useLocation()
   const [searchParams] = useSearchParams()
 
   const [groups,          setGroups]          = useState([])
@@ -369,12 +371,10 @@ export default function Groups() {
         <div className="grp-page-header">
           <h1 className="grp-page-title">My Groups</h1>
           <div className="grp-header-actions">
-            <button className="btn btn-outline btn-sm" onClick={() => setJoinOpen(true)} disabled={!canCreateMore} title={!canCreateMore ? 'Max 3 groups reached' : undefined}>Join</button>
+            <button className="btn btn-outline btn-sm" onClick={() => canCreateMore ? setJoinOpen(true) : showToast('You can be in at most 3 groups', 'error')}>Join</button>
             <button
               className="btn btn-gold btn-sm"
-              onClick={() => setCreateOpen(true)}
-              disabled={!canCreateMore}
-              title={!canCreateMore ? 'Max 3 groups reached' : undefined}
+              onClick={() => canCreateMore ? setCreateOpen(true) : showToast('You can be in at most 3 groups', 'error')}
             >
               + Create
             </button>
@@ -405,8 +405,8 @@ export default function Groups() {
               <p className="grp-empty-title">No groups yet</p>
               <p className="grp-empty-sub">Create a group and share the invite link with friends, or enter an invite code to join one.</p>
               <div className="grp-empty-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => setJoinOpen(true)}>Join with Code</button>
-                <button className="btn btn-gold btn-sm" onClick={() => setCreateOpen(true)}>+ Create Group</button>
+                <button className="btn btn-outline btn-sm" onClick={() => canCreateMore ? setJoinOpen(true) : showToast('You can be in at most 3 groups', 'error')}>Join with Code</button>
+                <button className="btn btn-gold btn-sm" onClick={() => canCreateMore ? setCreateOpen(true) : showToast('You can be in at most 3 groups', 'error')}>+ Create Group</button>
               </div>
             </div>
 

@@ -422,7 +422,7 @@ export default function Picks() {
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <Layout title="My Picks">
+    <Layout title="My Picks" showBack={false}>
       <div className="pk-page">
 
         {/* ── Page tab switcher ── */}

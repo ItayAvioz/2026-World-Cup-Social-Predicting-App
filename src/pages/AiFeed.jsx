@@ -265,7 +265,7 @@ export default function AiFeed() {
   // ── Loading groups ───────────────────────────────────────
   if (groups === null) {
     return (
-      <Layout title="AI Feed">
+      <Layout title="AI Feed" showBack={false}>
         <SkeletonCards />
       </Layout>
     )
@@ -274,7 +274,7 @@ export default function AiFeed() {
   // ── Groups error ─────────────────────────────────────────
   if (groupsError) {
     return (
-      <Layout title="AI Feed">
+      <Layout title="AI Feed" showBack={false}>
         <div className="af-empty">
           <div className="af-empty-icon">⚠️</div>
           <div className="af-empty-text">Failed to load groups.</div>
@@ -287,7 +287,7 @@ export default function AiFeed() {
   // ── No groups ─────────────────────────────────────────────
   if (groups.length === 0) {
     return (
-      <Layout title="AI Feed">
+      <Layout title="AI Feed" showBack={false}>
         <div className="af-empty">
           <div className="af-empty-icon">🤖</div>
           <div className="af-empty-text">AI summaries are generated nightly per group.<br />Join or create a group to get started.</div>
@@ -301,7 +301,7 @@ export default function AiFeed() {
   const useTabs       = groups.length <= 4
 
   return (
-    <Layout title="AI Feed">
+    <Layout title="AI Feed" showBack={false}>
       <div className="af-page">
 
         {/* ── Group selector ─────────────────────────────── */}

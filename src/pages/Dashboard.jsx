@@ -363,7 +363,7 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard" showBack={false}
-      leftSlot={<button className="btn btn-gold btn-nav-sm" onClick={() => navigate('/groups')}>+ Create Group</button>}
+      leftSlot={<button className="btn btn-gold btn-nav-sm" onClick={() => navigate('/groups', { state: { openCreate: true } })}>+ Group</button>}
       rightSlot={<button ref={gearBtnRef} className="prof-gear-btn" onClick={openSheet} aria-label="Profile settings">⚙️</button>}
     >
 
@@ -750,10 +750,7 @@ export default function Dashboard() {
 
         <div className="prof-divider" />
 
-        {/* Landing page */}
-        <div className="prof-section">
-          <a href="./index.html" className="btn btn-outline btn-full" style={{display:'block',textAlign:'center'}}>🏠 View Landing Page</a>
-        </div>
+
 
         <div className="prof-divider" />
 

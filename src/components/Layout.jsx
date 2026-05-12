@@ -10,12 +10,16 @@ export default function Layout({ title, children, showBack = true, rightSlot, le
       <div className="side-deco side-deco-left" aria-hidden="true"><span>USA · CANADA · MEXICO</span></div>
       <div className="side-deco side-deco-right" aria-hidden="true"><span>WORLD CUP · 2026</span></div>
       <nav className="page-nav">
-        {leftSlot ?? (showBack
-          ? <button className="page-back" onClick={() => navigate(-1)}>← Back</button>
-          : <div className="nav-spacer" />
-        )}
-        <div className="nav-logo">⚽ WC2026</div>
-        {rightSlot ?? <a href="./index.html" className="nav-home-link" title="Landing page">🏠</a>}
+        <div className="nav-side nav-side-left">
+          {leftSlot ?? (showBack
+            ? <button className="page-back" onClick={() => navigate(-1)}>← Back</button>
+            : null
+          )}
+        </div>
+        <a href="./index.html" className="nav-logo" title="Home">⚽ WC2026</a>
+        <div className="nav-side nav-side-right">
+          {rightSlot ?? null}
+        </div>
       </nav>
       <div className="page-body">
         {children}
