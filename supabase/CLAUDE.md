@@ -87,8 +87,9 @@
 | 76 | 20260512000076_daily_digest_enhanced_stats.sql | fn_daily_admin_digest: per-game manual/auto split + auto_exact/auto_correct, outcomes from total, share_click tracking, peak hour in Israel time, v10B wins |
 | 77 | 20260512000077_trivia_schema.sql | trivia_questions + trivia_answers tables + RLS |
 | 78 | 20260512000078_trivia_rpc.sql | submit_trivia_answer SECURITY DEFINER RPC |
-| 79 | 20260512000079_leaderboard_trivia.sql | leaderboard + trivia points — **DEFERRED: apply after tournament ends** |
+| 79 | 20260512000079_leaderboard_trivia.sql | leaderboard + trivia points — **SUPERSEDED by M81, do NOT apply** |
 | 80 | 20260512000080_trivia_questions_seed.sql | 40 trivia questions seeded — Jun 11–Jul 20, 22:00 Israel time (19:00 UTC) |
+| 81 | 20260512000081_leaderboard_trivia_auto.sql | leaderboard trivia auto-guard — activates when final game knockout_winner is set |
 
 ## Edge Functions
 
