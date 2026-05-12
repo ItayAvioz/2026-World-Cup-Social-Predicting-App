@@ -140,16 +140,20 @@ export default function Trivia() {
   const [submitting, setSubmitting] = useState(false)
   const [stats,      setStats]      = useState({ total_pts: 0, correct: 0, total: 0 })
 
-  const timerRef = useRef(null)
+  const timerRef  = useRef(null)
+  const cancelRef = useRef(false)
 
   useEffect(() => {
+    cancelRef.current = false
     if (user?.id) { logEvent(supabase, user.id, 'page_view', 'trivia'); loadPage() }
+    return () => { cancelRef.current = true }
   }, [user?.id])
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
   async function loadPage() {
     const today = todayUTC()
+    if (cancelRef.current) return
     if (today < TOURNAMENT_START) { setPageState('pre_tournament'); return }
 
     const [{ data: q }, { data: answers }] = await Promise.all([
@@ -160,6 +164,7 @@ export default function Trivia() {
       supabase.from('trivia_answers').select('points_earned, is_correct').eq('user_id', user.id),
     ])
 
+    if (cancelRef.current) return
     setStats({
       total_pts: answers?.reduce((s, a) => s + a.points_earned, 0) ?? 0,
       correct:   answers?.filter(a => a.is_correct).length ?? 0,
@@ -173,6 +178,7 @@ export default function Trivia() {
       .from('trivia_answers').select('selected_option, is_correct, points_earned')
       .eq('question_id', q.id).eq('user_id', user.id).maybeSingle()
 
+    if (cancelRef.current) return
     if (existing) {
       setResult({
         is_correct:      existing.is_correct,
@@ -290,8 +296,8 @@ export default function Trivia() {
         }}>
           {[
             { label: 'Trivia pts', value: stats.total_pts, col: 'var(--accent)' },
-            { label: 'Correct',    value: `${stats.correct}/${stats.total}`, col: '#2ecc71' },
-            { label: 'Accuracy',   value: pct(stats.correct, stats.total), col: '#3b82f6' },
+            { label: 'Correct',    value: `${stats.correct}/${stats.total}`, col: 'var(--accent)' },
+            { label: 'Accuracy',   value: pct(stats.correct, stats.total), col: 'var(--accent)' },
           ].map(({ label, value, col }) => (
             <div key={label} style={{ background: 'var(--bg2)', padding: '.9rem .4rem', textAlign: 'center' }}>
               <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.45rem', fontWeight: 700, color: col }}>
@@ -453,7 +459,7 @@ export default function Trivia() {
         )}
 
         {/* ACTIVE */}
-        {pageState === 'active' && question && (
+        {pageState === 'active' && (
           <div style={card}>
             <SectionLabel>Question</SectionLabel>
 
@@ -461,7 +467,7 @@ export default function Trivia() {
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
               <CircleTimer timeLeft={timeLeft} />
               <p style={{ flex: 1, margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)', lineHeight: 1.6 }}>
-                {question.question_text}
+                {question?.question_text}
               </p>
             </div>
 
@@ -494,7 +500,7 @@ export default function Trivia() {
               border: `1px solid ${result.is_correct ? '#2ecc71' : '#e74c3c'}`,
             }}>
               <span style={{ fontSize: '1.8rem' }}>
-                {result.is_correct ? '🎉' : result.selected_option === 'timeout' ? '⏰' : '😔'}
+                {result.is_correct ? '😄' : result.selected_option === 'timeout' ? '⏰' : '😔'}
               </span>
               <div>
                 <div style={{
@@ -502,8 +508,8 @@ export default function Trivia() {
                   color: result.is_correct ? '#2ecc71' : '#e74c3c', letterSpacing: '.5px',
                 }}>
                   {result.is_correct
-                    ? `Correct! +${result.points_earned} pt`
-                    : result.selected_option === 'timeout' ? "Time's up — 0 pts" : 'Wrong — 0 pts'}
+                    ? `Goallllll! ${result.points_earned} pt`
+                    : result.selected_option === 'timeout' ? "Time's up — 0 pts" : 'Missed!'}
                 </div>
                 {!result.is_correct && result.correct_option && (
                   <div style={{ fontSize: '.8rem', color: 'var(--muted)', marginTop: '.2rem' }}>
