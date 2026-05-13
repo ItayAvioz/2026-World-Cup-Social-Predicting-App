@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (82 local files — all deployed)
+## Migrations (83 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -84,6 +84,7 @@
 | 72 | 20260506000072_v13_template_opener_fix.sql | v13-unique-2 prompt: ban verbatim "not just this group" opener in GLOBAL TOP RULE + quality check |
 | 73 | 20260510000073_fn_schedule_ai_summaries_per_group.sql | fn_schedule_ai_summaries: one cron per qualifying group per date (Option B fix for 120s timeout) |
 | 74 | 20260512000074_fix_fn_schedule_ai_summaries_body_cast.sql | fix fn_schedule_ai_summaries: remove ::text cast from net.http_post body (M73 re-introduced M56 bug) |
+| 83 | 20260514000083_fix_fn_schedule_ai_summaries_timing.sql | fix fn_schedule_ai_summaries: restore 150min delay (M73 regressed to 110 — fires before score sync at KO+120) |
 | 76 | 20260512000076_daily_digest_enhanced_stats.sql | fn_daily_admin_digest: per-game manual/auto split + auto_exact/auto_correct, outcomes from total, share_click tracking, peak hour in Israel time, v10B wins |
 | 77 | 20260512000077_trivia_schema.sql | trivia_questions + trivia_answers tables + RLS |
 | 78 | 20260512000078_trivia_rpc.sql | submit_trivia_answer SECURITY DEFINER RPC |
