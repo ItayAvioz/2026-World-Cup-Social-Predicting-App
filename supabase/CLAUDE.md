@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (76 local files — all deployed)
+## Migrations (82 local files — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -90,6 +90,7 @@
 | 79 | 20260512000079_leaderboard_trivia.sql | leaderboard + trivia points — **SUPERSEDED by M81, do NOT apply** |
 | 80 | 20260512000080_trivia_questions_seed.sql | 40 trivia questions seeded — Jun 11–Jul 20, 22:00 Israel time (19:00 UTC) |
 | 81 | 20260512000081_leaderboard_trivia_auto.sql | leaderboard trivia auto-guard — activates when final game knockout_winner is set |
+| 82 | 20260513000082_fix_team_tournament_stats_et.sql | team_tournament_stats view: W/D/L uses knockout_winner for ET/PEN games; avg_goals uses COALESCE(et_score, score) for full-match count |
 
 ## Edge Functions
 
