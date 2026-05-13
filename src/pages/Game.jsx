@@ -171,7 +171,7 @@ export default function Game() {
     // Load team form (individual results in order)
     const { data: formGames } = await supabase
       .from('games')
-      .select('team_home, team_away, score_home, score_away, kick_off_time')
+      .select('team_home, team_away, score_home, score_away, kick_off_time, knockout_winner, went_to_extra_time, went_to_penalties, phase')
       .or(`team_home.in.(${[g.team_home, g.team_away].map(t => `"${t}"`).join(',')}),team_away.in.(${[g.team_home, g.team_away].map(t => `"${t}"`).join(',')})`)
       .not('score_home', 'is', null)
       .order('kick_off_time', { ascending: true })
@@ -183,10 +183,15 @@ export default function Game() {
           .filter(fg => fg.team_home === team || fg.team_away === team)
           .map(fg => {
             const isHome = fg.team_home === team
-            const scored  = isHome ? fg.score_home : fg.score_away
+            const scored   = isHome ? fg.score_home : fg.score_away
             const conceded = isHome ? fg.score_away : fg.score_home
             if (scored > conceded) return 'W'
             if (scored < conceded) return 'L'
+            if (fg.knockout_winner) {
+              const won = fg.knockout_winner === team
+              const suffix = fg.went_to_penalties ? '·P' : '·ET'
+              return (won ? 'W' : 'L') + suffix
+            }
             return 'D'
           })
       }
@@ -578,7 +583,7 @@ export default function Game() {
                   <span className="gm-form">
                     {(teamForm[game.team_home] ?? []).length > 0
                       ? (teamForm[game.team_home] ?? []).map((r, i) => (
-                          <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
+                          <span key={i} className={`gm-form-badge gm-form-badge--${r.replace('·','').toLowerCase()}`}>{r}</span>
                         ))
                       : <span style={{ color:'var(--muted)', fontSize:'.78rem' }}>—</span>
                     }
@@ -589,7 +594,7 @@ export default function Game() {
                   <span className="gm-form" style={{ justifyContent:'flex-end' }}>
                     {(teamForm[game.team_away] ?? []).length > 0
                       ? (teamForm[game.team_away] ?? []).map((r, i) => (
-                          <span key={i} className={`gm-form-badge gm-form-badge--${r.toLowerCase()}`}>{r}</span>
+                          <span key={i} className={`gm-form-badge gm-form-badge--${r.replace('·','').toLowerCase()}`}>{r}</span>
                         ))
                       : <span style={{ color:'var(--muted)', fontSize:'.78rem' }}>—</span>
                     }

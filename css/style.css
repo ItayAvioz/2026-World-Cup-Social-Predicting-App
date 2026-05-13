@@ -969,9 +969,9 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .gm-gstat-val { font-family:'Oswald',sans-serif; font-size:.86rem; font-weight:600; color:var(--text); }
 .gm-form { display:flex; flex-wrap:wrap; gap:.2rem; }
 .gm-gstat-val--right .gm-form { justify-content:flex-end; }
-.gm-form-badge { display:inline-flex; align-items:center; justify-content:center; width:1.2rem; height:1.2rem; border-radius:3px; font-size:.62rem; font-weight:700; font-family:'Inter',sans-serif; }
-.gm-form-badge--w { background:#1a7a3a; color:#fff; }
-.gm-form-badge--l { background:#a01c1c; color:#fff; }
+.gm-form-badge { display:inline-flex; align-items:center; justify-content:center; min-width:1.2rem; height:1.2rem; padding:0 .25rem; border-radius:3px; font-size:.62rem; font-weight:700; font-family:'Inter',sans-serif; }
+.gm-form-badge--w, .gm-form-badge--wet, .gm-form-badge--wp { background:#1a7a3a; color:#fff; }
+.gm-form-badge--l, .gm-form-badge--let, .gm-form-badge--lp { background:#a01c1c; color:#fff; }
 .gm-form-badge--d { background:#555; color:#fff; }
 .gm-gstat-val--right { text-align:right; }
 .gm-gstat-name { font-size:.74rem; font-weight:400; color:var(--text); line-height:1.35; }
