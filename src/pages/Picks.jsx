@@ -82,6 +82,8 @@ export default function Picks() {
   const [predInputs, setPredInputs]   = useState({}) // { [gameId]: { home, away } }
   const [savingPred, setSavingPred]   = useState({}) // { [gameId]: bool }
   const [predsLoading, setPredsLoading] = useState(false)
+  const [predSubTab, setPredSubTab]     = useState('upcoming') // 'upcoming' | 'history'
+  const [historySort, setHistorySort]   = useState({ by: 'date', dir: 'desc' })
 
   // ── Tournament results state ───────────────────────────────────
   const [tournamentChampion, setTournamentChampion] = useState(undefined) // undefined=loading, null=not yet, string=winner
@@ -393,6 +395,48 @@ export default function Picks() {
     })
     return map
   }, [games])
+
+  const upcomingGamesByPhase = useMemo(() => {
+    const map = {}
+    games.filter(g => g.score_home === null).forEach(g => {
+      if (!map[g.phase]) map[g.phase] = []
+      map[g.phase].push(g)
+    })
+    return map
+  }, [games])
+
+  const historyGames = useMemo(() => {
+    function outcomeScore(game) {
+      const pred = myPreds[game.id]
+      if (!pred) return -1
+      if (pred.pred_home === game.score_home && pred.pred_away === game.score_away) return 3
+      const actualOut = game.score_home > game.score_away ? 'H' : game.score_home < game.score_away ? 'A' : 'D'
+      const predOut   = pred.pred_home  > pred.pred_away  ? 'H' : pred.pred_home  < pred.pred_away  ? 'A' : 'D'
+      return actualOut === predOut ? 1 : 0
+    }
+    const finished = games.filter(g => g.score_home !== null)
+    return [...finished].sort((a, b) => {
+      if (historySort.by === 'date') {
+        const diff = new Date(b.kick_off_time) - new Date(a.kick_off_time)
+        return historySort.dir === 'desc' ? diff : -diff
+      }
+      const diff = outcomeScore(b) - outcomeScore(a)
+      return historySort.dir === 'desc' ? diff : -diff
+    })
+  }, [games, myPreds, historySort])
+
+  function getOutcome(game) {
+    const pred = myPreds[game.id]
+    if (!pred) return null
+    if (pred.pred_home === game.score_home && pred.pred_away === game.score_away) return 'exact'
+    const actualOut = game.score_home > game.score_away ? 'H' : game.score_home < game.score_away ? 'A' : 'D'
+    const predOut   = pred.pred_home  > pred.pred_away  ? 'H' : pred.pred_home  < pred.pred_away  ? 'A' : 'D'
+    return actualOut === predOut ? 'correct' : 'wrong'
+  }
+
+  function toggleHistorySort(by) {
+    setHistorySort(s => s.by !== by ? { by, dir: 'desc' } : { by, dir: s.dir === 'desc' ? 'asc' : 'desc' })
+  }
 
   // Count how many future predictable games have been predicted
   const predProgress = useMemo(() => {
@@ -753,20 +797,26 @@ export default function Picks() {
               </p>
             )}
 
-            {/* Progress */}
-            {!gamesLoading && !predsLoading && games.length > 0 && predProgress.total > 0 && (
-              <p className="pd-progress">
-                {predProgress.done} / {predProgress.total} games predicted
-                {predProgress.done === predProgress.total && predProgress.total > 0 && ' ✓'}
-              </p>
-            )}
-
-            {/* Scoring note */}
-            {!gamesLoading && games.length > 0 && (
-              <>
-                <p className="pd-scoring-note">Score calculated on 90-min result · Knockout stages also show extra time &amp; penalties</p>
-                <p className="pd-scoring-note">No pick = auto-assigned at kickoff.</p>
-              </>
+            {/* Sub-tab switcher */}
+            {!gamesLoading && !gamesError && games.length > 0 && (
+              <div className="pd-subtab-sw" role="tablist" aria-label="Predictions view">
+                <button
+                  role="tab"
+                  aria-selected={predSubTab === 'upcoming'}
+                  className={`pd-subtab-btn${predSubTab === 'upcoming' ? ' pd-subtab-btn--active' : ''}`}
+                  onClick={() => setPredSubTab('upcoming')}
+                >
+                  Upcoming
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={predSubTab === 'history'}
+                  className={`pd-subtab-btn${predSubTab === 'history' ? ' pd-subtab-btn--active' : ''}`}
+                  onClick={() => setPredSubTab('history')}
+                >
+                  History {historyGames.length > 0 && <span className="pd-subtab-count">{historyGames.length}</span>}
+                </button>
+              </div>
             )}
 
             {/* Loading state */}
@@ -788,104 +838,204 @@ export default function Picks() {
               <div className="pk-section" style={{ padding:'2rem 1rem', textAlign:'center' }}>
                 <p style={{ color:'var(--muted)', fontSize:'.9rem' }}>No games scheduled yet.</p>
               </div>
-            ) : (
-              /* ── Games list ── */
-              <div className="pd-games">
-                {PHASE_ORDER.filter(ph => gamesByPhase[ph]).map(ph => (
-                  <div key={ph}>
-                    <div className="pd-phase-head">{PHASE_LABEL[ph]}</div>
-                    {gamesByPhase[ph].map(game => {
-                      const pastKO = new Date() >= new Date(game.kick_off_time)
-                      const isTBD  = game.team_home === 'TBD' || game.team_away === 'TBD'
-                      const locked = pastKO || isTBD
-                      const myPred = myPreds[game.id]
-                      const input  = predInputs[game.id]
-                      const changed = isPredChanged(game.id)
+            ) : predSubTab === 'upcoming' ? (
+              /* ── Upcoming sub-tab ── */
+              <>
+                {!predsLoading && predProgress.total > 0 && (
+                  <p className="pd-progress">
+                    {predProgress.done} / {predProgress.total} games predicted
+                    {predProgress.done === predProgress.total && ' ✓'}
+                  </p>
+                )}
+                <p className="pd-scoring-note">Score calculated on 90-min result · Knockout stages also show extra time &amp; penalties</p>
+                <p className="pd-scoring-note">No pick = auto-assigned at kickoff.</p>
+                {PHASE_ORDER.filter(ph => upcomingGamesByPhase[ph]).length === 0 ? (
+                  <div className="pk-section" style={{ padding:'2rem 1rem', textAlign:'center' }}>
+                    <p style={{ color:'var(--muted)', fontSize:'.9rem' }}>No upcoming games — check History for past predictions.</p>
+                  </div>
+                ) : (
+                  <div className="pd-games">
+                    {PHASE_ORDER.filter(ph => upcomingGamesByPhase[ph]).map(ph => (
+                      <div key={ph}>
+                        <div className="pd-phase-head">{PHASE_LABEL[ph]}</div>
+                        {upcomingGamesByPhase[ph].map(game => {
+                          const pastKO = new Date() >= new Date(game.kick_off_time)
+                          const isTBD  = game.team_home === 'TBD' || game.team_away === 'TBD'
+                          const locked = pastKO || isTBD
+                          const myPred = myPreds[game.id]
+                          const input  = predInputs[game.id]
+                          const changed = isPredChanged(game.id)
 
+                          return (
+                            <div
+                              key={game.id}
+                              className={`pd-row${locked ? ' pd-row--locked' : ''}`}
+                              onClick={() => navigate(`/game/${game.id}${selectedGroupId ? `?group=${selectedGroupId}` : ''}`)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={e => e.key === 'Enter' && navigate(`/game/${game.id}${selectedGroupId ? `?group=${selectedGroupId}` : ''}`)}
+                              aria-label={`${game.team_home} vs ${game.team_away}`}
+                            >
+                              <div className="pd-match">
+                                <div className="pd-team pd-team--home">
+                                  <FlagImg name={game.team_home} code={teamCodeMap[game.team_home]} className="pk-player-flag" />
+                                  <span className="pd-tname">{game.team_home}</span>
+                                </div>
+                                {locked ? (
+                                  <div className="pd-vs-locked">
+                                    {myPred ? (
+                                      <>
+                                        <span className="pd-pick-label">your pick</span>
+                                        <span className="pd-my-score">{myPred.pred_home}–{myPred.pred_away}</span>
+                                        {myPred.is_auto && <span className="pd-auto">auto</span>}
+                                      </>
+                                    ) : (
+                                      <span className="pd-no-pred">–</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="pd-vs" onClick={e => e.stopPropagation()}>
+                                    <input type="number" min="0" max="20" className="pd-inp"
+                                      value={input?.home ?? ''} placeholder="0"
+                                      onChange={e => handlePredInput(game.id, 'home', e.target.value)}
+                                      aria-label={`${game.team_home} goals`} />
+                                    <span className="pd-vsep">–</span>
+                                    <input type="number" min="0" max="20" className="pd-inp"
+                                      value={input?.away ?? ''} placeholder="0"
+                                      onChange={e => handlePredInput(game.id, 'away', e.target.value)}
+                                      aria-label={`${game.team_away} goals`} />
+                                  </div>
+                                )}
+                                <div className="pd-team pd-team--away">
+                                  <span className="pd-tname">{game.team_away}</span>
+                                  <FlagImg name={game.team_away} code={teamCodeMap[game.team_away]} className="pk-player-flag" />
+                                </div>
+                              </div>
+                              <div className="pd-result-row">
+                                <div className="pd-res-item">
+                                  <span className="pd-res-label">90'</span>
+                                  <span className="pd-res-val">{game.score_home !== null ? `${game.score_home}–${game.score_away}` : '–'}</span>
+                                </div>
+                                {game.phase !== 'group' && (
+                                  <div className="pd-res-item">
+                                    <span className="pd-res-label">E.T.</span>
+                                    <span className="pd-res-val">
+                                      {game.went_to_extra_time && game.et_score_home !== null ? `${game.et_score_home}–${game.et_score_away}` : '–'}
+                                    </span>
+                                  </div>
+                                )}
+                                {game.phase !== 'group' && (
+                                  <div className="pd-res-item">
+                                    <span className="pd-res-label">pens</span>
+                                    <span className="pd-res-val">
+                                      {game.went_to_penalties && game.penalty_score_home !== null ? `${game.penalty_score_home}–${game.penalty_score_away}` : '–'}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="pd-meta">
+                                {isTBD ? (
+                                  <div className="pd-meta-tbd">
+                                    <span className="pd-kickoff">{fmtKickoff(game.kick_off_time)}</span>
+                                    <span className="pd-lock-note">Matchup TBD</span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span className="pd-kickoff">{fmtKickoff(game.kick_off_time)}</span>
+                                    {!pastKO && (
+                                      <button
+                                        className="pd-save-btn"
+                                        onClick={e => { e.stopPropagation(); savePred(game.id) }}
+                                        disabled={!changed || savingPred[game.id]}
+                                        aria-label="Save prediction"
+                                      >
+                                        {savingPred[game.id] ? '…' : myPred ? 'Update' : 'Save'}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* ── History sub-tab ── */
+              <>
+                <div className="pd-sort-row">
+                  <span className="pd-sort-label">Sort:</span>
+                  <button
+                    className={`pd-sort-btn${historySort.by === 'date' ? ' pd-sort-btn--active' : ''}`}
+                    onClick={() => toggleHistorySort('date')}
+                  >
+                    {historySort.by === 'date' ? (historySort.dir === 'desc' ? '↓ ' : '↑ ') : ''}Date
+                  </button>
+                  <button
+                    className={`pd-sort-btn${historySort.by === 'points' ? ' pd-sort-btn--active' : ''}`}
+                    onClick={() => toggleHistorySort('points')}
+                  >
+                    {historySort.by === 'points' ? (historySort.dir === 'desc' ? '↓ ' : '↑ ') : ''}Points
+                  </button>
+                </div>
+                {historyGames.length === 0 ? (
+                  <div className="pk-section" style={{ padding:'2rem 1rem', textAlign:'center' }}>
+                    <p style={{ color:'var(--muted)', fontSize:'.9rem' }}>No finished games yet.</p>
+                  </div>
+                ) : (
+                  <div className="pd-games">
+                    {historyGames.map(game => {
+                      const myPred  = myPreds[game.id]
+                      const outcome = getOutcome(game)
                       return (
                         <div
                           key={game.id}
-                          className={`pd-row${locked ? ' pd-row--locked' : ''}`}
+                          className="pd-row pd-row--locked"
                           onClick={() => navigate(`/game/${game.id}${selectedGroupId ? `?group=${selectedGroupId}` : ''}`)}
                           role="button"
                           tabIndex={0}
                           onKeyDown={e => e.key === 'Enter' && navigate(`/game/${game.id}${selectedGroupId ? `?group=${selectedGroupId}` : ''}`)}
                           aria-label={`${game.team_home} vs ${game.team_away}`}
                         >
-                          {/* Match row: teams + prediction in center */}
                           <div className="pd-match">
                             <div className="pd-team pd-team--home">
-                              <FlagImg
-                                name={game.team_home}
-                                code={teamCodeMap[game.team_home]}
-                                className="pk-player-flag"
-                              />
+                              <FlagImg name={game.team_home} code={teamCodeMap[game.team_home]} className="pk-player-flag" />
                               <span className="pd-tname">{game.team_home}</span>
                             </div>
-
-                            {/* Prediction center */}
-                            {locked ? (
-                              <div className="pd-vs-locked">
-                                {myPred ? (
-                                  <>
-                                    <span className="pd-pick-label">your pick</span>
-                                    <span className="pd-my-score">{myPred.pred_home}–{myPred.pred_away}</span>
-                                    {myPred.is_auto && <span className="pd-auto">auto</span>}
-                                  </>
-                                ) : (
-                                  <span className="pd-no-pred">–</span>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="pd-vs" onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="20"
-                                  className="pd-inp"
-                                  value={input?.home ?? ''}
-                                  placeholder="0"
-                                  onChange={e => handlePredInput(game.id, 'home', e.target.value)}
-                                  aria-label={`${game.team_home} goals`}
-                                />
-                                <span className="pd-vsep">–</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="20"
-                                  className="pd-inp"
-                                  value={input?.away ?? ''}
-                                  placeholder="0"
-                                  onChange={e => handlePredInput(game.id, 'away', e.target.value)}
-                                  aria-label={`${game.team_away} goals`}
-                                />
-                              </div>
-                            )}
-
+                            <div className="pd-vs-locked">
+                              {myPred ? (
+                                <>
+                                  <span className="pd-pick-label">your pick</span>
+                                  <span className="pd-my-score">{myPred.pred_home}–{myPred.pred_away}</span>
+                                  {myPred.is_auto && <span className="pd-auto">auto</span>}
+                                  {outcome && (
+                                    <span className={`pd-outcome-badge pd-outcome-badge--${outcome}`}>
+                                      {outcome === 'exact' ? 'Exact' : outcome === 'correct' ? 'Correct' : 'Wrong'}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="pd-no-pred">–</span>
+                              )}
+                            </div>
                             <div className="pd-team pd-team--away">
                               <span className="pd-tname">{game.team_away}</span>
-                              <FlagImg
-                                name={game.team_away}
-                                code={teamCodeMap[game.team_away]}
-                                className="pk-player-flag"
-                              />
+                              <FlagImg name={game.team_away} code={teamCodeMap[game.team_away]} className="pk-player-flag" />
                             </div>
                           </div>
-
-                          {/* Result row: always shown — 90-min always, ET+pens knockout only */}
                           <div className="pd-result-row">
                             <div className="pd-res-item">
                               <span className="pd-res-label">90'</span>
-                              <span className="pd-res-val">
-                                {game.score_home !== null ? `${game.score_home}–${game.score_away}` : '–'}
-                              </span>
+                              <span className="pd-res-val">{game.score_home}–{game.score_away}</span>
                             </div>
                             {game.phase !== 'group' && (
                               <div className="pd-res-item">
                                 <span className="pd-res-label">E.T.</span>
                                 <span className="pd-res-val">
-                                  {game.went_to_extra_time && game.et_score_home !== null
-                                    ? `${game.et_score_home}–${game.et_score_away}` : '–'}
+                                  {game.went_to_extra_time && game.et_score_home !== null ? `${game.et_score_home}–${game.et_score_away}` : '–'}
                                 </span>
                               </div>
                             )}
@@ -893,42 +1043,20 @@ export default function Picks() {
                               <div className="pd-res-item">
                                 <span className="pd-res-label">pens</span>
                                 <span className="pd-res-val">
-                                  {game.went_to_penalties && game.penalty_score_home !== null
-                                    ? `${game.penalty_score_home}–${game.penalty_score_away}` : '–'}
+                                  {game.went_to_penalties && game.penalty_score_home !== null ? `${game.penalty_score_home}–${game.penalty_score_away}` : '–'}
                                 </span>
                               </div>
                             )}
                           </div>
-
-                          {/* Meta row: kickoff + save button (pre-KO) / state (post-KO) */}
                           <div className="pd-meta">
-                            {isTBD ? (
-                              <div className="pd-meta-tbd">
-                                <span className="pd-kickoff">{fmtKickoff(game.kick_off_time)}</span>
-                                <span className="pd-lock-note">Matchup TBD</span>
-                              </div>
-                            ) : (
-                              <>
-                                <span className="pd-kickoff">{fmtKickoff(game.kick_off_time)}</span>
-                                {!pastKO && (
-                                  <button
-                                    className="pd-save-btn"
-                                    onClick={e => { e.stopPropagation(); savePred(game.id) }}
-                                    disabled={!changed || savingPred[game.id]}
-                                    aria-label="Save prediction"
-                                  >
-                                    {savingPred[game.id] ? '…' : myPred ? 'Update' : 'Save'}
-                                  </button>
-                                )}
-                              </>
-                            )}
+                            <span className="pd-kickoff">{fmtKickoff(game.kick_off_time)}</span>
                           </div>
                         </div>
                       )
                     })}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </>
         )}

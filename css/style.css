@@ -1196,6 +1196,22 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .pd-stats-row .pd-stats-val:first-child { text-align:left; }
 .pd-stats-row .pd-stats-val:last-child { text-align:right; }
 
+/* Predictions sub-tabs */
+.pd-subtab-sw { display:flex; gap:.5rem; padding:.5rem 1rem .25rem; }
+.pd-subtab-btn { flex:1; padding:.5rem; font-size:.82rem; font-weight:600; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; font-family:'Inter',sans-serif; }
+.pd-subtab-btn--active { background:var(--bg3); color:var(--text); border-color:var(--accent); }
+.pd-subtab-count { display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,.12); border-radius:10px; font-size:.65rem; padding:.05rem .35rem; margin-left:.3rem; }
+/* History sort controls */
+.pd-sort-row { display:flex; align-items:center; gap:.5rem; padding:.4rem 1rem .25rem; }
+.pd-sort-label { font-size:.72rem; color:var(--muted); }
+.pd-sort-btn { padding:.3rem .65rem; font-size:.75rem; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; font-family:'Inter',sans-serif; white-space:nowrap; }
+.pd-sort-btn--active { background:var(--bg3); color:var(--text); border-color:var(--accent); }
+/* Outcome badges */
+.pd-outcome-badge { display:inline-block; font-size:.58rem; font-weight:700; border-radius:3px; padding:.1rem .35rem; letter-spacing:.3px; line-height:1.4; text-transform:uppercase; }
+.pd-outcome-badge--exact   { background:rgba(245,197,24,.18); color:var(--accent); }
+.pd-outcome-badge--correct { background:rgba(34,197,94,.15);  color:#4ade80; }
+.pd-outcome-badge--wrong   { background:rgba(239,68,68,.12);  color:#f87171; }
+
 /* ── AI Feed ─────────────────────────────────────────── */
 .af-selector-row { margin-bottom:1.25rem; }
 .af-group-label { font-family:'Oswald',sans-serif; font-size:.85rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:1rem; }
