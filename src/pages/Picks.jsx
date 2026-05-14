@@ -405,6 +405,10 @@ export default function Picks() {
     return map
   }, [games])
 
+  const upcomingCount = useMemo(() =>
+    games.filter(g => g.score_home === null).length
+  , [games])
+
   const historyGames = useMemo(() => {
     function outcomeScore(game) {
       const pred = myPreds[game.id]
@@ -806,7 +810,7 @@ export default function Picks() {
                   className={`pd-subtab-btn${predSubTab === 'upcoming' ? ' pd-subtab-btn--active' : ''}`}
                   onClick={() => setPredSubTab('upcoming')}
                 >
-                  Upcoming
+                  Upcoming {upcomingCount > 0 && <span className="pd-subtab-count">{upcomingCount}</span>}
                 </button>
                 <button
                   role="tab"
