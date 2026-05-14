@@ -1197,9 +1197,10 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .pd-stats-row .pd-stats-val:last-child { text-align:right; }
 
 /* Predictions sub-tabs */
-.pd-subtab-sw { display:flex; gap:.5rem; padding:.5rem 1rem .25rem; }
-.pd-subtab-btn { flex:1; padding:.5rem; font-size:.82rem; font-weight:600; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; font-family:'Inter',sans-serif; }
-.pd-subtab-btn--active { background:var(--bg3); color:var(--text); border-color:var(--accent); }
+.pd-subtab-sw { display:flex; gap:.4rem; padding:.5rem 0 .25rem; }
+.pd-subtab-btn { flex:1; padding:.6rem 1rem; font-size:.88rem; font-weight:600; border-radius:8px; border:1.5px solid var(--border); background:var(--bg2); color:var(--muted); cursor:pointer; transition:background .15s,color .15s,border-color .15s; font-family:'Inter',sans-serif; min-height:48px; }
+.pd-subtab-btn--active { border-color:var(--accent); background:rgba(245,197,24,.08); color:var(--accent); }
+.pd-subtab-btn:hover { border-color:rgba(245,197,24,.35); color:var(--text); }
 .pd-subtab-count { display:inline-flex; align-items:center; justify-content:center; background:rgba(255,255,255,.12); border-radius:10px; font-size:.65rem; padding:.05rem .35rem; margin-left:.3rem; }
 /* History sort controls */
 .pd-sort-row { display:flex; align-items:center; gap:.5rem; padding:.4rem 1rem .25rem; }
