@@ -94,7 +94,7 @@ export default function HowToPlay({ isOpen, onClose }) {
           {/* ── Groups ── */}
           <div className="htp-section">
             <h2 className="htp-section-title">👥 Groups &amp; "The Wisdom Engine"</h2>
-            <p className="htp-desc">Every group is its own private battlefield with an independent leaderboard, champion pick, top scorer pick, and nightly AI summary. Max <strong>3 groups</strong> per user · max <strong>10 members</strong> per group.</p>
+            <p className="htp-desc">Every group is its own private battlefield with an independent leaderboard, champion pick, top scorer pick, predictions and nightly AI summary. Max <strong>3 groups</strong> per user · max <strong>10 members</strong> per group.</p>
             <ul className="htp-list">
               <li><strong>Group Leaderboard:</strong> Ranks members by total points — group rank and global rank side by side. Shareable in one tap.</li>
               <li><strong>Live Game Focus:</strong> The current or next upcoming game sits below the leaderboard with your prediction chip per group.</li>
@@ -117,12 +117,16 @@ export default function HowToPlay({ isOpen, onClose }) {
           {/* ── Picks ── */}
           <div className="htp-section">
             <h2 className="htp-section-title">🎯 Your Picks</h2>
-            <p className="htp-desc">Two sections — your big bets and your full prediction history.</p>
+            <p className="htp-desc">Two tabs — <strong>Picks</strong> for your big bets, <strong>Predictions</strong> for your full game-by-game. Everything is per group — switch groups with the tabs at the top.</p>
             <ul className="htp-list">
               <li><strong>Champion Pick:</strong> Choose from all 48 qualified teams. Live <strong>William Hill odds</strong> shown next to each team so you know exactly what you're backing. Worth <strong>10 pts</strong> if correct.</li>
               <li><strong>Top Scorer Pick:</strong> Choose from the full tournament squads — every player, every nation. Each player's <strong>live goal tally</strong> updates throughout the competition. Worth <strong>10 pts</strong> if correct.</li>
-              <li><strong>Per-Group Independence:</strong> Picks are made separately for each group — different champion, different top scorer, scored independently.</li>
-              <li><strong>Predictions Tab:</strong> Browse every tournament game in one place. Before kickoff — tournament avg stats for each team. After the game — full match stats, chronological goal timeline, and your prediction alongside the final score. Your complete tournament record, game by game.</li>
+              <li><strong>Predictions Tab:</strong> Browse every tournament game in two views:
+                <ul className="htp-list" style={{ marginTop: '.4rem' }}>
+                  <li><strong>Upcoming:</strong> All games not yet played. Enter predictions for each group inline — or tap a game to open it and predict for all your groups at once, with full tournament avg stats for each team.</li>
+                  <li><strong>History:</strong> Completed games. Full match stats, chronological goal timeline, and your prediction alongside the final score. Your complete tournament record, game by game.</li>
+                </ul>
+              </li>
             </ul>
             <div className="htp-callout htp-callout--warn">
               <strong>Deadline: June 11 · 22:00 IDT.</strong> After that — locked for everyone. Miss it and the app auto-assigns at random. Points are awarded the moment the Final result is confirmed.
