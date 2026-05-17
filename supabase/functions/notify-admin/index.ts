@@ -186,8 +186,9 @@ function buildDailyDigest(d: Record<string, unknown>): { subject: string; html: 
         ${row('Active users',    d.active_users)}
         ${row('Avg time/user',   avgLabel)}
         ${row('Peak hour',       peakHour)}
-        ${row('Predictions',     d.prediction_actions)}
-        ${row('Pick submits',    d.pick_actions)}
+        ${row('Predictions',     `${d.pred_total} total · ${d.pred_edits} edits · ${d.pred_users} users · ${d.pred_games} games · ${d.pred_groups} groups`)}
+        ${row('Champion pick',   `${d.champ_total} total · ${d.champ_edits} edits · ${d.champ_users} users · ${d.champ_groups} groups`)}
+        ${row('Top scorer pick', `${d.scorer_total} total · ${d.scorer_edits} edits · ${d.scorer_users} users · ${d.scorer_groups} groups`)}
         ${row('Share clicks',    d.share_clicks)}
         ${row('Page views',      d.page_views)}
       </tbody></table>

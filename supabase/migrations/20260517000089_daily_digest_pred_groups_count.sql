@@ -1,0 +1,2 @@
+-- M89: Predictions add unique groups count; drop new/edits split; display: total · users · games · groups
+-- Applied via MCP (stub only)

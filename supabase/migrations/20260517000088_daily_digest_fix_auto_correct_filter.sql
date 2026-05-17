@@ -1,0 +1,2 @@
+-- M88: Fix auto_correct filter dropped in M87 (missing draw + away-win conditions)
+-- Applied via MCP (stub only)

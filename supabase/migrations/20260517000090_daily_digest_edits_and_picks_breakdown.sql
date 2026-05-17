@@ -1,0 +1,3 @@
+-- M90: Add edits count to predictions; add edits+groups to champion/top scorer picks
+-- Display: total · edits · users · games · groups (predictions) | total · edits · users · groups (picks)
+-- Applied via MCP (stub only)

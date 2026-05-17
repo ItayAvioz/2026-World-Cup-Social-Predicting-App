@@ -92,6 +92,13 @@
 | 80 | 20260512000080_trivia_questions_seed.sql | 40 trivia questions seeded — Jun 11–Jul 20, 22:00 Israel time (19:00 UTC) |
 | 81 | 20260512000081_leaderboard_trivia_auto.sql | leaderboard trivia auto-guard — activates when final game knockout_winner is set |
 | 82 | 20260513000082_fix_team_tournament_stats_et.sql | team_tournament_stats view: W/D/L uses knockout_winner for ET/PEN games; avg_goals uses COALESCE(et_score, score) for full-match count |
+| 84 | 20260517000084_daily_digest_unique_users.sql | fn_daily_admin_digest: add unique user counts for prediction_submit + pick_submit |
+| 85 | 20260517000085_daily_digest_pred_pick_breakdown.sql | fn_daily_admin_digest: predictions from DB table (new/edits/users/games); picks split champion vs top scorer |
+| 86 | 20260517000086_daily_digest_pred_unique_user_game.sql | fn_daily_admin_digest: predictions count DISTINCT (user_id, game_id) — superseded by M87 |
+| 87 | 20260517000087_daily_digest_revert_to_per_group_counts.sql | fn_daily_admin_digest: revert M86 — raw rows per user per group (stub) |
+| 88 | 20260517000088_daily_digest_fix_auto_correct_filter.sql | fn_daily_admin_digest: fix auto_correct filter dropped in M87 (stub) |
+| 89 | 20260517000089_daily_digest_pred_groups_count.sql | fn_daily_admin_digest: predictions add unique groups; display total · users · games · groups (stub) |
+| 90 | 20260517000090_daily_digest_edits_and_picks_breakdown.sql | fn_daily_admin_digest: add edits to predictions; champion+top scorer picks show total · edits · users · groups (stub) |
 
 ## Edge Functions
 
@@ -100,7 +107,7 @@
 | football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
-| notify-admin | v5 | ✅ ACTIVE | v5: fix W/D/L double-count bug (correct_outcome includes exact); v4: enhanced digest per-game manual/auto/outcomes/auto-got, share clicks, IL peak hour, v10B wins |
+| notify-admin | v9 | ✅ ACTIVE | v9: predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90 |
 
 ## Key pg_cron Jobs
 

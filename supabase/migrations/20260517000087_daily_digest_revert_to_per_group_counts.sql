@@ -1,0 +1,2 @@
+-- M87: Revert M86 — predictions count raw rows (per user per group), not deduped user-game pairs
+-- Applied via MCP (stub only)
