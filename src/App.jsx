@@ -68,7 +68,7 @@ function InstallBanner() {
       }
       {deferredPrompt && (
         <button onClick={install} style={{
-          background: 'var(--gold)', border: 'none', color: '#000', fontWeight: 600,
+          background: '#f5c518', border: 'none', color: '#000', fontWeight: 600,
           padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap'
         }}>Install</button>
       )}
