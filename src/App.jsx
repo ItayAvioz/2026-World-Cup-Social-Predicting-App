@@ -32,6 +32,13 @@ function AuthGuard({ children }) {
 
 const VAPID_PUBLIC_KEY = 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'
 
+// Capture beforeinstallprompt at module level — fires before React mounts, would be missed by component-level listeners
+let _deferredInstallPrompt = null
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  _deferredInstallPrompt = e
+})
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -100,7 +107,7 @@ function NotificationPrompt({ userId, onGranted }) {
       boxShadow: '0 4px 20px rgba(0,0,0,0.6)', fontSize: '0.85rem', color: '#f0f0f0'
     }}>
       <span style={{ fontSize: '1.4rem' }}>🔔</span>
-      <span style={{ flex: 1 }}>Get notified before kickoff & when AI summary is ready</span>
+      <span style={{ flex: 1 }}>Get notified before kickoff, daily trivia & when AI summary is ready</span>
       <button onClick={ask} style={{
         background: '#f5c518', border: 'none', color: '#000', fontWeight: 600,
         padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap'
@@ -117,10 +124,12 @@ function InstallBanner({ show }) {
   const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
   const [dismissed, setDismiss] = useState(() => localStorage.getItem('wc2026_install_banner') === '1')
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  // Initialise from module-level capture (event may have fired before this component mounted)
+  const [deferredPrompt, setDeferredPrompt] = useState(() => _deferredInstallPrompt)
 
   useEffect(() => {
-    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
+    if (_deferredInstallPrompt) setDeferredPrompt(_deferredInstallPrompt)
+    const handler = (e) => { e.preventDefault(); _deferredInstallPrompt = e; setDeferredPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
