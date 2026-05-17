@@ -347,8 +347,8 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .host-game-time { font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:var(--accent); flex-shrink:0; margin-left:.5rem; }
 
 /* BOTTOM NAV (React app only) */
-.bottom-nav { position:fixed; top:auto; bottom:0; left:0; right:0; z-index:200; display:flex; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); border-top:1px solid var(--border); padding-bottom:env(safe-area-inset-bottom); }
-.bottom-nav-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:.55rem .25rem; color:var(--muted); text-decoration:none; transition:color .15s; gap:.2rem; }
+.bottom-nav { position:fixed; top:auto; bottom:0; left:0; right:0; z-index:200; display:flex; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); border-top:1px solid var(--border); }
+.bottom-nav-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:.55rem .25rem calc(.55rem + env(safe-area-inset-bottom)); color:var(--muted); text-decoration:none; transition:color .15s; gap:.2rem; }
 .bottom-nav-tab.active { color:var(--accent); }
 .bottom-nav-tab:hover { color:var(--text); }
 .bottom-nav-icon { font-size:1.25rem; line-height:1; width:24px; height:24px; display:flex; align-items:center; justify-content:center; }
