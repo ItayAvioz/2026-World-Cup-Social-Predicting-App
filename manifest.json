@@ -1,0 +1,25 @@
+{
+  "name": "WorldCup 2026 — Predict & Win",
+  "short_name": "WC2026",
+  "description": "Social predictions app for FIFA World Cup 2026",
+  "start_url": "/2026-World-Cup-Social-Predicting-App/app.html#/dashboard",
+  "scope": "/2026-World-Cup-Social-Predicting-App/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/2026-World-Cup-Social-Predicting-App/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/2026-World-Cup-Social-Predicting-App/icon-192.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
