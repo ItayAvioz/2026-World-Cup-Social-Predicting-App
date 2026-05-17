@@ -1,8 +1,27 @@
+const SW_VERSION = '3'
+
 self.addEventListener('install', () => self.skipWaiting())
-self.addEventListener('activate', () => self.clients.claim())
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open('wc-sw-meta')
+    const res = await cache.match('version')
+    const prev = res ? await res.text() : null
+    await cache.put('version', new Response(SW_VERSION))
+    await self.clients.claim()
+    if (prev !== SW_VERSION) {
+      const list = await self.clients.matchAll({ type: 'window' })
+      list.forEach(c => {
+        Promise.resolve()
+          .then(() => c.navigate(c.url))
+          .catch(() => c.postMessage({ type: 'SW_UPDATE' }))
+      })
+    }
+  })())
+})
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.endsWith('app.html')) {
+  if (event.request.url.includes('/app.html')) {
     event.respondWith(fetch(event.request, { cache: 'no-store' }))
   }
 })
