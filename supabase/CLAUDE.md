@@ -102,6 +102,7 @@
 | 91 | *(MCP-only, no local file)* | push_subscriptions table + RLS (user_id, endpoint, p256dh, auth; UNIQUE user_id,endpoint) |
 | 92 | *(MCP-only, no local file)* | fn_notify_ko + fn_schedule_ko_notification + fn_notify_trivia + trivia-push-daily cron (0 19 * * * UTC) |
 | 93 | *(MCP-only, no local file)* | fn_notify_ai_summary trigger function + trg_notify_ai_summary AFTER INSERT on ai_summaries |
+| 94 | 20260517000094_trivia_security_hardening.sql | Trivia security: trivia_secrets table (no user SELECT) stores correct_option+explanation; trivia_questions drops those cols; RLS time-locked (available_from <= now()); submit_trivia_answer updated to JOIN trivia_secrets |
 
 ## Edge Functions
 
