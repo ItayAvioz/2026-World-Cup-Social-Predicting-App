@@ -278,7 +278,7 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 /* PAGE SHELL */
 .page-shell { min-height:100vh; position:relative; }
 .side-deco { display:none; }
-.page-nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.2rem; min-height:72px; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+.page-nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.2rem; min-height:72px; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
 .page-back { display:flex; align-items:center; gap:.5rem; color:var(--accent); font-size:.9rem; font-weight:600; cursor:pointer; background:none; border:none; padding:.3rem 0; }
 .page-back:hover { opacity:.75; }
 .page-body { padding-top:76px; min-height:100vh; }
@@ -347,7 +347,7 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .host-game-time { font-family:'Oswald',sans-serif; font-size:1.05rem; font-weight:700; color:var(--accent); flex-shrink:0; margin-left:.5rem; }
 
 /* BOTTOM NAV (React app only) */
-.bottom-nav { position:fixed; top:auto; bottom:0; left:0; right:0; z-index:200; display:flex; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); border-top:1px solid var(--border); }
+.bottom-nav { position:fixed; top:auto; bottom:0; left:0; right:0; z-index:200; display:flex; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-top:1px solid var(--border); }
 .bottom-nav-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:.55rem .25rem; color:var(--muted); text-decoration:none; transition:color .15s; gap:.2rem; }
 .bottom-nav-tab.active { color:var(--accent); }
 .bottom-nav-tab:hover { color:var(--text); }
