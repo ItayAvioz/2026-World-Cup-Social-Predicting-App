@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (83 local files — all deployed)
+## Migrations (90 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -99,6 +99,9 @@
 | 88 | 20260517000088_daily_digest_fix_auto_correct_filter.sql | fn_daily_admin_digest: fix auto_correct filter dropped in M87 (stub) |
 | 89 | 20260517000089_daily_digest_pred_groups_count.sql | fn_daily_admin_digest: predictions add unique groups; display total · users · games · groups (stub) |
 | 90 | 20260517000090_daily_digest_edits_and_picks_breakdown.sql | fn_daily_admin_digest: add edits to predictions; champion+top scorer picks show total · edits · users · groups (stub) |
+| 91 | *(MCP-only, no local file)* | push_subscriptions table + RLS (user_id, endpoint, p256dh, auth; UNIQUE user_id,endpoint) |
+| 92 | *(MCP-only, no local file)* | fn_notify_ko + fn_schedule_ko_notification + fn_notify_trivia + trivia-push-daily cron (0 19 * * * UTC) |
+| 93 | *(MCP-only, no local file)* | fn_notify_ai_summary trigger function + trg_notify_ai_summary AFTER INSERT on ai_summaries |
 
 ## Edge Functions
 
@@ -108,12 +111,15 @@
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v9 | ✅ ACTIVE | v9: predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90 |
+| send-push | v1 | ✅ ACTIVE | Web Push via npm:web-push; VAPID private key from vault `Notification_Key`; input: {title,body,url?,user_ids?}; 410 Gone → delete stale sub |
 
 ## Key pg_cron Jobs
 
 | Job | Schedule | Purpose |
 |---|---|---|
 | af-odds-daily | 07:15 UTC daily | API Football odds for upcoming games |
+| trivia-push-daily | 0 19 * * * UTC | Push notification: trivia question now open (22:00 Israel time) |
+| ko-notif-{game_id} | KO-15min | Push notification: kickoff soon (102 crons backfilled 2026-05-17) |
 | admin-daily-digest | 08:00 UTC daily | Admin email digest |
 | auto-assign-picks | 19:00 Jun 11 2026 | Auto-assign champion + top scorer at deadline |
 | auto-predict-{game_id} | at each game's KO | fn_auto_predict_game for users who didn't submit |
