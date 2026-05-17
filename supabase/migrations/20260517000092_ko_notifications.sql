@@ -1,0 +1,7 @@
+-- M92: KO notification functions + trivia daily push cron
+-- Applied via MCP on 2026-05-17. Stub file for local tracking.
+--
+-- fn_notify_ko(p_home, p_away, job_name) — calls send-push EF, unschedules self
+-- fn_schedule_ko_notification(p_game_id, p_kick_off, p_home, p_away) — schedules ko-notif-{game_id} cron at KO-15min
+-- fn_notify_trivia() — daily trivia push
+-- cron: trivia-push-daily at 0 19 * * * UTC

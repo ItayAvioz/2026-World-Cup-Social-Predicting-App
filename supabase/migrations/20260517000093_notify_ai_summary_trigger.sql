@@ -1,0 +1,5 @@
+-- M93: AI summary push notification trigger
+-- Applied via MCP on 2026-05-17. Stub file for local tracking.
+--
+-- fn_notify_ai_summary() — trigger function, calls send-push EF
+-- trg_notify_ai_summary — AFTER INSERT ON ai_summaries

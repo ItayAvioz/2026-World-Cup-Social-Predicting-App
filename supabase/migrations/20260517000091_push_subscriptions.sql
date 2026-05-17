@@ -1,0 +1,6 @@
+-- M91: push_subscriptions table for Web Push notifications
+-- Applied via MCP on 2026-05-17. Stub file for local tracking.
+--
+-- push_subscriptions(id, user_id, endpoint, p256dh, auth, created_at)
+-- UNIQUE(user_id, endpoint)
+-- RLS: users manage their own subscriptions
