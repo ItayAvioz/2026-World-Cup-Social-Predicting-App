@@ -41,17 +41,24 @@ function urlBase64ToUint8Array(base64String) {
 
 async function subscribeUserToPush(userId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
-  const reg = await navigator.serviceWorker.ready
-  const existing = await reg.pushManager.getSubscription()
-  const sub = existing || await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-  })
-  const { endpoint, keys: { p256dh, auth } } = sub.toJSON()
-  await supabase.from('push_subscriptions').upsert(
-    { user_id: userId, endpoint, p256dh, auth },
-    { onConflict: 'user_id,endpoint' }
-  )
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const existing = await reg.pushManager.getSubscription()
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    })
+    const json = sub.toJSON()
+    const { endpoint, keys: { p256dh, auth } } = json
+    const { error } = await supabase.from('push_subscriptions').upsert(
+      { user_id: userId, endpoint, p256dh, auth },
+      { onConflict: 'user_id,endpoint' }
+    )
+    if (error) console.error('[push] upsert failed:', error.message, error.details)
+    else console.log('[push] subscription saved for', userId)
+  } catch (e) {
+    console.error('[push] subscribe failed:', e)
+  }
 }
 
 const notifSupported = typeof Notification !== 'undefined'
@@ -182,7 +189,7 @@ function AppInner() {
   return (
     <>
       {canPrompt && <NotificationPrompt userId={user?.id} onGranted={() => setNotifGranted(true)} />}
-      <InstallBanner show={notifGranted} />
+      <InstallBanner show={notifGranted || isIos} />
     </>
   )
 }
