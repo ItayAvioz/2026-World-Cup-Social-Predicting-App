@@ -30,7 +30,80 @@ function AuthGuard({ children }) {
   return children
 }
 
-function InstallBanner() {
+const VAPID_PUBLIC_KEY = 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+}
+
+async function subscribeUserToPush(userId) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+  const reg = await navigator.serviceWorker.ready
+  const existing = await reg.pushManager.getSubscription()
+  const sub = existing || await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+  })
+  const { endpoint, keys: { p256dh, auth } } = sub.toJSON()
+  await supabase.from('push_subscriptions').upsert(
+    { user_id: userId, endpoint, p256dh, auth },
+    { onConflict: 'user_id,endpoint' }
+  )
+}
+
+function NotificationPrompt({ userId, onGranted }) {
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    if (!userId) return
+    if (Notification.permission !== 'default') return
+    if (localStorage.getItem('wc2026_notif_asked') === '1') return
+    const t = setTimeout(() => setShow(true), 10000)
+    return () => clearTimeout(t)
+  }, [userId])
+
+  if (!show) return null
+
+  const ask = async () => {
+    setShow(false)
+    localStorage.setItem('wc2026_notif_asked', '1')
+    const permission = await Notification.requestPermission()
+    if (permission === 'granted') {
+      await subscribeUserToPush(userId)
+      onGranted()
+    }
+  }
+
+  const dismiss = () => {
+    setShow(false)
+    localStorage.setItem('wc2026_notif_asked', '1')
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '72px', left: '12px', right: '12px', zIndex: 9999,
+      background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px',
+      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.6)', fontSize: '0.85rem', color: '#f0f0f0'
+    }}>
+      <span style={{ fontSize: '1.4rem' }}>🔔</span>
+      <span style={{ flex: 1 }}>Get notified before kickoff & when AI summary is ready</span>
+      <button onClick={ask} style={{
+        background: '#f5c518', border: 'none', color: '#000', fontWeight: 600,
+        padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap'
+      }}>Allow</button>
+      <button onClick={dismiss} style={{
+        background: 'none', border: 'none', color: '#888', fontSize: '1.2rem',
+        cursor: 'pointer', padding: '0 4px', lineHeight: 1
+      }}>✕</button>
+    </div>
+  )
+}
+
+function InstallBanner({ show }) {
   const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
   const [dismissed, setDismiss] = useState(() => localStorage.getItem('wc2026_install_banner') === '1')
@@ -42,7 +115,7 @@ function InstallBanner() {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
-  if (isInStandaloneMode || dismissed) return null
+  if (!show || isInStandaloneMode || dismissed) return null
   if (!isIos && !deferredPrompt) return null
 
   const dismiss = () => { localStorage.setItem('wc2026_install_banner', '1'); setDismiss(true) }
@@ -56,7 +129,7 @@ function InstallBanner() {
 
   return (
     <div style={{
-      position: 'fixed', bottom: '72px', left: '12px', right: '12px', zIndex: 9999,
+      position: 'fixed', bottom: '72px', left: '12px', right: '12px', zIndex: 9998,
       background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px',
       padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
       boxShadow: '0 4px 20px rgba(0,0,0,0.6)', fontSize: '0.85rem', color: '#f0f0f0'
@@ -83,6 +156,9 @@ function InstallBanner() {
 function AppInner() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const [notifGranted, setNotifGranted] = useState(
+    () => Notification.permission === 'granted'
+  )
   useHeartbeat(supabase, user?.id)
 
   useEffect(() => {
@@ -92,9 +168,21 @@ function AppInner() {
       localStorage.removeItem('wc2026_welcome')
       showToast(`Welcome to the app, ${name}!`)
     }
+    // Re-subscribe on load if already granted (handles app reinstall)
+    if (Notification.permission === 'granted') subscribeUserToPush(user.id)
   }, [user?.id])
 
-  return <InstallBanner />
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+  // Show notification prompt: Android always, iPhone only when installed
+  const canPrompt = !isIos || isStandalone
+
+  return (
+    <>
+      {canPrompt && <NotificationPrompt userId={user?.id} onGranted={() => setNotifGranted(true)} />}
+      <InstallBanner show={notifGranted} />
+    </>
+  )
 }
 
 export default function App() {
