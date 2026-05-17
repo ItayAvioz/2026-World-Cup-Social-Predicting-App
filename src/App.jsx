@@ -1,5 +1,5 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
@@ -30,6 +30,35 @@ function AuthGuard({ children }) {
   return children
 }
 
+function IosInstallBanner() {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+  const [dismissed, setDismiss] = useState(() => localStorage.getItem('wc2026_ios_banner') === '1')
+
+  if (!isIos || isInStandaloneMode || dismissed) return null
+
+  const dismiss = () => {
+    localStorage.setItem('wc2026_ios_banner', '1')
+    setDismiss(true)
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '72px', left: '12px', right: '12px', zIndex: 9999,
+      background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px',
+      padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.6)', fontSize: '0.85rem', color: '#f0f0f0'
+    }}>
+      <span style={{ fontSize: '1.4rem' }}>⚽</span>
+      <span style={{ flex: 1 }}>Install the app: tap <strong>Share</strong> → <strong>Add to Home Screen</strong></span>
+      <button onClick={dismiss} style={{
+        background: 'none', border: 'none', color: '#888', fontSize: '1.2rem',
+        cursor: 'pointer', padding: '0 4px', lineHeight: 1
+      }}>✕</button>
+    </div>
+  )
+}
+
 function AppInner() {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -44,7 +73,7 @@ function AppInner() {
     }
   }, [user?.id])
 
-  return null
+  return <IosInstallBanner />
 }
 
 export default function App() {
