@@ -30,16 +30,28 @@ function AuthGuard({ children }) {
   return children
 }
 
-function IosInstallBanner() {
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+function InstallBanner() {
   const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
-  const [dismissed, setDismiss] = useState(() => localStorage.getItem('wc2026_ios_banner') === '1')
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const [dismissed, setDismiss] = useState(() => localStorage.getItem('wc2026_install_banner') === '1')
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
 
-  if (!isIos || isInStandaloneMode || dismissed) return null
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
 
-  const dismiss = () => {
-    localStorage.setItem('wc2026_ios_banner', '1')
-    setDismiss(true)
+  if (isInStandaloneMode || dismissed) return null
+  if (!isIos && !deferredPrompt) return null
+
+  const dismiss = () => { localStorage.setItem('wc2026_install_banner', '1'); setDismiss(true) }
+
+  const install = async () => {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') dismiss()
   }
 
   return (
@@ -50,7 +62,16 @@ function IosInstallBanner() {
       boxShadow: '0 4px 20px rgba(0,0,0,0.6)', fontSize: '0.85rem', color: '#f0f0f0'
     }}>
       <span style={{ fontSize: '1.4rem' }}>⚽</span>
-      <span style={{ flex: 1 }}>Install the app: tap <strong>Share</strong> → <strong>Add to Home Screen</strong></span>
+      {deferredPrompt
+        ? <span style={{ flex: 1 }}>Install the app for quick access</span>
+        : <span style={{ flex: 1 }}>Install: tap <strong>Share</strong> → <strong>Add to Home Screen</strong></span>
+      }
+      {deferredPrompt && (
+        <button onClick={install} style={{
+          background: 'var(--gold)', border: 'none', color: '#000', fontWeight: 600,
+          padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap'
+        }}>Install</button>
+      )}
       <button onClick={dismiss} style={{
         background: 'none', border: 'none', color: '#888', fontSize: '1.2rem',
         cursor: 'pointer', padding: '0 4px', lineHeight: 1
@@ -73,7 +94,7 @@ function AppInner() {
     }
   }, [user?.id])
 
-  return <IosInstallBanner />
+  return <InstallBanner />
 }
 
 export default function App() {
