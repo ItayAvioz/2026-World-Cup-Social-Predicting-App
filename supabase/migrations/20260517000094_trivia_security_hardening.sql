@@ -12,7 +12,8 @@ CREATE TABLE public.trivia_secrets (
   correct_option char(1) NOT NULL CHECK (correct_option IN ('a','b','c','d')),
   explanation    text
 );
--- No SELECT policy → authenticated users cannot query this table directly
+-- RLS enabled with no policies → table fully locked to all users
+ALTER TABLE public.trivia_secrets ENABLE ROW LEVEL SECURITY;
 
 -- 2. Migrate answers + explanations from trivia_questions
 INSERT INTO public.trivia_secrets (question_id, correct_option, explanation)
