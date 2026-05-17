@@ -1,6 +1,12 @@
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', () => self.clients.claim())
 
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.endsWith('app.html')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }))
+  }
+})
+
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {}
   event.waitUntil(
