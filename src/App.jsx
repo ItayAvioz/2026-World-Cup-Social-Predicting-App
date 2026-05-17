@@ -54,11 +54,13 @@ async function subscribeUserToPush(userId) {
   )
 }
 
+const notifSupported = typeof Notification !== 'undefined'
+
 function NotificationPrompt({ userId, onGranted }) {
   const [show, setShow] = useState(false)
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !notifSupported) return
     if (Notification.permission !== 'default') return
     if (localStorage.getItem('wc2026_notif_asked') === '1') return
     const t = setTimeout(() => setShow(true), 10000)
@@ -70,6 +72,7 @@ function NotificationPrompt({ userId, onGranted }) {
   const ask = async () => {
     setShow(false)
     localStorage.setItem('wc2026_notif_asked', '1')
+    if (!notifSupported) return
     const permission = await Notification.requestPermission()
     if (permission === 'granted') {
       await subscribeUserToPush(userId)
@@ -157,7 +160,7 @@ function AppInner() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const [notifGranted, setNotifGranted] = useState(
-    () => Notification.permission === 'granted'
+    () => notifSupported && Notification.permission === 'granted'
   )
   useHeartbeat(supabase, user?.id)
 
@@ -168,8 +171,7 @@ function AppInner() {
       localStorage.removeItem('wc2026_welcome')
       showToast(`Welcome to the app, ${name}!`)
     }
-    // Re-subscribe on load if already granted (handles app reinstall)
-    if (Notification.permission === 'granted') subscribeUserToPush(user.id)
+    if (notifSupported && Notification.permission === 'granted') subscribeUserToPush(user.id)
   }, [user?.id])
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
