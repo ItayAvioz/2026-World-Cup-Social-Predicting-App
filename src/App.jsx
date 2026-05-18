@@ -58,8 +58,16 @@ async function subscribeUserToPush(userId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
   try {
     const reg = await navigator.serviceWorker.ready
+    // Force-fresh: destroy any cached subscription, get a brand-new endpoint.
+    // The old endpoint may have been silently 410'd by the push service (Android OS toggle off,
+    // PWA reinstalled, etc.). Re-subscribing gives the freshest possible state every PWA open.
     const existing = await reg.pushManager.getSubscription()
-    const sub = existing || await reg.pushManager.subscribe({
+    let oldEndpoint = null
+    if (existing) {
+      oldEndpoint = existing.endpoint
+      try { await existing.unsubscribe() } catch {}
+    }
+    const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     })
@@ -71,6 +79,11 @@ async function subscribeUserToPush(userId) {
     )
     if (error) console.error('[push] upsert failed:', error.message, error.details)
     else console.log('[push] subscription saved for', userId)
+    // Clean up the specific old endpoint we just unsubscribed from (other devices' subs untouched)
+    if (oldEndpoint && oldEndpoint !== endpoint) {
+      await supabase.from('push_subscriptions')
+        .delete().eq('user_id', userId).eq('endpoint', oldEndpoint)
+    }
   } catch (e) {
     console.error('[push] subscribe failed:', e)
   }
@@ -84,7 +97,9 @@ function NotificationPrompt({ userId, onGranted }) {
   useEffect(() => {
     if (!userId || !notifSupported) return
     if (Notification.permission !== 'default') return
-    if (localStorage.getItem('wc2026_notif_asked') === '1') return
+    // 24h cooldown after dismiss — was a permanent skip, but that locked users out after PWA reinstall
+    const dismissedAt = parseInt(localStorage.getItem('wc2026_notif_dismissed') || '0', 10)
+    if (Date.now() - dismissedAt < 24 * 60 * 60 * 1000) return
     const t = setTimeout(() => setShow(true), 10000)
     return () => clearTimeout(t)
   }, [userId])
@@ -93,18 +108,20 @@ function NotificationPrompt({ userId, onGranted }) {
 
   const ask = async () => {
     setShow(false)
-    localStorage.setItem('wc2026_notif_asked', '1')
     if (!notifSupported) return
     const permission = await Notification.requestPermission()
     if (permission === 'granted') {
       await subscribeUserToPush(userId)
       onGranted()
+    } else {
+      // Browser-level denied — record dismissal so we respect the cooldown
+      localStorage.setItem('wc2026_notif_dismissed', String(Date.now()))
     }
   }
 
   const dismiss = () => {
     setShow(false)
-    localStorage.setItem('wc2026_notif_asked', '1')
+    localStorage.setItem('wc2026_notif_dismissed', String(Date.now()))
   }
 
   return (
