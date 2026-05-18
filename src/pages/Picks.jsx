@@ -396,14 +396,9 @@ export default function Picks() {
     return map
   }, [games])
 
-  const upcomingGamesByPhase = useMemo(() => {
-    const map = {}
-    games.filter(g => g.score_home === null).forEach(g => {
-      if (!map[g.phase]) map[g.phase] = []
-      map[g.phase].push(g)
-    })
-    return map
-  }, [games])
+  const upcomingGames = useMemo(() =>
+    games.filter(g => g.score_home === null).sort((a, b) => new Date(a.kick_off_time) - new Date(b.kick_off_time))
+  , [games])
 
   const upcomingCount = useMemo(() =>
     games.filter(g => g.score_home === null).length
@@ -853,16 +848,13 @@ export default function Picks() {
                 )}
                 <p className="pd-scoring-note">Score calculated on 90-min result · Knockout stages also show extra time &amp; penalties</p>
                 <p className="pd-scoring-note">No pick = auto-assigned at kickoff.</p>
-                {PHASE_ORDER.filter(ph => upcomingGamesByPhase[ph]).length === 0 ? (
+                {upcomingGames.length === 0 ? (
                   <div className="pk-section" style={{ padding:'2rem 1rem', textAlign:'center' }}>
                     <p style={{ color:'var(--muted)', fontSize:'.9rem' }}>No upcoming games — check History for past predictions.</p>
                   </div>
                 ) : (
                   <div className="pd-games">
-                    {PHASE_ORDER.filter(ph => upcomingGamesByPhase[ph]).map(ph => (
-                      <div key={ph}>
-                        <div className="pd-phase-head">{PHASE_LABEL[ph]}</div>
-                        {upcomingGamesByPhase[ph].map(game => {
+                    {upcomingGames.map(game => {
                           const pastKO = new Date() >= new Date(game.kick_off_time)
                           const isTBD  = game.team_home === 'TBD' || game.team_away === 'TBD'
                           const locked = pastKO || isTBD
@@ -961,9 +953,7 @@ export default function Picks() {
                               </div>
                             </div>
                           )
-                        })}
-                      </div>
-                    ))}
+                    })}
                   </div>
                 )}
               </>
