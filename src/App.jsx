@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
   document.documentElement.classList.add('ios')
 }
+if (window.navigator.standalone) {
+  document.documentElement.classList.add('standalone')
+}
 
 import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
