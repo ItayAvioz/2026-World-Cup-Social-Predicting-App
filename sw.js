@@ -1,4 +1,4 @@
-const SW_VERSION = '7'
+const SW_VERSION = '8'
 const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png'
 
 self.addEventListener('install', (event) => {
@@ -14,15 +14,17 @@ self.addEventListener('fetch', (event) => {
 })
 
 self.addEventListener('push', (event) => {
-  const data = event.data?.json() ?? {}
-  event.waitUntil(
-    self.registration.showNotification(data.title ?? 'WC2026', {
-      body: data.body,
+  event.waitUntil((async () => {
+    let data = {}
+    try { data = event.data ? event.data.json() : {} }
+    catch { try { data = { title: event.data.text() } } catch { data = {} } }
+    await self.registration.showNotification(data.title ?? 'WC2026', {
+      body: data.body ?? '',
       icon: data.icon ?? ICON,
       badge: data.badge ?? ICON,
       data: { url: data.url ?? 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/app.html#/dashboard' }
     })
-  )
+  })())
 })
 
 self.addEventListener('notificationclick', (event) => {
