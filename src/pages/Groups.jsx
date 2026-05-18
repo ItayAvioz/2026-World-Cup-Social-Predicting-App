@@ -306,7 +306,8 @@ export default function Groups() {
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
       const text = `Join my World Cup 2026 predictions group! 🏆\n${link}`
-      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      window.open((isIOS ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank')
     } else {
       try {
         await navigator.clipboard.writeText(link)
@@ -321,7 +322,8 @@ export default function Groups() {
     if (user?.id) logEvent(supabase, user.id, 'share_click', 'groups')
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
-      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      window.open((isIOS ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank')
       return
     }
     try {

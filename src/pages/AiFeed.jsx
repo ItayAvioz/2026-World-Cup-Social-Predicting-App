@@ -199,7 +199,8 @@ export default function AiFeed() {
     if (user?.id) logEvent(supabase, user.id, 'share_click', 'ai_feed')
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
-      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank')
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      window.open((isIOS ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(text), '_blank')
       return
     }
     try {

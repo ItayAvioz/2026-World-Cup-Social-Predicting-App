@@ -1,5 +1,10 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+
+if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+  document.documentElement.classList.add('ios')
+}
+
 import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
