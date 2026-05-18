@@ -1,6 +1,10 @@
-const SW_VERSION = '5'
+const SW_VERSION = '6'
+const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-180.png'
 
-self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('install', (event) => {
+  self.skipWaiting()
+  event.waitUntil(caches.open('wc2026-static').then(c => c.add(ICON)))
+})
 self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()) })
 
 self.addEventListener('fetch', (event) => {
@@ -14,9 +18,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title ?? 'WC2026', {
       body: data.body,
-      icon: data.icon ?? '/2026-World-Cup-Social-Predicting-App/icon-180.png',
-      badge: data.badge ?? '/2026-World-Cup-Social-Predicting-App/icon-180.png',
-      data: { url: data.url ?? '/2026-World-Cup-Social-Predicting-App/app.html#/dashboard' }
+      icon: data.icon ?? ICON,
+      badge: data.badge ?? ICON,
+      data: { url: data.url ?? 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/app.html#/dashboard' }
     })
   )
 })
