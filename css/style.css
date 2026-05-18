@@ -278,7 +278,7 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 /* PAGE SHELL */
 .page-shell { min-height:100vh; position:relative; }
 .side-deco { display:none; }
-.page-nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.2rem; min-height:72px; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+.page-nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-items:center; justify-content:space-between; padding:.85rem 1.2rem; min-height:72px; background:rgba(10,10,10,.95); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid rgba(255,255,255,.12); }
 .page-back { display:flex; align-items:center; gap:.5rem; color:var(--accent); font-size:.9rem; font-weight:600; cursor:pointer; background:none; border:none; padding:.3rem 0; }
 .page-back:hover { opacity:.75; }
 .page-body { padding-top:76px; min-height:100vh; }
@@ -358,7 +358,8 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 /* iOS overrides */
 .ios .bottom-nav { bottom:0; min-height:unset; height:88px; box-sizing:border-box; padding-bottom:env(safe-area-inset-bottom); backdrop-filter:none; -webkit-backdrop-filter:none; }
 .ios .bottom-nav::after { display:none; }
-.ios .bottom-nav-tab { padding:0 .25rem 10px; transition:none; }
+.ios .bottom-nav-tab { padding:8px .25rem 2px; transition:none; }
+@media (display-mode: standalone) { .ios .bottom-nav-tab { padding:2px .25rem 8px; } }
 .ios .bottom-nav-icon { width:26px; height:26px; }
 .ios .bottom-nav-icon svg { width:26px; height:26px; }
 
