@@ -1,5 +1,5 @@
-const SW_VERSION = '6'
-const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-180.png'
+const SW_VERSION = '7'
+const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png'
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
