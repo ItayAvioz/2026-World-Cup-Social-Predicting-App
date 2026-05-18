@@ -106,6 +106,8 @@
 | 95 | 20260518000095_security_rls_view_fixes.sql | Security: feedback SELECT restricted to service_role only; ai_judge_scores view: REVOKE SELECT from anon+authenticated; team_tournament_stats left as-is (frontend depends on it) |
 | 96 | 20260518000096_security_revoke_views_prompts.sql | Security: feedback_readable view REVOKE from anon+authenticated; prompt_versions anon read policy dropped (service role only) |
 | 97 | 20260518000097_fix_team_tournament_stats_security_invoker.sql | Fix team_tournament_stats: recreated with security_invoker=true (was SECURITY DEFINER — bypassed RLS) |
+| 98 | 20260518000098_add_friendly_phase.sql | games.phase CHECK constraint: add 'friendly' value for non-WC test/warm-up games |
+| 99 | 20260518000099_add_ko_notif_to_auto_schedule_trigger.sql | trg_auto_schedule_game: add fn_schedule_ko_notification call on INSERT (was missing — backfilled 2 May 19 friendlies) |
 
 ## Edge Functions
 

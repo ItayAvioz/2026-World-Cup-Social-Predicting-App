@@ -1,0 +1,5 @@
+-- M98: add fn_schedule_ko_notification to trg_auto_schedule_game
+-- Previously the trigger only scheduled auto-predict, ai-summary, and game-sync crons.
+-- KO notification crons (ko-notif-{game_id}) were backfilled manually at M92 but
+-- any game inserted after that missed them. This update adds the call.
+-- Also backfilled the 2 friendly games (May 19) that were missing crons.
