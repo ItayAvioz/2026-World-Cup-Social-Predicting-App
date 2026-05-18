@@ -279,9 +279,9 @@ const flagUrl = (code, w=40) => `https://flagcdn.com/w${w}/${code}.png`;
   var mapImg = document.createElement('img');
   mapImg.className = 'map-bg';
   mapImg.alt = '';
-  mapImg.src = 'https://unpkg.com/three-globe/example/img/earth-dark.jpg';
+  mapImg.src = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg';
   mapImg.onerror = function() {
-    this.src = 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg';
+    this.src = 'https://unpkg.com/three-globe/example/img/earth-dark.jpg';
   };
   container.appendChild(mapImg);
 

@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 Deno.serve(async (req) => {
   try {
-    const { title, body, url = '/app.html#/dashboard', user_ids } = await req.json()
+    const { title, body, url = '/2026-World-Cup-Social-Predicting-App/app.html#/dashboard', user_ids } = await req.json()
 
     if (!title || !body) return new Response(JSON.stringify({ error: 'title and body required' }), { status: 400 })
 
