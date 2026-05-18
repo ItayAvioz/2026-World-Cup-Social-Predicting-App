@@ -115,7 +115,7 @@
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v9 | ✅ ACTIVE | v9: predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90 |
-| send-push | v1 | ✅ ACTIVE | Web Push via npm:web-push; VAPID private key from vault `Notification_Key`; input: {title,body,url?,user_ids?}; 410 Gone → delete stale sub |
+| send-push | v6 | ✅ ACTIVE | v6 (2026-05-18): payload includes icon=icon-notif.png (transparent ⚽) + badge=icon-badge.png (white "WC" text) with `?v=3` cache-bust. v1–v5 iterated icons. Web Push via npm:web-push; VAPID private key from vault `Notification_Key`; 410 Gone → delete stale sub |
 
 ## Key pg_cron Jobs
 
