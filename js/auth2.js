@@ -21,6 +21,29 @@
   const inviteCode = params.get('invite')
   if (inviteCode) localStorage.setItem('wc2026_pending_invite', inviteCode)
 
+  // ── FORM TOGGLE ──────────────────────────────────────────────
+  // Attached SYNCHRONOUSLY before the session await so clicks don't fall through
+  // the ~300ms iOS Safari gap (anchor scroll would run alone; form wouldn't switch).
+  const formRegister = document.getElementById('form-register')
+  const formLogin    = document.getElementById('form-login')
+  const toggleLink   = document.getElementById('toggle-link')
+  const toggleText   = document.getElementById('toggle-text')
+  const formSub      = document.getElementById('form-sub')
+
+  let isLogin = false
+
+  function switchToLogin() {
+    isLogin = true
+    if (formRegister) formRegister.style.display = 'none'
+    if (formLogin)    formLogin.style.display    = ''
+    if (toggleText)   toggleText.textContent     = "Don't have an account? "
+    if (toggleLink)   toggleLink.textContent     = 'Sign Up'
+    if (formSub)      formSub.textContent        = 'Sign in to continue predicting'
+  }
+
+  const navLoginBtn = document.getElementById('nav-login-btn')
+  if (navLoginBtn) navLoginBtn.addEventListener('click', () => switchToLogin())
+
   // Session guard — already logged in?
   const { data: { session } } = await _supabase.auth.getSession()
   if (session) {
@@ -40,27 +63,6 @@
     document.querySelectorAll('a[href="#register-section"]').forEach(el => { el.style.display = 'none' })
     return
   }
-
-  // ── FORM TOGGLE ──────────────────────────────────────────────
-  const formRegister = document.getElementById('form-register')
-  const formLogin    = document.getElementById('form-login')
-  const toggleLink   = document.getElementById('toggle-link')
-  const toggleText   = document.getElementById('toggle-text')
-  const formSub      = document.getElementById('form-sub')
-
-  let isLogin = false
-
-  function switchToLogin() {
-    isLogin = true
-    formRegister.style.display = 'none'
-    formLogin.style.display    = ''
-    toggleText.textContent     = "Don't have an account? "
-    toggleLink.textContent     = 'Sign Up'
-    formSub.textContent        = 'Sign in to continue predicting'
-  }
-
-  const navLoginBtn = document.getElementById('nav-login-btn')
-  if (navLoginBtn) navLoginBtn.addEventListener('click', () => switchToLogin())
 
   toggleLink.addEventListener('click', e => {
     e.preventDefault()
