@@ -26,7 +26,8 @@ Deno.serve(async (req) => {
       title,
       body,
       url,
-      icon: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png'
+      icon: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png',
+      badge: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-badge.png'
     })
 
     const results = { sent: 0, failed: 0, stale: [] as string[] }
