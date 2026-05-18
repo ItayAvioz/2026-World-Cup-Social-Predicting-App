@@ -104,6 +104,7 @@
 | 93 | *(MCP-only, no local file)* | fn_notify_ai_summary trigger function + trg_notify_ai_summary AFTER INSERT on ai_summaries |
 | 94 | 20260517000094_trivia_security_hardening.sql | Trivia security: trivia_secrets table (RLS enabled, no SELECT policy) stores correct_option+explanation; trivia_questions drops those cols; RLS time-locked (available_from <= now()); submit_trivia_answer updated to JOIN trivia_secrets |
 | 95 | 20260518000095_security_rls_view_fixes.sql | Security: feedback SELECT restricted to service_role only; ai_judge_scores view: REVOKE SELECT from anon+authenticated; team_tournament_stats left as-is (frontend depends on it) |
+| 96 | 20260518000096_security_revoke_views_prompts.sql | Security: feedback_readable view REVOKE from anon+authenticated; prompt_versions anon read policy dropped (service role only) |
 
 ## Edge Functions
 
