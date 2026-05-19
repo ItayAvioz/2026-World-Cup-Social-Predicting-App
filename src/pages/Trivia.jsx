@@ -186,10 +186,23 @@ export default function Trivia() {
 
     if (cancelRef.current) return
     if (existing) {
+      let correctOption = localStorage.getItem(`trivia_correct_${q.id}`)
+      let explanation   = localStorage.getItem(`trivia_expl_${q.id}`)
+      // Cross-device fallback: this device never saw the reveal — fetch via RPC.
+      if (!correctOption) {
+        const { data: secret } = await supabase.rpc('get_my_trivia_result', { p_question_id: q.id })
+        if (secret) {
+          correctOption = secret.correct_option ?? null
+          explanation   = secret.explanation ?? null
+          if (correctOption) localStorage.setItem(`trivia_correct_${q.id}`, correctOption)
+          if (explanation)   localStorage.setItem(`trivia_expl_${q.id}`, explanation)
+        }
+      }
+      if (cancelRef.current) return
       setResult({
         is_correct:      existing.is_correct,
-        correct_option:  localStorage.getItem(`trivia_correct_${q.id}`) || null,
-        explanation:     localStorage.getItem(`trivia_expl_${q.id}`) || null,
+        correct_option:  correctOption || null,
+        explanation:     explanation || null,
         points_earned:   existing.points_earned,
         selected_option: existing.selected_option,
       })
