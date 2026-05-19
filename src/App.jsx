@@ -217,9 +217,16 @@ function AppInner() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
-    const handler = () => showToast('New version available — tap ⚙️ to refresh')
-    navigator.serviceWorker.addEventListener('controllerchange', handler)
-    return () => navigator.serviceWorker.removeEventListener('controllerchange', handler)
+    const handler = (event) => {
+      if (event.data?.type !== 'SW_VERSION') return
+      const newVer = String(event.data.version)
+      const oldVer = localStorage.getItem('wc2026_sw_ver')
+      if (oldVer && oldVer !== newVer) showToast('New version available — tap ⚙️ to refresh')
+      localStorage.setItem('wc2026_sw_ver', newVer)
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    navigator.serviceWorker.ready.then(reg => reg.active?.postMessage({ type: 'GET_VERSION' }))
+    return () => navigator.serviceWorker.removeEventListener('message', handler)
   }, [])
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
