@@ -8,12 +8,20 @@
   <meta name="theme-color" content="#0a0a0a">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="WC2026">
+  <link rel="apple-touch-icon" href="/2026-World-Cup-Social-Predicting-App/icon-180.png">
+  <link rel="manifest" href="/2026-World-Cup-Social-Predicting-App/manifest.json">
   <script type="module" crossorigin src="./assets/app-CsxwEvhF.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/app-Bz4NquYb.css">
 </head>
 <body>
   <div id="root"></div>
   <script>
+    if (!crypto.randomUUID) {
+      crypto.randomUUID = () => '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+        (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16))
+    }
     if (location.protocol === 'file:') {
       document.getElementById('root').innerHTML =
         '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:1rem;color:#f0f0f0;background:#0a0a0a;font-family:Inter,sans-serif;text-align:center;padding:2rem">' +
@@ -24,5 +32,6 @@
         '</div>'
     }
   </script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/2026-World-Cup-Social-Predicting-App/sw.js')</script>
 </body>
 </html>
