@@ -108,6 +108,7 @@
 | 97 | 20260518000097_fix_team_tournament_stats_security_invoker.sql | Fix team_tournament_stats: recreated with security_invoker=true (was SECURITY DEFINER — bypassed RLS) |
 | 98 | 20260518000098_add_friendly_phase.sql | games.phase CHECK constraint: add 'friendly' value for non-WC test/warm-up games |
 | 99 | 20260518000099_add_ko_notif_to_auto_schedule_trigger.sql | trg_auto_schedule_game: add fn_schedule_ko_notification call on INSERT (was missing — backfilled 2 May 19 friendlies) |
+| 100 | 20260519000100_add_get_my_trivia_result_rpc.sql | get_my_trivia_result(question_id) SECURITY DEFINER RPC — returns correct_option+explanation from trivia_secrets ONLY if user has answered (cross-device result display fix) |
 
 ## Edge Functions
 
