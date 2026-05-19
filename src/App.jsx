@@ -215,6 +215,13 @@ function AppInner() {
     if (notifSupported && Notification.permission === 'granted') subscribeUserToPush(user.id)
   }, [user?.id])
 
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const handler = () => showToast('New version available — tap ⚙️ to refresh')
+    navigator.serviceWorker.addEventListener('controllerchange', handler)
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', handler)
+  }, [])
+
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
   // Show notification prompt: Android always, iPhone only when installed

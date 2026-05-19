@@ -761,6 +761,16 @@ export default function Dashboard() {
 
         <div className="prof-divider" />
 
+        {/* Refresh app */}
+        <div className="prof-section">
+          <div className="prof-section-title">App</div>
+          <button className="btn btn-outline btn-full" onClick={() => window.location.reload()}>
+            Refresh to latest version
+          </button>
+        </div>
+
+        <div className="prof-divider" />
+
         {/* Delete account */}
         <div className="prof-section">
           <div className="prof-section-title prof-danger-title">Danger Zone</div>
