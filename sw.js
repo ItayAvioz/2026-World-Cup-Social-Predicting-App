@@ -1,4 +1,4 @@
-const SW_VERSION = '9'
+const SW_VERSION = '10'
 const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png'
 
 self.addEventListener('install', (event) => {
@@ -10,6 +10,12 @@ self.addEventListener('activate', (event) => { event.waitUntil(self.clients.clai
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/app.html')) {
     event.respondWith(fetch(event.request, { cache: 'no-store' }))
+  }
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'GET_VERSION') {
+    event.source.postMessage({ type: 'SW_VERSION', version: SW_VERSION })
   }
 })
 
