@@ -157,11 +157,16 @@ export default function Trivia() {
     const isTestMode = localStorage.getItem('wc2026_test_mode') === '1'
     if (today < TOURNAMENT_START && !isTestMode) { setPageState('pre_tournament'); return }
 
+    const nowISO = new Date().toISOString()
     const [{ data: q }, { data: answers }] = await Promise.all([
       supabase
         .from('trivia_questions')
         .select('id, question_date, available_from, available_until, question_text, option_a, option_b, option_c, option_d')
-        .eq('question_date', today).maybeSingle(),
+        .lte('available_from', nowISO)
+        .gt('available_until', nowISO)
+        .order('available_from', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       supabase.from('trivia_answers').select('points_earned, is_correct').eq('user_id', user.id),
     ])
 
