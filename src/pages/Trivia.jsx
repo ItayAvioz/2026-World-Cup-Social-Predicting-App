@@ -154,7 +154,8 @@ export default function Trivia() {
   async function loadPage() {
     const today = todayUTC()
     if (cancelRef.current) return
-    if (today < TOURNAMENT_START) { setPageState('pre_tournament'); return }
+    const isTestMode = localStorage.getItem('wc2026_test_mode') === '1'
+    if (today < TOURNAMENT_START && !isTestMode) { setPageState('pre_tournament'); return }
 
     const [{ data: q }, { data: answers }] = await Promise.all([
       supabase

@@ -72,6 +72,15 @@ export default function Dashboard() {
   const [deleteConfirm,   setDeleteConfirm]   = useState(false)
   const [deleteLoading,   setDeleteLoading]   = useState(false)
   const [displayUsername, setDisplayUsername] = useState(null) // null = use baseUsername
+  const isAdmin           = user?.email === 'itayavioz1@gmail.com'
+  const [testMode,        setTestMode]        = useState(() => localStorage.getItem('wc2026_test_mode') === '1')
+  const toggleTestMode = () => {
+    const next = !testMode
+    setTestMode(next)
+    if (next) localStorage.setItem('wc2026_test_mode', '1')
+    else localStorage.removeItem('wc2026_test_mode')
+    showToast(`Test mode ${next ? 'ON' : 'OFF'}`)
+  }
 
   const username = displayUsername ?? baseUsername
 
@@ -768,6 +777,21 @@ export default function Dashboard() {
             Refresh to latest version
           </button>
         </div>
+
+        {isAdmin && (
+          <>
+            <div className="prof-divider" />
+            <div className="prof-section">
+              <div className="prof-section-title">Admin</div>
+              <button className="btn btn-outline btn-full" onClick={toggleTestMode}>
+                Test Mode: {testMode ? 'ON' : 'OFF'}
+              </button>
+              <div className="prof-lock-note">
+                Bypasses gates (trivia June 11, etc). Only visible to you.
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="prof-divider" />
 
