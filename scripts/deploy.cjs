@@ -118,7 +118,16 @@ run('git push origin gh-pages')
 
 // ── 13. Return to main ──────────────────────────────────────────
 run('git checkout main')
-if (stashed) run('git stash pop')
+if (stashed) {
+  try {
+    run('git stash pop')
+  } catch {
+    // Stash conflict — restore HEAD and drop the stash (deploy already succeeded)
+    try { silent('git checkout -- .') } catch {}
+    try { silent('git stash drop') } catch {}
+    console.log('  ⚠️  Stash conflict resolved — your pre-deploy changes were dropped (deploy succeeded)')
+  }
+}
 fs.rmSync(tmp, { recursive: true })
 
 console.log(`\n✅  Deploy complete! SW v${newVer} — users will see refresh toast on next PWA open\n`)
