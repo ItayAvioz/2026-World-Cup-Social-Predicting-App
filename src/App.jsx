@@ -216,17 +216,11 @@ function AppInner() {
   }, [user?.id])
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return
-    const handler = (event) => {
-      if (event.data?.type !== 'SW_VERSION') return
-      const newVer = String(event.data.version)
-      const oldVer = localStorage.getItem('wc2026_sw_ver')
-      if (oldVer && oldVer !== newVer) showToast('New version available — tap ⚙️ to refresh')
-      localStorage.setItem('wc2026_sw_ver', newVer)
-    }
-    navigator.serviceWorker.addEventListener('message', handler)
-    navigator.serviceWorker.ready.then(reg => reg.active?.postMessage({ type: 'GET_VERSION' }))
-    return () => navigator.serviceWorker.removeEventListener('message', handler)
+    const newVer = String(window.__APP_VER__ || '')
+    if (!newVer) return
+    const oldVer = localStorage.getItem('wc2026_sw_ver')
+    if (oldVer && oldVer !== newVer) showToast('New version available — tap ⚙️ to refresh')
+    localStorage.setItem('wc2026_sw_ver', newVer)
   }, [])
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)

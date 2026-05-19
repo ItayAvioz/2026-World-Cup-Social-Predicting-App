@@ -81,6 +81,15 @@ fs.copyFileSync(tmpSw,   path.join(ROOT, 'sw.js'))
 const ghCss = path.join(ROOT, 'assets', cssFile)
 if (!fs.existsSync(ghCss) && fs.existsSync(tmpCss)) fs.copyFileSync(tmpCss, ghCss)
 
+// ── 8b. Inject SW version inline into app.html ─────────────────
+// Bulletproof toast detection: window.__APP_VER__ is read synchronously by React
+// on mount and compared with localStorage. No SW timing dependency.
+const appHtmlPath = path.join(ROOT, 'app.html')
+let html = fs.readFileSync(appHtmlPath, 'utf8')
+html = html.replace(/\s*<script>window\.__APP_VER__=.*?<\/script>/g, '')
+html = html.replace('</head>', `  <script>window.__APP_VER__='${newVer}'</script>\n</head>`)
+fs.writeFileSync(appHtmlPath, html)
+
 // ── 9. Restore vanilla pages from main ──────────────────────────
 run('git checkout main -- team.html host.html')
 
