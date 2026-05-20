@@ -150,7 +150,7 @@ export default function HowToPlay({ isOpen, onClose }) {
             <h2 className="htp-section-title">🧠 Daily Trivia</h2>
             <ul className="htp-list">
               <li><strong>The Window:</strong> One question drops every day at 22:00 IDT, starting June 11.</li>
-              <li><strong>The Catch:</strong> 60 seconds on the clock. One shot — no retries, no going back.</li>
+              <li><strong>The Catch:</strong> 40 seconds on the clock. One shot — no retries, no going back. Miss the window and it counts as wrong.</li>
               <li><strong>The Long Game:</strong> Trivia points are banked silently. They don't appear on the leaderboard during the tournament — so no one knows who's ahead. The moment the World Cup Final result is confirmed, every trivia point lands simultaneously across every group. It's not over until the trivia lands.</li>
             </ul>
           </div>

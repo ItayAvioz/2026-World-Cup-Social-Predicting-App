@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (91 local + 3 MCP-only — all deployed)
+## Migrations (92 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -110,6 +110,7 @@
 | 99 | 20260518000099_add_ko_notif_to_auto_schedule_trigger.sql | trg_auto_schedule_game: add fn_schedule_ko_notification call on INSERT (was missing — backfilled 2 May 19 friendlies) |
 | 100 | 20260519000100_add_get_my_trivia_result_rpc.sql | get_my_trivia_result(question_id) SECURITY DEFINER RPC — returns correct_option+explanation from trivia_secrets ONLY if user has answered (cross-device result display fix) |
 | 101 | 20260520000101_consolidate_ai_summary_push.sql | Drop trg_notify_ai_summary + fn_notify_ai_summary (per-group push on INSERT). Add fn_notify_ai_summary_daily(date) — one push per user (DISTINCT across all qualifying groups). fn_schedule_ai_summaries: also schedule `ai-summary-push-{date}` cron at last_KO+160min (10min after per-group jobs). User in N groups now gets 1 push, not N. |
+| 102 | 20260520000102_trivia_missed_as_wrong.sql | Trivia: missed questions count as wrong. fn_auto_miss_trivia(question_id) inserts trivia_answers(selected_option='miss', is_correct=false, points_earned=0) for every user registered before available_from. fn_schedule_trivia_miss schedules `trivia-miss-{id[:8]}` cron at available_until. trg_schedule_trivia_miss AFTER INSERT auto-schedules for new questions. Backfill: 42 currently-future questions scheduled (2 test + 40 tournament Jun 11–Jul 20). |
 
 ## Edge Functions
 
@@ -127,6 +128,7 @@
 |---|---|---|
 | af-odds-daily | 07:15 UTC daily | API Football odds for upcoming games |
 | trivia-push-daily | 0 19 * * * UTC | Push notification: trivia question now open (22:00 Israel time) |
+| trivia-miss-{question_id[:8]} | at each question's available_until | Auto-insert miss row for users who didn't answer (M102) |
 | ko-notif-{game_id} | KO-15min | Push notification: kickoff soon (102 crons backfilled 2026-05-17) |
 | admin-daily-digest | 08:00 UTC daily | Admin email digest |
 | auto-assign-picks | 19:00 Jun 11 2026 | Auto-assign champion + top scorer at deadline |

@@ -35,7 +35,7 @@ function SectionLabel({ children }) {
 }
 
 // Circular SVG countdown timer
-function CircleTimer({ timeLeft, total = 60 }) {
+function CircleTimer({ timeLeft, total = 40 }) {
   const r    = 34
   const circ = 2 * Math.PI * r
   const hot  = timeLeft <= 10
@@ -136,7 +136,7 @@ export default function Trivia() {
   const [pageState,  setPageState]  = useState('loading')
   const [question,   setQuestion]   = useState(null)
   const [result,     setResult]     = useState(null)
-  const [timeLeft,   setTimeLeft]   = useState(60)
+  const [timeLeft,   setTimeLeft]   = useState(40)
   const [submitting, setSubmitting] = useState(false)
   const [stats,      setStats]      = useState({ total_pts: 0, correct: 0, total: 0 })
 
@@ -217,7 +217,7 @@ export default function Trivia() {
   }
 
   function openQuestion() {
-    setTimeLeft(60)
+    setTimeLeft(40)
     setPageState('active')
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
@@ -391,7 +391,7 @@ export default function Trivia() {
             {[
               {
                 icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-                label: '1 minute to answer', sub: 'Timer starts when you open the question',
+                label: '40 seconds to answer', sub: 'Timer starts when you open the question',
               },
               {
                 icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
@@ -469,7 +469,7 @@ export default function Trivia() {
               Today's Question is Ready
             </div>
             <div style={{ fontSize: '.83rem', color: 'var(--muted)', marginBottom: '1.6rem' }}>
-              You have <strong style={{ color: 'var(--accent)' }}>60 seconds</strong> once you open it
+              You have <strong style={{ color: 'var(--accent)' }}>40 seconds</strong> once you open it
             </div>
             <button className="btn btn-gold" style={{ width: '100%', borderRadius: 10, padding: '1rem', fontSize: '.95rem' }} onClick={openQuestion}>
               Open Today's Question
@@ -494,7 +494,7 @@ export default function Trivia() {
             <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden', marginBottom: '1.1rem' }}>
               <div style={{
                 height: '100%', borderRadius: 2,
-                width: `${(timeLeft / 60) * 100}%`,
+                width: `${(timeLeft / 40) * 100}%`,
                 background: timeLeft <= 10 ? 'var(--red)' : 'var(--accent)',
                 transition: 'width 1s linear, background .3s',
               }} />
