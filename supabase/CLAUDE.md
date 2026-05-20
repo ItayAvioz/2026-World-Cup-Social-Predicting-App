@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (90 local + 3 MCP-only — all deployed)
+## Migrations (91 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -109,6 +109,7 @@
 | 98 | 20260518000098_add_friendly_phase.sql | games.phase CHECK constraint: add 'friendly' value for non-WC test/warm-up games |
 | 99 | 20260518000099_add_ko_notif_to_auto_schedule_trigger.sql | trg_auto_schedule_game: add fn_schedule_ko_notification call on INSERT (was missing — backfilled 2 May 19 friendlies) |
 | 100 | 20260519000100_add_get_my_trivia_result_rpc.sql | get_my_trivia_result(question_id) SECURITY DEFINER RPC — returns correct_option+explanation from trivia_secrets ONLY if user has answered (cross-device result display fix) |
+| 101 | 20260520000101_consolidate_ai_summary_push.sql | Drop trg_notify_ai_summary + fn_notify_ai_summary (per-group push on INSERT). Add fn_notify_ai_summary_daily(date) — one push per user (DISTINCT across all qualifying groups). fn_schedule_ai_summaries: also schedule `ai-summary-push-{date}` cron at last_KO+160min (10min after per-group jobs). User in N groups now gets 1 push, not N. |
 
 ## Edge Functions
 
@@ -132,7 +133,8 @@
 | auto-predict-{game_id} | at each game's KO | fn_auto_predict_game for users who didn't submit |
 | verify-game-{game_id} | KO-30min | Verify API kick-off time matches DB |
 | sync-game-{game_id} | KO+120min | Write score + stats (football-api-sync mode=sync) |
-| ai-summary-{date}-{group_id[:8]} | last_KO+110min | Nightly AI summary — one job per qualifying group per date (M73) |
+| ai-summary-{date}-{group_id[:8]} | last_KO+150min | Nightly AI summary — one job per qualifying group per date (M73, timing fixed M83) |
+| ai-summary-push-{date} | last_KO+160min | Consolidated AI summary push — one push per user (DISTINCT across all groups) (M101) |
 
 ## Auto-Scheduling (M68 — 2026-05-04)
 
