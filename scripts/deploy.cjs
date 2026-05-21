@@ -50,18 +50,22 @@ run('git add sw.js')
 run(`git commit -m "chore: bump SW_VERSION to ${newVer}"`)
 
 // ── 5. Save files to temp ───────────────────────────────────────
-const tmp    = fs.mkdtempSync(path.join(os.tmpdir(), 'wc2026-'))
+// Snapshot ALL dist/assets/* (not just main.js+css) so lazy-loaded
+// page chunks from React.lazy() are deployed too.
+const tmp     = fs.mkdtempSync(path.join(os.tmpdir(), 'wc2026-'))
 const tmpHtml = path.join(tmp, 'app.html')
-const tmpJs   = path.join(tmp, jsFile)
-const tmpCss  = path.join(tmp, cssFile)
 const tmpSw   = path.join(tmp, 'sw.js')
+const tmpAssets = path.join(tmp, 'assets')
+fs.mkdirSync(tmpAssets, { recursive: true })
 
 fs.copyFileSync(distHtmlPath, tmpHtml)
-fs.copyFileSync(path.join(ROOT, 'dist', 'assets', jsFile), tmpJs)
 fs.copyFileSync(swPath, tmpSw)
-const distCss = path.join(ROOT, 'dist', 'assets', cssFile)
-if (fs.existsSync(distCss)) fs.copyFileSync(distCss, tmpCss)
-console.log(`💾  Saved to temp: ${tmp}`)
+const distAssetsDir = path.join(ROOT, 'dist', 'assets')
+const allAssets = fs.readdirSync(distAssetsDir)
+for (const f of allAssets) {
+  fs.copyFileSync(path.join(distAssetsDir, f), path.join(tmpAssets, f))
+}
+console.log(`💾  Saved to temp: ${tmp} (${allAssets.length} asset files)`)
 
 // ── 6. Stash any remaining main changes ─────────────────────────
 let stashed = false
@@ -75,11 +79,18 @@ run('git checkout gh-pages')
 
 // ── 8. Copy files ───────────────────────────────────────────────
 fs.copyFileSync(tmpHtml, path.join(ROOT, 'app.html'))
-fs.copyFileSync(tmpJs,   path.join(ROOT, 'assets', jsFile))
 fs.copyFileSync(tmpSw,   path.join(ROOT, 'sw.js'))
-// CSS only if new (avoid bloating gh-pages with duplicates)
-const ghCss = path.join(ROOT, 'assets', cssFile)
-if (!fs.existsSync(ghCss) && fs.existsSync(tmpCss)) fs.copyFileSync(tmpCss, ghCss)
+// Copy ALL asset files. Skip ones already present (content-hashed = identical).
+const ghAssetsDir = path.join(ROOT, 'assets')
+const copiedAssets = []
+for (const f of allAssets) {
+  const dest = path.join(ghAssetsDir, f)
+  if (!fs.existsSync(dest)) {
+    fs.copyFileSync(path.join(tmpAssets, f), dest)
+    copiedAssets.push(f)
+  }
+}
+console.log(`  → copied ${copiedAssets.length} new asset file(s)`)
 
 // ── 8b. Inject SW version inline into app.html ─────────────────
 // Bulletproof toast detection: window.__APP_VER__ is read synchronously by React
@@ -114,12 +125,11 @@ if (failed.length) {
 console.log('✅  app.html verified')
 
 // ── 11. Commit ──────────────────────────────────────────────────
-const filesToAdd = ['app.html', 'sw.js', `assets/${jsFile}`, 'team.html', 'host.html']
-try { silent(`git ls-files --error-unmatch assets/${cssFile}`) }
-catch { filesToAdd.push(`assets/${cssFile}`) }
+const filesToAdd = ['app.html', 'sw.js', 'team.html', 'host.html']
+for (const f of copiedAssets) filesToAdd.push(`assets/${f}`)
 run(`git add ${filesToAdd.join(' ')}`)
 
-const msg = process.argv[2] || `deploy: SW v${newVer} + ${jsFile}`
+const msg = process.argv[2] || `deploy: SW v${newVer} + ${jsFile} (+${copiedAssets.length} assets)`
 run(`git commit -m "${msg}\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"`)
 
 // ── 12. Push ────────────────────────────────────────────────────
