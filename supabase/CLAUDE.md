@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (92 local + 3 MCP-only — all deployed)
+## Migrations (94 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -112,6 +112,7 @@
 | 101 | 20260520000101_consolidate_ai_summary_push.sql | Drop trg_notify_ai_summary + fn_notify_ai_summary (per-group push on INSERT). Add fn_notify_ai_summary_daily(date) — one push per user (DISTINCT across all qualifying groups). fn_schedule_ai_summaries: also schedule `ai-summary-push-{date}` cron at last_KO+160min (10min after per-group jobs). User in N groups now gets 1 push, not N. |
 | 102 | 20260520000102_trivia_missed_as_wrong.sql | Trivia: missed questions count as wrong. fn_auto_miss_trivia(question_id) inserts trivia_answers(selected_option='miss', is_correct=false, points_earned=0) for every user registered before available_from. fn_schedule_trivia_miss schedules `trivia-miss-{id[:8]}` cron at available_until. trg_schedule_trivia_miss AFTER INSERT auto-schedules for new questions. Backfill: 42 currently-future questions scheduled (2 test + 40 tournament Jun 11–Jul 20). |
 | 103 | 103_dashboard_payload.sql | `get_dashboard_payload()` RPC: one JSONB return consolidates 13 Dashboard queries into 1. Plain SQL (no SECURITY DEFINER), runs as caller — RLS unchanged. Returns groups, leaderboard, group_ranks (LATERAL get_group_leaderboard), champion_picks, top_scorer_picks, predictions, finished_games (limit 150, ≥ 2026-04-11), team_stats, team_recent_games, day_games, day_date, day_preds. Frontend: Dashboard.jsx replaced 7 useEffects with 1 RPC call. |
+| 104 | 20260521000104_push_subscriptions_cleanup.sql | Push subs cleanup: `fn_cleanup_push_subscriptions()` keeps latest 2 rows per user_id (primary + rotation-transition backup). One-time backfill pruned Dani 7→2. Daily cron `cleanup-push-subs-daily` at 03:00 UTC. Pairs with send-push v8 TTL:60 — together prune stale APNS tokens that Apple rotates silently every 1-2 weeks. |
 
 ## Edge Functions
 
@@ -121,7 +122,7 @@
 | nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
 | sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
 | notify-admin | v9 | ✅ ACTIVE | v9: predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90 |
-| send-push | v7 | ✅ ACTIVE | v7 (2026-05-18): default URL now includes `/2026-World-Cup-Social-Predicting-App/` prefix so notification taps resolve to the right path (was 404 on github.io root). v6: payload includes icon=icon-notif.png (transparent ⚽) + badge=icon-badge.png (white "WC" text) with `?v=3` cache-bust. v1–v5 iterated icons. Web Push via npm:web-push; VAPID private key from vault `Notification_Key`; 410 Gone → delete stale sub |
+| send-push | v8 | ✅ ACTIVE | v8 (2026-05-21): **`urgency:'high'` + `TTL:60` + Promise.allSettled parallel sends**. Fixes iOS PWA silent overnight drops (APNS deprioritizes low-urgency pushes on locked devices) + dead-endpoint pruning (Apple rotates PWA tokens silently every 1-2 weeks without 410 unless TTL is short). Bulk-deletes 410/404 subs at end. v7: default URL `/2026-World-Cup-Social-Predicting-App/` prefix. v6: icon-notif+badge ?v=3. Web Push via npm:web-push; VAPID private key from vault `Notification_Key`. |
 
 ## Key pg_cron Jobs
 
@@ -138,6 +139,7 @@
 | sync-game-{game_id} | KO+120min | Write score + stats (football-api-sync mode=sync) |
 | ai-summary-{date}-{group_id[:8]} | last_KO+150min | Nightly AI summary — one job per qualifying group per date (M73, timing fixed M83) |
 | ai-summary-push-{date} | last_KO+160min | Consolidated AI summary push — one push per user (DISTINCT across all groups) (M101) |
+| cleanup-push-subs-daily | 03:00 UTC daily | Prune push_subscriptions to latest 2 per user — fights APNS silent token rotation (M104) |
 
 ## Auto-Scheduling (M68 — 2026-05-04)
 
