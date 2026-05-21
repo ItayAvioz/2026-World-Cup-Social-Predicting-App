@@ -1,5 +1,5 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 
 if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
   document.documentElement.classList.add('ios')
@@ -12,12 +12,20 @@ import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
 import { useHeartbeat } from './lib/analytics.ts'
-import Dashboard from './pages/Dashboard.jsx'
-import Game      from './pages/Game.jsx'
-import Picks     from './pages/Picks.jsx'
-import Groups    from './pages/Groups.jsx'
-import AiFeed    from './pages/AiFeed.jsx'
-import Trivia    from './pages/Trivia.jsx'
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
+const Game      = lazy(() => import('./pages/Game.jsx'))
+const Picks     = lazy(() => import('./pages/Picks.jsx'))
+const Groups    = lazy(() => import('./pages/Groups.jsx'))
+const AiFeed    = lazy(() => import('./pages/AiFeed.jsx'))
+const Trivia    = lazy(() => import('./pages/Trivia.jsx'))
+
+function RouteFallback() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', color:'var(--muted)' }}>
+      Loading…
+    </div>
+  )
+}
 
 function AuthGuard({ children }) {
   const { session, loading } = useAuth()
@@ -240,15 +248,17 @@ export default function App() {
   return (
     <HashRouter>
       <AppInner />
-      <Routes>
-        <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
-        <Route path="/game/:id"  element={<AuthGuard><Game /></AuthGuard>} />
-        <Route path="/picks"     element={<AuthGuard><Picks /></AuthGuard>} />
-        <Route path="/groups"    element={<AuthGuard><Groups /></AuthGuard>} />
-        <Route path="/ai-feed"   element={<AuthGuard><AiFeed /></AuthGuard>} />
-        <Route path="/trivia"    element={<AuthGuard><Trivia /></AuthGuard>} />
-        <Route path="*"          element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
+          <Route path="/game/:id"  element={<AuthGuard><Game /></AuthGuard>} />
+          <Route path="/picks"     element={<AuthGuard><Picks /></AuthGuard>} />
+          <Route path="/groups"    element={<AuthGuard><Groups /></AuthGuard>} />
+          <Route path="/ai-feed"   element={<AuthGuard><AiFeed /></AuthGuard>} />
+          <Route path="/trivia"    element={<AuthGuard><Trivia /></AuthGuard>} />
+          <Route path="*"          element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Suspense>
     </HashRouter>
   )
 }

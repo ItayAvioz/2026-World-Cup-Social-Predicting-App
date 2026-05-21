@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
 import { TEAMS } from '../lib/teams.js'
@@ -60,6 +61,7 @@ export default function Dashboard() {
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'dashboard') }, [])
   const navigate           = useNavigate()
   const { showToast }      = useToast()
+  const cache              = useDataCache()
   const baseUsername       = user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'Player'
 
   // ── Profile sheet state ───────────────────────────────
@@ -121,50 +123,44 @@ export default function Dashboard() {
     return () => clearInterval(timer)
   }, [nextGames])
 
-  // Load groups
+  // ── Consolidated payload load (one RPC instead of 13 separate queries) ──
   useEffect(() => {
-    supabase.from('groups').select('id, name')
-      .then(({ data, error: e }) => {
-        if (e) { setError(e.message); setLoading(false); return }
-        const g = data ?? []
-        setGroups(g)
-        setLoading(false)
-      })
-  }, [])
+    if (!user?.id) return
+    const cacheKey = `dashboard:${user.id}`
 
-  // Load global leaderboard
-  useEffect(() => {
-    if (loading) return
-    setLbLoading(true)
-    supabase.rpc('get_leaderboard').then(({ data, error: e }) => {
-      if (e) setError(e.message)
-      setLb(data ?? [])
-      setLbLoading(false)
-    })
-  }, [loading])
+    const applyPayload = (payload) => {
+      if (!payload) return
+      const groupsList   = payload.groups          ?? []
+      const leaderboard  = payload.leaderboard     ?? []
+      const groupRanksL  = payload.group_ranks     ?? []
+      const champPicks   = payload.champion_picks  ?? []
+      const tsPicks      = payload.top_scorer_picks?? []
+      const preds        = payload.predictions     ?? []
+      const finGames     = payload.finished_games  ?? []
+      const tStats       = payload.team_stats      ?? []
+      const tRecent      = payload.team_recent_games ?? []
+      const dayGames     = payload.day_games       ?? []
+      const dayDate      = payload.day_date        ?? null
+      const dayPreds     = payload.day_preds       ?? []
 
-  // Load team stats + win streaks
-  useEffect(() => {
-    if (!lb.length) return
-    const champTeams = [...new Set(lb.filter(r => r.champion_team).map(r => r.champion_team))]
-    if (!champTeams.length) return
+      setGroups(groupsList)
+      setLb(leaderboard)
+      setGroupRanks(groupRanksL)
 
-    const orFilter = champTeams.flatMap(t => [`team_home.eq.${t}`, `team_away.eq.${t}`]).join(',')
-    Promise.all([
-      supabase.from('team_tournament_stats').select('*').in('team', champTeams),
-      supabase.from('games')
-        .select('team_home, team_away, score_home, score_away, kick_off_time')
-        .not('score_home', 'is', null)
-        .or(orFilter)
-        .order('kick_off_time', { ascending: false }),
-    ]).then(([{ data: sData }, { data: gData }]) => {
+      const cpMap = {}; champPicks.forEach(r => { cpMap[r.group_id] = r })
+      setChampPickMap(cpMap)
+      const tsMap = {}; tsPicks.forEach(r => { tsMap[r.group_id] = r })
+      setTopScorerMap(tsMap)
+
       const statsMap = {}
-      sData?.forEach(s => { statsMap[s.team] = s })
+      tStats.forEach(s => { statsMap[s.team] = s })
       setTeamStats(statsMap)
 
+      // Streaks per champion team — most recent finished game first, count consecutive wins.
+      const champTeams = [...new Set(leaderboard.filter(r => r.champion_team).map(r => r.champion_team))]
       const streakMap = {}
       champTeams.forEach(team => {
-        const tg = (gData ?? []).filter(g => g.team_home === team || g.team_away === team)
+        const tg = tRecent.filter(g => g.team_home === team || g.team_away === team)
         let streak = 0
         for (const g of tg) {
           const isHome = g.team_home === team
@@ -174,128 +170,82 @@ export default function Dashboard() {
         streakMap[team] = streak
       })
       setStreaks(streakMap)
-    })
-  }, [lb])
 
-  // Load rank in every group
-  useEffect(() => {
-    if (!user || loading) return
-    if (!groups.length) { setGroupRanksLoading(false); return }
-    setGroupRanksLoading(true)
-    Promise.all(
-      groups.map(g =>
-        supabase.rpc('get_group_leaderboard', { p_group_id: g.id }).then(({ data, error }) => {
-          if (error) return { groupId: g.id, groupName: g.name, groupRank: null, globalRank: null, rpcError: error.message }
-          const row = data?.find(r => r.user_id === user.id)
-          return { groupId: g.id, groupName: g.name, groupRank: row?.group_rank ?? null, globalRank: row?.global_rank ?? null }
-        })
-      )
-    ).then(ranks => {
-      setGroupRanks(ranks)
-      setGroupRanksLoading(false)
-    })
-  }, [groups, user, loading])
-
-  // Load user picks + prediction stats
-  useEffect(() => {
-    if (!user) return
-    Promise.all([
-      supabase.from('champion_pick').select('team, group_id, is_auto').eq('user_id', user.id),
-      supabase.from('top_scorer_pick').select('player_name, group_id, is_auto').eq('user_id', user.id),
-      supabase.from('predictions').select('game_id, group_id, pred_home, pred_away, points_earned, is_auto').eq('user_id', user.id),
-      supabase.from('games').select('id, score_home, score_away, kick_off_time').not('score_home', 'is', null).gte('kick_off_time', '2026-04-11').order('kick_off_time', { ascending: true }).order('id', { ascending: false }).limit(150),
-    ]).then(([{ data: cpRows }, { data: tsRows }, { data: preds }, { data: finGames }]) => {
-      const cpMap = {}
-      cpRows?.forEach(r => { cpMap[r.group_id] = r })
-      setChampPickMap(cpMap)
-      const tsMap = {}
-      tsRows?.forEach(r => { tsMap[r.group_id] = r })
-      setTopScorerMap(tsMap)
-      setCompletedGames(finGames?.length ?? 0)
-      if (preds && finGames) {
-        const outcome = (h, a) => h > a ? 'H' : h < a ? 'A' : 'D'
-        const finishedGameIds = new Set(finGames.map(g => g.id))
-        const byGroup = {}
-        preds.forEach(p => {
-          if (!byGroup[p.group_id]) byGroup[p.group_id] = []
-          byGroup[p.group_id].push(p)
-        })
-        const statsMap = {}
-        Object.entries(byGroup).forEach(([gid, gPreds]) => {
-          const finishedPreds = gPreds.filter(p => finishedGameIds.has(p.game_id))
-          const total   = finishedPreds.length
-          const correct = finishedPreds.filter(p => p.points_earned >= 1).length
-          const exact   = finishedPreds.filter(p => p.points_earned === 3).length
-          const predMap = {}
-          gPreds.forEach(p => { predMap[p.game_id] = p })
-          let streak = 0
-          for (const g of finGames) {
-            const p = predMap[g.id]
-            if (!p) continue
-            const isCorrect = outcome(p.pred_home, p.pred_away) === outcome(g.score_home, g.score_away)
-            if (streak === 0 || (isCorrect ? streak > 0 : streak < 0)) {
-              streak += isCorrect ? 1 : -1
-            } else {
-              streak = isCorrect ? 1 : -1
-            }
-          }
-          statsMap[gid] = {
-            predictPct: total > 0 ? Math.round((correct / total) * 100) : 0,
-            exactPct:   total > 0 ? Math.round((exact / total) * 100) : 0,
-            streak,
-          }
-        })
-        setPredStats(statsMap)
-      }
-    })
-  }, [user])
-
-  // Load game day (today if has unfinished games, else next day)
-  useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10)
-    supabase.from('games')
-      .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, went_to_extra_time, et_score_home, et_score_away, went_to_penalties, penalty_score_home, penalty_score_away')
-      .gte('kick_off_time', todayStr + 'T00:00:00Z')
-      .order('kick_off_time')
-      .limit(50)
-      .then(({ data }) => {
-        if (!data?.length) return
-        const todayGames = data.filter(g => g.kick_off_time.slice(0, 10) === todayStr)
-        const allDone    = todayGames.length > 0 && todayGames.every(g => g.score_home !== null)
-
-        let displayGames, displayDate
-        if (!allDone && todayGames.length > 0) {
-          displayGames = todayGames
-          displayDate  = todayStr
-        } else {
-          const future = data.filter(g => g.kick_off_time.slice(0, 10) > todayStr)
-          if (future.length) {
-            displayDate  = future[0].kick_off_time.slice(0, 10)
-            displayGames = future.filter(g => g.kick_off_time.slice(0, 10) === displayDate)
+      // My Stats per group — based on finished games + my predictions
+      setCompletedGames(finGames.length)
+      const outcome = (h, a) => h > a ? 'H' : h < a ? 'A' : 'D'
+      const finishedGameIds = new Set(finGames.map(g => g.id))
+      const byGroup = {}
+      preds.forEach(p => {
+        if (!byGroup[p.group_id]) byGroup[p.group_id] = []
+        byGroup[p.group_id].push(p)
+      })
+      const pStatsMap = {}
+      Object.entries(byGroup).forEach(([gid, gPreds]) => {
+        const finishedPreds = gPreds.filter(p => finishedGameIds.has(p.game_id))
+        const total   = finishedPreds.length
+        const correct = finishedPreds.filter(p => p.points_earned >= 1).length
+        const exact   = finishedPreds.filter(p => p.points_earned === 3).length
+        const predMap = {}
+        gPreds.forEach(p => { predMap[p.game_id] = p })
+        let streak = 0
+        for (const g of finGames) {
+          const p = predMap[g.id]
+          if (!p) continue
+          const isCorrect = outcome(p.pred_home, p.pred_away) === outcome(g.score_home, g.score_away)
+          if (streak === 0 || (isCorrect ? streak > 0 : streak < 0)) {
+            streak += isCorrect ? 1 : -1
+          } else {
+            streak = isCorrect ? 1 : -1
           }
         }
-        if (displayGames?.length) { setNextGames(displayGames); setNextDate(displayDate) }
+        pStatsMap[gid] = {
+          predictPct: total > 0 ? Math.round((correct / total) * 100) : 0,
+          exactPct:   total > 0 ? Math.round((exact / total) * 100) : 0,
+          streak,
+        }
       })
-  }, [])
+      setPredStats(pStatsMap)
 
-  // Load my predictions for game day — all groups, keyed by game_id → array of {groupId, groupName, pred_home, pred_away}
-  useEffect(() => {
-    if (!nextGames.length || !user || !groups.length) return
-    supabase.from('predictions')
-      .select('game_id, group_id, pred_home, pred_away')
-      .eq('user_id', user.id)
-      .in('game_id', nextGames.map(g => g.id))
-      .then(({ data }) => {
-        const map = {}
-        data?.forEach(p => {
-          const grp = groups.find(g => g.id === p.group_id)
-          if (!grp) return
-          if (!map[p.game_id]) map[p.game_id] = []
-          map[p.game_id].push({ groupId: p.group_id, groupName: grp.name, pred_home: p.pred_home, pred_away: p.pred_away })
-        })
-        setMyPreds(map)
+      // Game day + my preds for those games
+      setNextGames(dayGames)
+      setNextDate(dayDate ? String(dayDate).slice(0, 10) : null)
+      const groupById = Object.fromEntries(groupsList.map(g => [g.id, g.name]))
+      const myMap = {}
+      dayPreds.forEach(p => {
+        const groupName = groupById[p.group_id]
+        if (!groupName) return
+        if (!myMap[p.game_id]) myMap[p.game_id] = []
+        myMap[p.game_id].push({ groupId: p.group_id, groupName, pred_home: p.pred_home, pred_away: p.pred_away })
       })
-  }, [nextGames, user, groups])
+      setMyPreds(myMap)
+
+      setLoading(false)
+      setLbLoading(false)
+      setGroupRanksLoading(false)
+    }
+
+    // Cache-first
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      applyPayload(cached)
+      return
+    }
+
+    setLbLoading(true)
+    setGroupRanksLoading(true)
+    supabase.rpc('get_dashboard_payload').then(({ data, error: e }) => {
+      if (e) {
+        setError(e.message)
+        setLoading(false)
+        setLbLoading(false)
+        setGroupRanksLoading(false)
+        return
+      }
+      cache.set(cacheKey, data)
+      applyPayload(data)
+    })
+  }, [user?.id, cache])
 
   const isLocked = new Date() >= KICKOFF_TIME
 
@@ -339,6 +289,7 @@ export default function Dashboard() {
     }
     await supabase.auth.updateUser({ data: { username: val } })
     setDisplayUsername(val)
+    if (user?.id) cache.invalidate(`dashboard:${user.id}`)
     setRenameLoading(false)
     closeSheet()
     showToast('Username updated!')

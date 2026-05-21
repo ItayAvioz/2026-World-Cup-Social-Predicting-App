@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { TEAMS } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
@@ -48,6 +49,7 @@ export default function Groups() {
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'groups') }, [])
   useEffect(() => { if (location.state?.openCreate) setCreateOpen(true) }, [])
   const { showToast }  = useToast()
+  const cache          = useDataCache()
   const navigate       = useNavigate()
   const location       = useLocation()
   const [searchParams] = useSearchParams()
@@ -85,28 +87,47 @@ export default function Groups() {
   const [globalPredStats, setGlobalPredStats] = useState({})  // { [game_id]: stats }
 
   // ── Load groups + members ──────────────────────────────────────────────
-  const loadGroups = useCallback(async () => {
+  const GROUPS_CACHE_KEY = user?.id ? `groups-list:${user.id}` : null
+  const applyGroupsList = useCallback((list) => {
+    setGroups(list)
+    setSelectedGroupId(prev => {
+      const stored = sessionStorage.getItem('groups_tab')
+      if (stored && list.some(g => g.id === stored)) return stored
+      return prev && list.some(g => g.id === prev) ? prev : (list[0]?.id ?? null)
+    })
+    setLoading(false)
+  }, [])
+
+  const loadGroups = useCallback(async ({ skipCache = false } = {}) => {
     setError(null)
+    if (!skipCache && GROUPS_CACHE_KEY) {
+      const cached = cache.get(GROUPS_CACHE_KEY)
+      if (cached) { applyGroupsList(cached); return }
+    }
     const { data, error: e } = await supabase
       .from('groups')
       .select('id, name, invite_code, created_by, group_members(user_id, is_inactive, profiles(username))')
       .order('created_at')
     if (e) { setError(e.message); setLoading(false); return }
     const list = data ?? []
-    setGroups(list)
-    setSelectedGroupId(prev => {
-      const stored = sessionStorage.getItem('groups_tab')
-      if (stored && list.some(g => g.id === stored)) return stored
-      return list[0]?.id ?? null
-    })
-    setLoading(false)
-  }, [])
+    if (GROUPS_CACHE_KEY) cache.set(GROUPS_CACHE_KEY, list)
+    applyGroupsList(list)
+  }, [cache, GROUPS_CACHE_KEY, applyGroupsList])
 
   useEffect(() => { loadGroups() }, [loadGroups])
 
   // ── Per-group leaderboards ─────────────────────────────────────────────
   useEffect(() => {
     if (!groups.length) return
+    const ids = groups.map(g => g.id).sort().join(',')
+    const lbKey = `group-lbs:${ids}`
+    const cached = cache.get(lbKey)
+    if (cached) {
+      setLeaderboards(cached.map)
+      setLbErrors(cached.errMap)
+      setLbLoading(false)
+      return
+    }
     setLbLoading(true)
     Promise.all(
       groups.map(g =>
@@ -120,11 +141,12 @@ export default function Groups() {
         map[r.groupId] = r.rows
         if (r.err) errMap[r.groupId] = r.err
       })
+      cache.set(lbKey, { map, errMap })
       setLeaderboards(map)
       setLbErrors(errMap)
       setLbLoading(false)
     })
-  }, [groups])
+  }, [groups, cache])
 
   // ── Focus games (next upcoming or in-progress) ──────────────────────────
   // Logic: show unscored games only (score_home IS NULL).
@@ -224,7 +246,8 @@ export default function Groups() {
 
       if (!error) {
         showToast('You\'ve joined the group!', 'success')
-        loadGroups()
+        if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+        loadGroups({ skipCache: true })
       } else if (error.message === 'already_member') {
         showToast('You\'re already in this group', 'success')
       } else {
@@ -256,7 +279,8 @@ export default function Groups() {
     showToast('Group created!', 'success')
     setCreateOpen(false)
     setCreateName('')
-    loadGroups()
+    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    loadGroups({ skipCache: true })
   }
 
   // ── Join group ─────────────────────────────────────────────────────────
@@ -282,7 +306,8 @@ export default function Groups() {
     setJoinOpen(false)
     setJoinCode('')
     setJoinError('')
-    loadGroups()
+    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    loadGroups({ skipCache: true })
   }
 
   // ── Rename group ───────────────────────────────────────────────────────
@@ -297,7 +322,8 @@ export default function Groups() {
     showToast('Group renamed!', 'success')
     setRenameOpen(false)
     setRenameGroup(null)
-    loadGroups()
+    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    loadGroups({ skipCache: true })
   }
 
   // ── Invite: WhatsApp on mobile, copy link on desktop ──────────────────

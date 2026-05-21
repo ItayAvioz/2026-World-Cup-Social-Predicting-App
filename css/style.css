@@ -1416,3 +1416,28 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .htp-footer { padding-top:1.2rem; display:flex; flex-direction:column; gap:.5rem; }
 .htp-footer p { font-size:.84rem; color:var(--muted); line-height:1.65; }
 .htp-footer-cta { font-family:'Oswald',sans-serif; font-size:1.1rem; font-weight:700; color:var(--accent); letter-spacing:.5px; margin-top:.4rem; }
+
+/* ── Skeleton placeholders ─────────────────────────────────────────── */
+@keyframes wc-skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, #1a1a1a 0%, #232323 50%, #1a1a1a 100%);
+  background-size: 800px 100%;
+  border-radius: 6px;
+  animation: wc-skeleton-shimmer 1.4s linear infinite;
+}
+.skeleton-row { height: 1.4rem; margin: .55rem 0; }
+.skeleton-row.short { width: 55%; }
+.skeleton-row.medium { width: 75%; }
+.skeleton-card {
+  height: 5.5rem;
+  margin: .6rem 0;
+  border-radius: 12px;
+}
+.skeleton-stack { padding: .4rem 0; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
