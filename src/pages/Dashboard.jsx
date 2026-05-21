@@ -7,7 +7,7 @@ import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
 import { TEAMS } from '../lib/teams.js'
 import Layout from '../components/Layout.jsx'
-import TrophyImg from '../assets/Trophy.jfif'
+import TrophyImg from '../assets/Trophy.webp'
 import { getVenue } from '../lib/venues.js'
 
 const KICKOFF_TIME     = new Date('2026-06-11T19:00:00Z')

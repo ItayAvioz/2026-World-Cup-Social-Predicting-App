@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
+import { useDataCache } from '../context/DataCacheContext.jsx'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../lib/supabase.js'
 import { TEAMS } from '../lib/teams.js'
@@ -37,6 +38,7 @@ function fmtKickoff(dt) {
 export default function Picks() {
   const { session } = useAuth()
   const { showToast } = useToast()
+  const cache = useDataCache()
   const navigate = useNavigate()
   const user = session?.user
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'picks') }, [user?.id])
@@ -222,6 +224,7 @@ export default function Picks() {
       else showToast('Failed to save — try again', 'error')
     } else {
       setSavedChampion(selChampion)
+      cache.invalidate(`dashboard:${user.id}`)
       showToast('Champion pick saved!', 'success')
       logEvent(supabase, user.id, 'pick_submit', 'picks')
     }
@@ -241,6 +244,7 @@ export default function Picks() {
       else showToast('Failed to save — try again', 'error')
     } else {
       setSavedPlayer({ player_name: selPlayer.name })
+      cache.invalidate(`dashboard:${user.id}`)
       showToast('Top scorer pick saved!', 'success')
       logEvent(supabase, user.id, 'pick_submit', 'picks')
     }
@@ -345,6 +349,7 @@ export default function Picks() {
       else showToast('Failed to save', 'error')
     } else {
       setMyPreds(p => ({ ...p, [gameId]: { ...(p[gameId] ?? {}), pred_home: h, pred_away: a, is_auto: false } }))
+      cache.invalidate(`dashboard:${user.id}`)
       showToast('Saved!', 'success')
     }
   }

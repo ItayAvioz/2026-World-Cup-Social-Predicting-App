@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
+import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { TEAMS } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
@@ -55,6 +56,7 @@ export default function Game() {
   const urlGroupId = searchParams.get('group')
   const { user } = useAuth()
   const { showToast } = useToast()
+  const cache = useDataCache()
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'game') }, [])
 
   const [game,            setGame]            = useState(null)
@@ -241,6 +243,7 @@ export default function Game() {
     logEvent(supabase, user.id, 'prediction_submit', 'game')
     if (groupId === resolvedGroupId) setMyPred(data)
     setAllGroupPreds(prev => prev.map(gp => gp.groupId === groupId ? { ...gp, pred: data } : gp))
+    cache.invalidate(`dashboard:${user.id}`)
     showToast('Prediction saved!')
   }
 

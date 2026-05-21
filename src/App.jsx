@@ -12,12 +12,33 @@ import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
 import { useHeartbeat } from './lib/analytics.ts'
-const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
-const Game      = lazy(() => import('./pages/Game.jsx'))
-const Picks     = lazy(() => import('./pages/Picks.jsx'))
-const Groups    = lazy(() => import('./pages/Groups.jsx'))
-const AiFeed    = lazy(() => import('./pages/AiFeed.jsx'))
-const Trivia    = lazy(() => import('./pages/Trivia.jsx'))
+// Lazy route loaders extracted so we can also prefetch them on idle.
+const loadDashboard = () => import('./pages/Dashboard.jsx')
+const loadGame      = () => import('./pages/Game.jsx')
+const loadPicks     = () => import('./pages/Picks.jsx')
+const loadGroups    = () => import('./pages/Groups.jsx')
+const loadAiFeed    = () => import('./pages/AiFeed.jsx')
+const loadTrivia    = () => import('./pages/Trivia.jsx')
+const Dashboard = lazy(loadDashboard)
+const Game      = lazy(loadGame)
+const Picks     = lazy(loadPicks)
+const Groups    = lazy(loadGroups)
+const AiFeed    = lazy(loadAiFeed)
+const Trivia    = lazy(loadTrivia)
+
+// Idle prefetch: download remaining route chunks in background after first paint
+// so navigation to Game/Picks/Groups/AiFeed/Trivia is instant. Runs once.
+let _routesPrefetched = false
+function prefetchRoutes() {
+  if (_routesPrefetched) return
+  _routesPrefetched = true
+  const prefetch = () => { loadGame(); loadPicks(); loadGroups(); loadAiFeed(); loadTrivia() }
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(prefetch, { timeout: 4000 })
+  } else {
+    setTimeout(prefetch, 2000)
+  }
+}
 
 function RouteFallback() {
   return (
@@ -221,6 +242,7 @@ function AppInner() {
       showToast(`Welcome to the app, ${name}!`)
     }
     if (notifSupported && Notification.permission === 'granted') subscribeUserToPush(user.id)
+    prefetchRoutes()
   }, [user?.id])
 
   useEffect(() => {

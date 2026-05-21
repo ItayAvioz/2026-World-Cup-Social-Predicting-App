@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import Layout from '../components/Layout.jsx'
 
@@ -132,6 +133,7 @@ function NextQuestionCard({ availableUntil }) {
 
 export default function Trivia() {
   const { user } = useAuth()
+  const cache    = useDataCache()
 
   const [pageState,  setPageState]  = useState('loading')
   const [question,   setQuestion]   = useState(null)
@@ -251,6 +253,7 @@ export default function Trivia() {
       correct:   prev.correct + (data.is_correct ? 1 : 0),
       total:     prev.total + 1,
     }))
+    cache.invalidate(`dashboard:${user.id}`)
     logEvent(supabase, user.id, 'trivia_answer', data.is_correct ? 'correct' : 'wrong')
   }
 
