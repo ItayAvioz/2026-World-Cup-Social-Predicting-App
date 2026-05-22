@@ -12,14 +12,15 @@ import { useAuth } from './context/AuthContext.jsx'
 import { useToast } from './context/ToastContext.jsx'
 import { supabase } from './lib/supabase.js'
 import { useHeartbeat } from './lib/analytics.ts'
-// Lazy route loaders extracted so we can also prefetch them on idle.
-const loadDashboard = () => import('./pages/Dashboard.jsx')
+// Dashboard is eager (post-login landing page) so it renders immediately and its
+// flag <img> tags start downloading early — avoids the iOS first-paint flag flicker
+// that React.lazy introduced. The other 5 routes stay lazy + prefetched on idle.
+import Dashboard from './pages/Dashboard.jsx'
 const loadGame      = () => import('./pages/Game.jsx')
 const loadPicks     = () => import('./pages/Picks.jsx')
 const loadGroups    = () => import('./pages/Groups.jsx')
 const loadAiFeed    = () => import('./pages/AiFeed.jsx')
 const loadTrivia    = () => import('./pages/Trivia.jsx')
-const Dashboard = lazy(loadDashboard)
 const Game      = lazy(loadGame)
 const Picks     = lazy(loadPicks)
 const Groups    = lazy(loadGroups)
