@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (94 local + 3 MCP-only — all deployed)
+## Migrations (95 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -113,6 +113,7 @@
 | 102 | 20260520000102_trivia_missed_as_wrong.sql | Trivia: missed questions count as wrong. fn_auto_miss_trivia(question_id) inserts trivia_answers(selected_option='miss', is_correct=false, points_earned=0) for every user registered before available_from. fn_schedule_trivia_miss schedules `trivia-miss-{id[:8]}` cron at available_until. trg_schedule_trivia_miss AFTER INSERT auto-schedules for new questions. Backfill: 42 currently-future questions scheduled (2 test + 40 tournament Jun 11–Jul 20). |
 | 103 | 103_dashboard_payload.sql | `get_dashboard_payload()` RPC: one JSONB return consolidates 13 Dashboard queries into 1. Plain SQL (no SECURITY DEFINER), runs as caller — RLS unchanged. Returns groups, leaderboard, group_ranks (LATERAL get_group_leaderboard), champion_picks, top_scorer_picks, predictions, finished_games (limit 150, ≥ 2026-04-11), team_stats, team_recent_games, day_games, day_date, day_preds. Frontend: Dashboard.jsx replaced 7 useEffects with 1 RPC call. |
 | 104 | 20260521000104_push_subscriptions_cleanup.sql | Push subs cleanup: `fn_cleanup_push_subscriptions()` keeps latest 2 rows per user_id (primary + rotation-transition backup). One-time backfill pruned Dani 7→2. Daily cron `cleanup-push-subs-daily` at 03:00 UTC. Pairs with send-push v8 TTL:60 — together prune stale APNS tokens that Apple rotates silently every 1-2 weeks. |
+| 105 | 20260522000105_prediction_edit_log.sql | `prediction_edit_log` table (append-only, RLS on, no anon/auth SELECT) + `trg_log_prediction_edit` AFTER INSERT/UPDATE on predictions → logs every MANUAL prediction value change (is_initial flag; ignores score-sync updated_at bumps via IS DISTINCT FROM check). `fn_daily_admin_digest` prediction block repointed at the log: pred_total=new submissions, pred_edits=every edit action (same-day + multiple-per-prediction now counted; old cross-day heuristic only counted ≤1 cross-day edit). Champion/top-scorer picks still use old heuristic. notify-admin EF unchanged (same JSON keys). |
 
 ## Edge Functions
 
