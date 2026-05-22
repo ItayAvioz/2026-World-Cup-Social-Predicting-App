@@ -84,8 +84,12 @@ export default function Picks() {
   const [predInputs, setPredInputs]   = useState({}) // { [gameId]: { home, away } }
   const [savingPred, setSavingPred]   = useState({}) // { [gameId]: bool }
   const [predsLoading, setPredsLoading] = useState(false)
-  const [predSubTab, setPredSubTab]     = useState('upcoming') // 'upcoming' | 'history'
-  const [historySort, setHistorySort]   = useState({ by: 'date', dir: 'desc' })
+  const [predSubTab, setPredSubTab]     = useState(() => sessionStorage.getItem('picks_predsubtab') || 'upcoming') // 'upcoming' | 'history'
+  const [historySort, setHistorySort]   = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('picks_historysort')) || { by: 'date', dir: 'desc' } }
+    catch { return { by: 'date', dir: 'desc' } }
+  })
+  const switchPredSubTab = tab => { sessionStorage.setItem('picks_predsubtab', tab); setPredSubTab(tab) }
 
   // ── Tournament results state ───────────────────────────────────
   const [tournamentChampion, setTournamentChampion] = useState(undefined) // undefined=loading, null=not yet, string=winner
@@ -439,7 +443,11 @@ export default function Picks() {
   }
 
   function toggleHistorySort(by) {
-    setHistorySort(s => s.by !== by ? { by, dir: 'desc' } : { by, dir: s.dir === 'desc' ? 'asc' : 'desc' })
+    setHistorySort(s => {
+      const next = s.by !== by ? { by, dir: 'desc' } : { by, dir: s.dir === 'desc' ? 'asc' : 'desc' }
+      sessionStorage.setItem('picks_historysort', JSON.stringify(next))
+      return next
+    })
   }
 
   // Count how many future predictable games have been predicted
@@ -808,7 +816,7 @@ export default function Picks() {
                   role="tab"
                   aria-selected={predSubTab === 'upcoming'}
                   className={`pd-subtab-btn${predSubTab === 'upcoming' ? ' pd-subtab-btn--active' : ''}`}
-                  onClick={() => setPredSubTab('upcoming')}
+                  onClick={() => switchPredSubTab('upcoming')}
                 >
                   Upcoming {upcomingCount > 0 && <span className="pd-subtab-count">{upcomingCount}</span>}
                 </button>
@@ -816,7 +824,7 @@ export default function Picks() {
                   role="tab"
                   aria-selected={predSubTab === 'history'}
                   className={`pd-subtab-btn${predSubTab === 'history' ? ' pd-subtab-btn--active' : ''}`}
-                  onClick={() => setPredSubTab('history')}
+                  onClick={() => switchPredSubTab('history')}
                 >
                   History {historyGames.length > 0 && <span className="pd-subtab-count">{historyGames.length}</span>}
                 </button>
