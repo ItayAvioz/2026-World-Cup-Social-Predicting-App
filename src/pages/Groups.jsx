@@ -246,7 +246,7 @@ export default function Groups() {
 
       if (!error) {
         showToast('You\'ve joined the group!', 'success')
-        if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+        cache.invalidate()  // clear all — group membership/name also shows in dashboard My Stats cache
         loadGroups({ skipCache: true })
       } else if (error.message === 'already_member') {
         showToast('You\'re already in this group', 'success')
@@ -279,7 +279,7 @@ export default function Groups() {
     showToast('Group created!', 'success')
     setCreateOpen(false)
     setCreateName('')
-    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    cache.invalidate()  // clear all — group membership/name also shows in dashboard My Stats cache
     loadGroups({ skipCache: true })
   }
 
@@ -306,7 +306,7 @@ export default function Groups() {
     setJoinOpen(false)
     setJoinCode('')
     setJoinError('')
-    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    cache.invalidate()  // clear all — group membership/name also shows in dashboard My Stats cache
     loadGroups({ skipCache: true })
   }
 
@@ -322,7 +322,7 @@ export default function Groups() {
     showToast('Group renamed!', 'success')
     setRenameOpen(false)
     setRenameGroup(null)
-    if (GROUPS_CACHE_KEY) cache.invalidate(GROUPS_CACHE_KEY)
+    cache.invalidate()  // clear all — group membership/name also shows in dashboard My Stats cache
     loadGroups({ skipCache: true })
   }
 

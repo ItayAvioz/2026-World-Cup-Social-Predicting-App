@@ -289,7 +289,7 @@ export default function Dashboard() {
     }
     await supabase.auth.updateUser({ data: { username: val } })
     setDisplayUsername(val)
-    if (user?.id) cache.invalidate(`dashboard:${user.id}`)
+    cache.invalidate()  // clear all — username appears in dashboard + groups-list + group leaderboard caches
     setRenameLoading(false)
     closeSheet()
     showToast('Username updated!')

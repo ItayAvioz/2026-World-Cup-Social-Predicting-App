@@ -253,7 +253,7 @@ export default function Trivia() {
       correct:   prev.correct + (data.is_correct ? 1 : 0),
       total:     prev.total + 1,
     }))
-    cache.invalidate(`dashboard:${user.id}`)
+    cache.invalidate()  // clear all — after the final, trivia points enter dashboard + group leaderboards (M81 guard)
     logEvent(supabase, user.id, 'trivia_answer', data.is_correct ? 'correct' : 'wrong')
   }
 
