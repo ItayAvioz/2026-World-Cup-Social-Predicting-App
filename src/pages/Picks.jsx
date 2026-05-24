@@ -192,9 +192,10 @@ export default function Picks() {
   async function loadTournamentResults() {
     const [{ data: finalGame }, { data: statsRows }] = await Promise.all([
       supabase.from('games').select('knockout_winner').eq('phase', 'final').maybeSingle(),
-      // No row limit: the tie-aware cutoff below must see ALL players level with the
-      // 5th-place goal count, otherwise a deep tie could be truncated mid-tie.
-      supabase.from('player_tournament_stats').select('player_name, team, total_goals').order('total_goals', { ascending: false }),
+      // Only scorers (filter server-side so we never hit PostgREST's ~1000-row
+      // default cap), and no .limit() so the tie-aware cutoff below sees ALL
+      // players level with the 5th-place goal count — a deep tie is never split.
+      supabase.from('player_tournament_stats').select('player_name, team, total_goals').gt('total_goals', 0).order('total_goals', { ascending: false }),
     ])
     setTournamentChampion(finalGame?.knockout_winner ?? null)
     const scored = (statsRows ?? []).filter(r => r.total_goals > 0)
