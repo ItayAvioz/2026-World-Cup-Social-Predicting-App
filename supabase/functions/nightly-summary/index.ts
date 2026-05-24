@@ -214,8 +214,8 @@ async function callJudge(
       console.error(`[judge] error attempt ${attempt + 1}:`, (err as Error)?.message)
       if (attempt === 1) {
         return {
-          winnerAgent:      1 as 1 | 2 | 3 | 4 | 5,
-          reasoning:        'Judge failed — defaulted to agent 1',
+          winnerAgent:      4 as 1 | 2 | 3 | 4 | 5,
+          reasoning:        'Judge failed — defaulted to agent 4 (baseline)',
           scores:           [1,2,3,4,5].map(a => ({ agent: a, accuracy: 0, humor: 0, compliance: 0, structure: 0, total: 0 })),
           promptTokens:     0,
           completionTokens: 0,
@@ -223,7 +223,7 @@ async function callJudge(
       }
     }
   }
-  return { winnerAgent: 1 as 1 | 2 | 3 | 4 | 5, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
+  return { winnerAgent: 4 as 1 | 2 | 3 | 4 | 5, reasoning: 'Judge failed', scores: [], promptTokens: 0, completionTokens: 0 }
 }
 
 // ─── Payload builder (v17) ────────────────────────────────────────────────────
@@ -984,8 +984,21 @@ serve(async (req) => {
       processed++
 
     } catch (err: unknown) {
-      console.error(`[group] unexpected error for ${group.name}:`, (err as Error)?.message)
-      skipped++; errors.push(`${group.name}: ${(err as Error)?.message ?? 'unknown error'}`)
+      const emsg = (err as Error)?.message ?? 'unknown error'
+      console.error(`[group] unexpected error for ${group.name}:`, emsg)
+      skipped++; errors.push(`${group.name}: ${emsg}`)
+      // A hard group failure is otherwise silent (cron discards the response). Log to ef_errors →
+      // admin email + daily digest → manual re-run. (Skipped in test mode to avoid spurious alerts.)
+      if (!testMode) {
+        try {
+          await supabase.from('ef_errors').insert({
+            ef_name:    'nightly-summary',
+            error_type: 'group_failed',
+            error_msg:  emsg,
+            context:    { group_id: group.id, group_name: group.name, date }
+          })
+        } catch { /* best-effort */ }
+      }
     }
   }
 

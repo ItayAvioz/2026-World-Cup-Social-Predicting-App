@@ -231,3 +231,93 @@ Reflects the per-EF review decisions (the 📌 notes above). **Supersedes the Pa
 
 **Production one-time manual setup:** #1 (pull + insert all games) · #8 (pull all players).
 **Open code fixes to decide:** #2, #3, #4, #5, #19, #25. **Optional:** #6, #9, #18, #24. **Verify:** #11.
+
+---
+
+## FINAL IMPLEMENTATION FIX PLAN (locked 2026-05-24)
+
+**Scope rule (applies to every item below): change ONLY the lines the fix requires. No refactor, no
+reformatting, no behaviour change to any other mode, branch, prompt, or query.** Each change is verified by a
+before/after diff that must contain *only* the intended edit, then the deployed artifact is re-pulled and
+confirmed `== local`.
+
+**Workflow per item:** (1) capture *before* — EF: deployed source; DB fn: `pg_get_functiondef`. (2) apply the
+single targeted edit. (3) diff before/after → confirm 100% only the decided change. (4) run the item's
+verify checks. (5) deploy. (6) re-pull deployed → confirm `== local`. Implement ALL items, diff-verify each,
+THEN deploy as a set.
+
+| # | Area | Migration | EF change (exact) | Must stay IDENTICAL (double-check) | Verify after |
+|---|---|---|---|---|---|
+| #3 | football-api-sync `sync` | — (none) | In `handleSync`, before the final `:689` generic +5min retry, add a terminal-status branch: if `status` ∈ `PST/SUSP/ABD/CANC/AWD/WO/INT` → `fn_unschedule_game_sync(game_id)` + `reportEfError('crash'…terminal status)` → return. Optional: hard-stop if `now() > kick_off + 6h`. | All score-write logic (FT/AET/PEN, ET/pen flags, `knockout_winner`, 3× retry), `writeStats`, ET/penalty in-progress branches, +5min/+40min/+10min ladders, 90-min-only rule. | Normal FT game still writes score+stats+unschedules; ET/pen ladder unchanged; a `PST` fixture → unschedules + email, no infinite loop. |
+| #2 | football-api-sync `verify` + DB helper | **M107** — `fn_reschedule_game(p_game_id)`: re-runs per-game `auto-predict-{id}` + `ko-notif-{id}` scheduling (verify existing fn signatures: `fn_schedule_ko_notification`, per-game auto-predict path). | In `handleVerify`, where the >5min KO change is already detected & `fn_schedule_game_sync` is re-run, ALSO call `fn_reschedule_game(game_id)`. | The KO-change detection threshold (>5min), `kick_off_time` UPDATE, and `fn_schedule_game_sync` re-run. No change when KO moves ≤5min. | Simulate KO move >5min → `auto-predict-{id}` + `ko-notif-{id}` crons land on the NEW time; ≤5min move → unchanged. |
+| #5 | football-api-sync (local file only) | — | Copy deployed v34's `probe_date` + `probe_ns` handlers + their `switch` cases into local `index.ts`. **No deploy.** | Every other handler byte-identical. After paste, local must equal deployed v34 exactly (no version bump). | `git diff` shows only the 2 added handlers + 2 switch cases; deployed v34 unchanged (no redeploy). |
+| #19 | send-push | — (none) | After `Promise.allSettled`, if any non-410/404 failure OR top-level catch fires → `insert into ef_errors('push-send'…)`. Logging only. | Send loop, `{TTL:60, urgency:'high'}`, parallel `allSettled`, 410/404 bulk-delete pruning. | Healthy send → no `ef_errors`; forced bad-VAPID/batch-throw → one `ef_errors` row → real-time email + digest. |
+| #25 | crons/triggers | **M108** — rewrite `fn_schedule_ai_summaries` + `fn_schedule_af_odds_sync` auth header to inline `(SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name='app_service_role_key')` (the `fn_schedule_game_sync` pattern). | **CRITICAL — leave untouched:** the 150-min delay, **jsonb body (NO `::text` cast)**, per-group loop, jobname format, `net.http_post` URL, last_KO+160min push job. Only the key-injection line changes. | `cron.job.command` must show `SELECT decrypted_secret…` NOT a JWT. M56/M74 regression guard. | Inspect a scheduled `cron.job.command` → no plaintext key. Fire ONE per-group job manually → confirm an `ai_summaries` row generates with real roast text (not the fallback) → confirms scheduling + auth + body all still work. |
+| Trivia | crons/triggers | **M109** — wrap `fn_notify_trivia()` body in `IF EXISTS (SELECT 1 FROM trivia_questions WHERE available_from <= now() AND available_until > now()) THEN <existing net.http_post> END IF;`. | The `net.http_post` URL, title, body text, `trivia-push-daily` cron schedule (`0 19 * * *`). | With an open question → `SELECT fn_notify_trivia()` pushes; with none open → no push. Delete any temp test question after. |
+| AI-fail | nightly-summary | — (none) | **Two edits:** (1) group `catch` (~line 988) add `insert into ef_errors('group_failed', {group, error})` — logging only. (2) **judge-fail fallback `winnerAgent: 1` → `4`** at the judge catch returns (`index.ts:217` and `:226`) so a failed judge ships agent 4 = `baseline` (v10-baseline). Leave init `:862` as-is (overwritten when judge runs). | All 5 agent prompts/temps/seeds, the judge scoring/weights/DQ logic, candidate ordering (slots 1–5), `failed_summaries` save path, single-group vs loop modes, `winner_score`/`version_tag` writes. | Force a group exception → one `ef_errors` row → real-time email. Force judge fail → summary ships using agent 4 (v10-baseline) content, `winner_score=0`. Normal night → no `ef_errors`, judge picks normally, summary text unchanged. |
+
+### #3 — postponed/abandoned games: scope & limits (note)
+
+**What #3 does:** ONLY stops the endless +5min retry loop + sends a mail. It is a **safety valve, not a fix** for
+the postponed-game experience. Its real value: **the loop drains the SHARED football-API quota (~288 calls/day per
+stuck game) → can hit the rate limit and silently break score sync for REAL games.** #3 prevents that cascade + alerts you.
+
+**Auto vs manual (decided 2026-05-24):**
+- **Auto:** the `verify` job at **KO−30min** compares only the API's **kick-off time** vs DB. If the time/date
+  **changed >5min** by then → it updates `kick_off_time` + reschedules sync (and, with #2, auto-predict + ko-notif).
+  **A cleanly-rescheduled postponement (new time known in time) self-heals.**
+- **Manual:** if the API shows a "won't-finish" **status** (`PST/SUSP/ABD/CANC/AWD/WO/INT`) with **no time change**,
+  `verify` won't catch it → at KO+120 `sync` hits the #3 branch → **stops + emails.** Admin then: pull the updated
+  fixture, set the new KO time / reschedule sync, and (manual decision) **reopen predictions** for the real date.
+
+**What users see for a stuck game until handled (frontend NOT changed — accepted as-is):**
+- **Score:** stays empty (NULL) — no score shown, **no points move, leaderboard/groups unaffected.**
+- **Dashboard:** the time-based **LIVE badge shows wrongly for ~120min** after the original KO, then it sits as a
+  past game with a blank score.
+- **Predictions:** **locked** at the original KO; auto-predict already filled random picks — won't reopen unless the
+  admin manually reschedules/clears them.
+
+**Not built (rare event, manual-only):** fixing the LIVE badge, auto-reopening predictions, or any postponed-game
+UX. WC postponements are rare; handle manually if it ever happens.
+
+### AI-summary failure — simple summary (verified 2026-05-24)
+
+nightly-summary can fail 3 ways:
+1. **Judge fails** → summary still posts using a default agent, all scores 0. Harmless, ships.
+   **CHANGE (decided 2026-05-24): default to agent 4 = `baseline` slot (v10-baseline) instead of agent 1 (`main`).**
+   Rationale: when the judge can't vet quality, ship the conservative proven baseline prompt, not the more
+   experimental main one. (Agents: 1=main/v11-main-2, 2=v12-picks-2, 3=v13-unique-2, **4=baseline/v10-baseline**, 5=v10B.)
+2. **Save/upsert fails** → row goes to `failed_summaries` → `trg_notify_failed_summary` (M61) → **email**. Already covered.
+3. **Whole group crashes** (e.g. OpenAI down, both agent retries throw) → caught at the group loop
+   (`index.ts:986–988`: `console.error` + `skipped++` + `errors.push`) → **NO `ef_errors`, NO
+   `failed_summaries`, response discarded by the cron → SILENT, no email, no summary that night.** ← the only real gap.
+
+**Fix (nightly-summary EF, Low risk):** add **1 line** in the group `catch` (~line 988) —
+`insert into ef_errors('group_failed', {group, error})` → fires `trg_notify_ef_error` → real-time email.
+Logging only — **no retry, no flow change, nothing else touched.**
+
+**Retry decision:** do NOT add a +5min delayed retry. Keep agent 2×/5s, judge 2×/3s, save→`failed_summaries`.
+Visibility (the email) is the fix, not auto-retry.
+
+### Failure recovery policy — stats AND ai-summary (decided 2026-05-24)
+
+Both are **non-core** (display / engagement; never affect scoring). Same policy: **alert, then manual re-trigger.**
+
+| Failure | Alert (already/added) | Recovery action (manual) |
+|---|---|---|
+| **Stats missing** (`writeStats` fail, score saved) | real-time `ef_error` email (existing `trg_notify_ef_error`) **+ daily digest** count | run `football-api-sync mode=sync_stats` for that game (score is already correct; idempotent) |
+| **AI summary group crash** | real-time `ef_error` email (**1-line fix above**) **+ daily digest** | re-run `nightly-summary` with `{date, group_id}` for the failed group |
+
+→ **No auto-retry built for either.** Both get a real-time warning email + show in the daily digest; the admin
+manually re-triggers the relevant EF. This is the deliberate trade: visibility over automation for non-core failures.
+
+**Items NOT implemented (decided):** #4 (real-time `stats_write` email already fires; manual `sync_stats`
+recovers) · #6 (cron HTTP response has no reader) · #9 (working, failure-alert ON) · #18 (retry can't beat the
+Resend daily cap) · #24 (per-game crons self-delete; no game deletes planned in fresh prod).
+
+**Production (manual, prod env — NOT in this code work):** #1 insert all games complete with `api_fixture_id`
+(group + per knockout round; never UPDATE placeholders) · #8 `setup_lineups` for real `api_player_id` · #11
+verify `teams` spelling vs odds map · then pull real games and run the pipeline end-to-end to verify.
+
+**Migrations added:** M107 (`fn_reschedule_game`), M108 (vault-inline for ai-summary + af-odds schedulers),
+M109 (`fn_notify_trivia` guard). **EFs redeployed:** football-api-sync (#3, #2; #5 is local-only), send-push (#19).

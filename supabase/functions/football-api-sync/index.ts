@@ -124,6 +124,65 @@ function deriveKnockoutWinner(
   return goals.home > goals.away ? teams.home.name : teams.away.name
 }
 
+// ─── Mode: probe_date ─────────────────────────────────────────────────────────
+// Fetch fixtures for given dates + league IDs (default PL=39, La Liga=140)
+// Useful for testing nightly-summary with real fixture data.
+
+async function handleProbeDate(
+  dates: string[],
+  leagueIds: number[],
+  season: number
+): Promise<Response> {
+  const results: Record<string, unknown[]> = {}
+
+  for (const date of dates) {
+    const fixtures: unknown[] = []
+    for (const leagueId of leagueIds) {
+      const raw = await footballApiGet(`/fixtures?date=${date}&league=${leagueId}&season=${season}`)
+      for (const f of raw) {
+        fixtures.push({
+          fixture_id: f.fixture.id,
+          league_id:  f.league.id,
+          league:     f.league.name,
+          country:    f.league.country,
+          date:       f.fixture.date,
+          status:     f.fixture.status.short,
+          home:       f.teams.home.name,
+          away:       f.teams.away.name,
+          goals_home: f.goals.home,
+          goals_away: f.goals.away,
+        })
+      }
+    }
+    results[date] = fixtures
+  }
+
+  const total = Object.values(results).reduce((s, arr) => s + arr.length, 0)
+  return json({ status: 'probe_date_ok', dates, league_ids: leagueIds, season, total, results })
+}
+
+// ─── Mode: probe_ns ───────────────────────────────────────────────────────────
+
+async function handleProbeNs(limit: number): Promise<Response> {
+  const today = new Date().toISOString().split('T')[0]
+  const fixtures = await footballApiGet(`/fixtures?date=${today}&status=NS`)
+  const mapped = fixtures.slice(0, limit).map((f: {
+    fixture: { id: number; date: string; status: { short: string } }
+    league:  { id: number; name: string; country: string }
+    teams:   { home: { name: string }; away: { name: string } }
+  }) => ({
+    fixture_id: f.fixture.id,
+    league_id:  f.league.id,
+    league:     f.league.name,
+    country:    f.league.country,
+    date:       f.fixture.date,
+    status:     f.fixture.status.short,
+    home:       f.teams.home.name,
+    away:       f.teams.away.name,
+  }))
+  return json({ status: 'probe_ns_ok', today, total_ns: fixtures.length, fixtures: mapped })
+}
+
 // ─── Mode: probe ──────────────────────────────────────────────────────────────
 
 async function handleProbe(league_id: number, season: number, limit: number): Promise<Response> {
@@ -461,6 +520,8 @@ async function handleVerify(supabase: ReturnType<typeof createClient>, game_id: 
   if (diffMin > 5) {
     await supabase.from('games').update({ kick_off_time: apiDate.toISOString() }).eq('id', game_id)
     await supabase.rpc('fn_schedule_game_sync', { p_game_id: game_id })
+    // KO moved >5min — also move the auto-predict + kickoff-notification crons to the new time.
+    await supabase.rpc('fn_reschedule_game', { p_game_id: game_id })
     return json({ status: 'updated', db_time: dbDate.toISOString(), api_time: apiDate.toISOString(), diff_minutes: diffMin })
   }
 
@@ -591,7 +652,7 @@ async function handleSync(
 
   const { data: game, error: gameErr } = await supabase
     .from('games')
-    .select('id, api_fixture_id, team_home, team_away')
+    .select('id, api_fixture_id, team_home, team_away, kick_off_time')
     .eq('id', game_id)
     .single()
   if (gameErr || !game) return json({ error: 'Game not found' }, 404)
@@ -684,6 +745,22 @@ async function handleSync(
     }).eq('id', game_id)
     await supabase.rpc('fn_schedule_retry_sync', { p_game_id: game_id, p_stage: 'et_followup', p_delay_minutes: 5 })
     return json({ status: 'penalty_in_progress', game_id })
+  }
+
+  // Terminal statuses — game will never reach FT (postponed/abandoned/cancelled/etc).
+  // Stop retrying + alert admin to handle manually, instead of looping +5min forever.
+  const TERMINAL_STATUSES = ['PST', 'SUSP', 'ABD', 'CANC', 'AWD', 'WO', 'INT']
+  if (TERMINAL_STATUSES.includes(status)) {
+    await supabase.rpc('fn_unschedule_game_sync', { p_game_id: game_id })
+    await reportEfError(supabase, 'crash', `Game in terminal status '${status}' — sync stopped, manual handling required`, { game_id, api_status: status })
+    return json({ status: 'terminal_stopped', game_id, api_status: status })
+  }
+
+  // Safety net: hard-stop if still unfinished 6h after kickoff (covers any unknown status).
+  if (game.kick_off_time && Date.now() > new Date(game.kick_off_time as string).getTime() + 6 * 60 * 60 * 1000) {
+    await supabase.rpc('fn_unschedule_game_sync', { p_game_id: game_id })
+    await reportEfError(supabase, 'crash', `Game still unfinished 6h after KO (status '${status}') — sync stopped, manual handling required`, { game_id, api_status: status })
+    return json({ status: 'stale_stopped', game_id, api_status: status })
   }
 
   await supabase.rpc('fn_schedule_retry_sync', { p_game_id: game_id, p_stage: stage, p_delay_minutes: 5 })
@@ -836,6 +913,14 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
     switch (body.mode) {
+      case 'probe_date': {
+        const dates      = Array.isArray(body.dates) ? body.dates : [body.date ?? new Date().toISOString().split('T')[0]]
+        const leagueIds  = Array.isArray(body.league_ids) ? body.league_ids : [39, 140]
+        const season     = body.season ?? 2025
+        return await handleProbeDate(dates, leagueIds, season)
+      }
+      case 'probe_ns':
+        return await handleProbeNs(body.limit ?? 10)
       case 'probe':
         return await handleProbe(body.league_id ?? 39, body.season ?? 2024, body.limit ?? 5)
       case 'probe_stats':
@@ -860,7 +945,7 @@ Deno.serve(async (req) => {
         return await handleSync(supabase, body.game_id, phase, body.stage ?? 'initial')
       }
       default:
-        return json({ error: 'Unknown mode. Use: probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | sync_af_odds | verify | sync' }, 400)
+        return json({ error: 'Unknown mode. Use: probe_date | probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | sync_af_odds | verify | sync' }, 400)
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

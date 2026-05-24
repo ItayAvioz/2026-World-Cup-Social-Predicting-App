@@ -65,9 +65,26 @@ Deno.serve(async (req) => {
       await supabase.from('push_subscriptions').delete().in('id', staleIds)
     }
 
+    // Visibility: non-stale failures mean push may be broken for real users (bad VAPID, provider outage).
+    // Log to ef_errors → triggers admin email + shows in daily digest. (410/404 are normal pruning, not logged.)
+    if (results.failed > 0) {
+      await supabase.from('ef_errors').insert({
+        ef_name:    'send-push',
+        error_type: 'push-send',
+        error_msg:  `${results.failed} push send(s) failed (non-stale)`,
+        context:    { sent: results.sent, failed: results.failed, stale: results.stale.length, title }
+      })
+    }
+
     return new Response(JSON.stringify(results), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err: any) {
     console.error('send-push error:', err.message)
+    // Whole-batch failure (e.g. bad VAPID config) — log so a total push outage is not silent.
+    try {
+      await supabase.from('ef_errors').insert({
+        ef_name: 'send-push', error_type: 'push-send', error_msg: err?.message ?? String(err), context: null
+      })
+    } catch { /* best-effort */ }
     return new Response(JSON.stringify({ error: err.message }), { status: 500 })
   }
 })
