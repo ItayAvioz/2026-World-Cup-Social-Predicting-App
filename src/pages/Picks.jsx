@@ -195,9 +195,11 @@ export default function Picks() {
       supabase.from('player_tournament_stats').select('player_name, team, total_goals').order('total_goals', { ascending: false }).limit(20),
     ])
     setTournamentChampion(finalGame?.knockout_winner ?? null)
-    if (statsRows && statsRows.length > 0) {
-      const maxGoals = statsRows[0].total_goals
-      setTopScorers(maxGoals > 0 ? statsRows.filter(r => r.total_goals === maxGoals) : [])
+    const scored = (statsRows ?? []).filter(r => r.total_goals > 0)
+    if (scored.length > 0) {
+      // Top 5 scorers, but never split a tie: include everyone level with the 5th-place goal count
+      const cutoff = scored.length >= 5 ? scored[4].total_goals : 0
+      setTopScorers(scored.filter(r => r.total_goals >= cutoff))
     } else {
       setTopScorers([])
     }
@@ -574,15 +576,18 @@ export default function Picks() {
                     )}
                   </div>
                   <div className="pk-result-card">
-                    <div className="pk-result-card-title">⚽ Top Scorer</div>
+                    <div className="pk-result-card-title">⚽ Top 5 Scorers</div>
                     {topScorers === undefined ? (
                       <div className="pk-result-card-skeleton" />
                     ) : topScorers.length > 0 ? (
                       <div className="pk-result-card-scorers">
                         {topScorers.map(p => {
                           const code = dbPlayers.find(s => s.name === p.player_name)?.code ?? null
+                          // Standard competition rank: players level on goals share a rank
+                          const rank = topScorers.findIndex(r => r.total_goals === p.total_goals) + 1
                           return (
                             <div key={p.player_name} className="pk-result-card-val">
+                              <span className="pk-result-rank">{rank}</span>
                               <FlagImg name={p.player_name} code={code} className="pk-player-flag" />
                               <span>{p.player_name}</span>
                               <span className="pk-result-goals">{p.total_goals}G</span>
