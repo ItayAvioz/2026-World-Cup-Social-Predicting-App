@@ -120,10 +120,10 @@
 
 | Function | Version | Status | Notes |
 |---|---|---|---|
-| football-api-sync | v29 | ✅ ACTIVE | Modes: probe, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds |
-| nightly-summary | v25 (Supabase v29) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). |
-| sync-odds | v19 | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill |
-| notify-admin | v9 | ✅ ACTIVE | v9: predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90 |
+| football-api-sync | **v34** (was v29) | ✅ ACTIVE | Modes: probe, probe_date, probe_ns, verify, sync, sync_stats, sync_af_odds, setup, setup_lineups, snap_stats, probe_stats, probe_odds. ⚠️ deployed v34 adds `probe_date`+`probe_ns` (test-only) NOT in local source — sync local file before any CLI redeploy. Audited 2026-05-23: deployed == local + those 2 modes. |
+| nightly-summary | **v32** (was v25) | ✅ ACTIVE | Single-group mode: accepts group_id in body, skips loop. Per-group cron architecture (M73). Audited 2026-05-23: deployed byte-identical to local (v25→v32 = re-deploys, no code change). |
+| sync-odds | **v23** (was v19) | ✅ ACTIVE | Champion odds via TheOddsAPI William Hill. Audited 2026-05-23: deployed == local. External cron-job.org 07:00 UTC trigger (not pg_cron). |
+| notify-admin | **v12** (was v9) | ✅ ACTIVE | predictions total·edits·users·games·groups from DB; champion+top scorer picks total·edits·users·groups; M84–M90. Audited 2026-05-23: deployed == local. ⚠️ FROM_ADDRESS still `onboarding@resend.dev` (Resend sandbox). |
 | send-push | v8 | ✅ ACTIVE | v8 (2026-05-21): **`urgency:'high'` + `TTL:60` + Promise.allSettled parallel sends**. Fixes iOS PWA silent overnight drops (APNS deprioritizes low-urgency pushes on locked devices) + dead-endpoint pruning (Apple rotates PWA tokens silently every 1-2 weeks without 410 unless TTL is short). Bulk-deletes 410/404 subs at end. v7: default URL `/2026-World-Cup-Social-Predicting-App/` prefix. v6: icon-notif+badge ?v=3. Web Push via npm:web-push; VAPID private key from vault `Notification_Key`. |
 
 ## Key pg_cron Jobs
