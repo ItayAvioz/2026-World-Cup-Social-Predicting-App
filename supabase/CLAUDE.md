@@ -1,6 +1,6 @@
 # Supabase — Deployed State
 
-## Migrations (101 local + 3 MCP-only — all deployed)
+## Migrations (102 local + 3 MCP-only — all deployed)
 
 > **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
 
@@ -120,6 +120,7 @@
 | 109 | 20260524000109_fn_notify_trivia_guard.sql | EF-audit fix (trivia push bug). `fn_notify_trivia()` wrapped in `IF EXISTS (SELECT 1 FROM trivia_questions WHERE available_from <= now() AND available_until > now())`. Before: `trivia-push-daily` (0 19 * * *, no end) POSTed "Trivia Time!" every night unconditionally → endless spam after 2026-07-21 + gap-day false pushes. Now a no-op when nothing is open; data-driven so test questions still fire. Verified: open_now=0 → fn_notify_trivia() queued 0 pushes. net.http_post body/title/url unchanged. |
 | 110 | 20260525000110_ai_summary_matchday_boundary.sql | AI-summary "match-day" boundary 00:00 UTC → **07:30 UTC** (10:30 Israel). `fn_schedule_ai_summaries` groups by `(kick_off_time - interval '7.5 hours')::date` so a US match-night (afternoon → 04:00 UTC late games) stays in ONE summary instead of splitting at 03:00 Israel. Verified: 05:00–13:00 UTC has ZERO fixtures; latest knockout KO=03:00 UTC, latest group KO=04:00 UTC. ONLY the grouping key changed — MAX(kick_off) + 150/160 fire/push delays unchanged (90-min score is written during ET at KO+120, so ET/pens never delay the summary). Must pair with nightly-summary EF day-window (07:30) + M111. Not re-run (new grouping applies on next scheduler run / WC setup). |
 | 111 | 20260525000111_digest_matchday_boundary.sql | `fn_daily_admin_digest`: align to the 07:30 match-day. (a) window starts 07:30 UTC (was 00:00); (b) summaries/tokens counted by `ai_summaries.date` (was `generated_at`) — fixes "game shown but 0 summaries/0 tokens" (summary generated 00:00 UTC next day fell outside the old window). Run time 08:00 UTC + v_yesterday calc unchanged. Verified via manual trigger 2026-05-25 18:01 UTC: digest for 2026-05-24 = 1 game + 8 summaries + 44,915/1,932 tokens together (email sent OK). |
+| 112 | 20260525000112_dashboard_matchday_boundary.sql | `get_dashboard_payload`: align Dashboard "today's games" to the 07:30-UTC match-day (matches M110/M111). Was 00:00 UTC cut → a US match-night straddling midnight split, so users could MISS predicting the late games. 5 day-grouping date expressions → `((kick_off_time AT TIME ZONE 'UTC') - interval '7.5 hours')::date` (TZ-independent; DB tz=UTC). Everything else (leaderboard/picks/predictions/finished_games/RLS) untouched — read-only STABLE RPC, dashboard-only. Verified: Haiti–Scotland 01:00 UTC Jun 14 now groups into Jun 13 night; live RPC day_date=2026-06-11 with 2 games (opener + late 02:00 game) + leaderboard 40 rows intact. No frontend change. |
 
 ## Edge Functions
 
