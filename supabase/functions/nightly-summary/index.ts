@@ -573,8 +573,11 @@ serve(async (req) => {
   const openaiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('AI_Summary_GPT_Key') || ''
   const openai    = new OpenAI({ apiKey: openaiKey })
 
-  const dayStart = `${date}T00:00:00Z`
-  const dayEnd   = `${nextUTCDay(date)}T00:00:00Z`
+  // Match-day window = 07:30 UTC → next 07:30 UTC (so late US games up to ~04:00 UTC stay in the
+  // same match-day, and the boundary sits in the 05:00–13:00 UTC dead zone). Must match the grouping
+  // in fn_schedule_ai_summaries: (kick_off_time - interval '7.5 hours')::date.
+  const dayStart = `${date}T07:30:00Z`
+  const dayEnd   = `${nextUTCDay(date)}T07:30:00Z`
 
   const { data: allGames, error: gamesErr } = await supabase
     .from('games')
