@@ -135,6 +135,11 @@ export default function AiFeed() {
 
   async function loadDailyStandings(summaryId, groupId, date) {
     setDailyData(prev => ({ ...prev, [summaryId]: { loading: true, rows: [], error: null } }))
+    // Match-day boundary = 07:30 UTC (NOT 00:00 UTC). A US match-night straddles midnight UTC, so
+    // a late game (e.g. 00:30 UTC) belongs to the PREVIOUS calendar day's summary. Match-day D = kickoffs
+    // in [D 07:30 UTC, D+1 07:30 UTC). Must match the server side (M110-M113: fn_schedule_ai_summaries,
+    // nightly-summary EF, digest, dashboard, get_group_summary_data — all use (ko - 7.5h)::date). Using a
+    // 00:00 window here dropped the late game's points → day standings under-counted vs the roast text.
     const nextDate = new Date(date + 'T00:00:00Z')
     nextDate.setDate(nextDate.getDate() + 1)
     const nextDateStr = nextDate.toISOString().slice(0, 10)
@@ -142,8 +147,8 @@ export default function AiFeed() {
     const [{ data: members, error: mErr }, { data: games, error: gErr }] = await Promise.all([
       supabase.from('group_members').select('user_id, profiles(username)').eq('group_id', groupId),
       supabase.from('games').select('id')
-        .gte('kick_off_time', `${date}T00:00:00Z`)
-        .lt('kick_off_time', `${nextDateStr}T00:00:00Z`),
+        .gte('kick_off_time', `${date}T07:30:00Z`)
+        .lt('kick_off_time', `${nextDateStr}T07:30:00Z`),
     ])
 
     if (mErr) {
