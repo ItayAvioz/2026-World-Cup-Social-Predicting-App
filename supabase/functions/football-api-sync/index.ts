@@ -397,6 +397,7 @@ async function handleSetup(supabase: ReturnType<typeof createClient>): Promise<R
   const { data: games, error: dbErr } = await supabase
     .from('games')
     .select('id, team_home, team_away, kick_off_time, api_fixture_id')
+    .range(0, 99999)   // defensive: bypass Supabase JS-client 1000-row default cap
   if (dbErr) throw new Error(`DB error: ${dbErr.message}`)
 
   const matched: Array<{ game_id: string; api_fixture_id: number }> = []
@@ -542,6 +543,7 @@ async function handleSyncStats(
     .select('id, api_fixture_id, team_home, team_away')
     .not('score_home', 'is', null)
     .not('api_fixture_id', 'is', null)
+    .range(0, 99999)   // defensive: finished games grow season-to-season; bypass 1000-row JS cap
 
   if (game_id) query = query.eq('id', game_id)
 

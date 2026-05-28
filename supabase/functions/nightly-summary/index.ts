@@ -1,4 +1,10 @@
-// nightly-summary v25
+// nightly-summary v35
+// v35 (2026-05-28): Global-rank source switched from JS recompute → `get_leaderboard()` RPC.
+//   Previously summed predictions/champion_pick/top_scorer_pick in JS to derive rank — hit the
+//   Supabase JS-client default 1000-row cap once predictions table grew past it; ranks were silently
+//   wrong (verified: Test3 stored Itay=1 vs true 2). Now reads the canonical SQL leaderboard → one
+//   source of truth, no cap risk. Defensive `.range(0,99999)` added to the remaining JS-driver
+//   queries (`games` match-day, `groups`, `predictions` by game_id IN) for future-proofing.
 // v25: Accept group_id in body — single-group mode (per-group cron, Option B). No group_id = legacy loop (manual/test).
 // 5-agent Judge LLM system. Runs v11/v12/v13/v10B/v10-baseline in parallel, judge picks winner, saves to ai_summaries.
 // v19: Judge verification-first approach (accuracy checklist with per-error deductions). JUDGE_MAX_TOK 200→350.
@@ -584,6 +590,7 @@ serve(async (req) => {
     .select('id, team_home, team_away, score_home, score_away, phase')
     .gte('kick_off_time', dayStart)
     .lt ('kick_off_time', dayEnd)
+    .range(0, 99999)   // defensive: avoid Supabase JS-client 1000-row default cap (filter limits to ≤30/day, hygiene only)
 
   if (gamesErr) {
     console.error('[guard] games fetch error:', gamesErr.message)
@@ -646,7 +653,7 @@ serve(async (req) => {
     if (grpErr || !grp) return json({ error: 'group_not_found', group_id: singleGroupId }, 404)
     qualifyingGroups = [grp]
   } else {
-    const { data: allGroups } = await supabase.from('groups').select('id, name')
+    const { data: allGroups } = await supabase.from('groups').select('id, name').range(0, 99999)   // defensive: bypass 1000-row JS cap
     qualifyingGroups = []
     for (const g of allGroups ?? []) {
       const { count } = await supabase
@@ -683,6 +690,7 @@ serve(async (req) => {
     .from('predictions')
     .select('user_id, game_id, points_earned, is_auto')
     .in('game_id', gameIds)
+    .range(0, 99999)   // defensive: bypass 1000-row JS cap (~30 preds × ≤10 games × N groups can approach it during WC)
 
   // deno-lint-ignore no-explicit-any
   const globalUserAgg: Record<string, { uid: string; gamesPts: Record<string, number>; predCount: number; autoCount: number }> = {}
@@ -714,46 +722,25 @@ serve(async (req) => {
     }))
     .sort((a, b) => b.pts - a.pts)
 
-  const [{ data: predTotals }, { data: champTotals }, { data: tsrTotals }] = await Promise.all([
-    supabase.from('predictions').select('user_id, group_id, points_earned')
-      .not('points_earned', 'is', null).not('group_id', 'is', null),
-    supabase.from('champion_pick').select('user_id, group_id, points_earned')
-      .not('points_earned', 'is', null),
-    supabase.from('top_scorer_pick').select('user_id, group_id, points_earned')
-      .not('points_earned', 'is', null),
-  ])
-
-  const userGroupPts:   Record<string, Record<string, number>> = {}
-  const userGroupExact: Record<string, Record<string, number>> = {}
-
-  function addUGPts(uid: string, gid: string, pts: number) {
-    if (!userGroupPts[uid]) userGroupPts[uid] = {}
-    userGroupPts[uid][gid] = (userGroupPts[uid][gid] ?? 0) + pts
+  // Global rank per (user × group) — pulled from the canonical SQL leaderboard so the AI summary,
+  // Dashboard, Groups page, and any future consumer share one source of truth. Previously this was
+  // re-implemented in JS by summing predictions/champion_pick/top_scorer_pick rows client-side, which
+  // hit the Supabase JS-client default 1000-row cap once `predictions` exceeded 1000 scored rows —
+  // the per-user totals were under-counted by a random fraction and the ranks went wrong (verified
+  // 2026-05-28: Test3 stored Itay=1/zac=14/bob=16; true 2/15/20). Using the RPC eliminates the cap
+  // AND removes the duplicate leaderboard formula (drift hazard).
+  const { data: lbRows, error: lbErr } = await supabase.rpc('get_leaderboard')
+  if (lbErr) {
+    console.error('[leaderboard] get_leaderboard RPC failed:', lbErr.message)
+    return json({ error: 'leaderboard_rpc_failed', detail: lbErr.message }, 500)
   }
-  // deno-lint-ignore no-explicit-any
-  for (const p of (predTotals ?? []) as any[]) {
-    addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
-    if ((p.points_earned ?? 0) === 3) {
-      if (!userGroupExact[p.user_id]) userGroupExact[p.user_id] = {}
-      userGroupExact[p.user_id][p.group_id] = (userGroupExact[p.user_id][p.group_id] ?? 0) + 1
-    }
-  }
-  // deno-lint-ignore no-explicit-any
-  for (const p of (champTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
-  // deno-lint-ignore no-explicit-any
-  for (const p of (tsrTotals ?? []) as any[]) addUGPts(p.user_id, p.group_id, p.points_earned ?? 0)
-
-  const allUGPairs = Object.entries(userGroupPts).flatMap(([uid, groups]) =>
-    Object.entries(groups).map(([gid, pts]) => ({ uid, gid, pts, exact: userGroupExact[uid]?.[gid] ?? 0 }))
-  ).sort((a, b) => b.pts - a.pts || b.exact - a.exact)
 
   const globalRankByUserGroup: Record<string, Record<string, number>> = {}
-  let ugRank = 1
-  for (let ri = 0; ri < allUGPairs.length; ri++) {
-    if (ri > 0 && (allUGPairs[ri].pts !== allUGPairs[ri-1].pts || allUGPairs[ri].exact !== allUGPairs[ri-1].exact)) ugRank = ri + 1
-    const { uid, gid } = allUGPairs[ri]
-    if (!globalRankByUserGroup[uid]) globalRankByUserGroup[uid] = {}
-    globalRankByUserGroup[uid][gid] = ugRank
+  // deno-lint-ignore no-explicit-any
+  for (const row of (lbRows ?? []) as any[]) {
+    if (!row.user_id || !row.group_id) continue
+    if (!globalRankByUserGroup[row.user_id]) globalRankByUserGroup[row.user_id] = {}
+    globalRankByUserGroup[row.user_id][row.group_id] = row.rank
   }
 
   let processed = 0; let skipped = 0
