@@ -3,9 +3,11 @@
 const fs   = require('fs')
 const path = require('path')
 const os   = require('os')
+const readline = require('readline')
 const { execSync } = require('child_process')
 
 const ROOT = path.resolve(__dirname, '..')
+const PROD_DOMAIN = 'pickyguessers.com'
 
 function run(cmd, opts = {}) {
   console.log(`  → ${cmd}`)
@@ -13,7 +15,30 @@ function run(cmd, opts = {}) {
 }
 function silent(cmd) { return run(cmd, { silent: true }).trim() }
 
-console.log('\n🚀 WC2026 Deploy\n')
+function askConfirmation(prompt) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    rl.question(prompt, answer => { rl.close(); resolve(answer.trim()) })
+  })
+}
+
+async function main() {
+
+console.log(`\n🚀 WC2026 Deploy → ${PROD_DOMAIN}\n`)
+
+// ── 0. Typed confirmation — prevents accidental prod deploys ────
+// gh-pages now serves the live PROD app at pickyguessers.com. Require
+// an explicit "deploy" string to proceed (no --yes flag accepted).
+if (!process.env.WC2026_SKIP_CONFIRM) {
+  const answer = await askConfirmation(
+    `⚠️  This will publish to PRODUCTION (${PROD_DOMAIN}).\n` +
+    `   Type "deploy" to confirm, anything else aborts: `
+  )
+  if (answer !== 'deploy') {
+    console.log('\n❌  Aborted (confirmation not received)\n')
+    process.exit(1)
+  }
+}
 
 // ── 1. Verify dist/app.html exists ──────────────────────────────
 const distHtmlPath = path.join(ROOT, 'dist', 'app.html')
@@ -101,6 +126,14 @@ html = html.replace(/\s*<script>window\.__APP_VER__=.*?<\/script>/g, '')
 html = html.replace('</head>', `  <script>window.__APP_VER__='${newVer}'</script>\n</head>`)
 fs.writeFileSync(appHtmlPath, html)
 
+// ── 8c. Write CNAME for GitHub Pages custom domain ──────────────
+// pickyguessers.com is bound to this gh-pages branch via GitHub Pages
+// settings. The CNAME file MUST exist on every commit or GitHub strips
+// the custom domain setting and reverts to <user>.github.io.
+const cnamePath = path.join(ROOT, 'CNAME')
+fs.writeFileSync(cnamePath, `${PROD_DOMAIN}\n`)
+console.log(`📍  CNAME → ${PROD_DOMAIN}`)
+
 // ── 9. Restore vanilla pages from main ──────────────────────────
 run('git checkout main -- team.html host.html')
 
@@ -125,7 +158,7 @@ if (failed.length) {
 console.log('✅  app.html verified')
 
 // ── 11. Commit ──────────────────────────────────────────────────
-const filesToAdd = ['app.html', 'sw.js', 'team.html', 'host.html']
+const filesToAdd = ['app.html', 'sw.js', 'team.html', 'host.html', 'CNAME']
 for (const f of copiedAssets) filesToAdd.push(`assets/${f}`)
 run(`git add ${filesToAdd.join(' ')}`)
 
@@ -149,4 +182,9 @@ if (stashed) {
 }
 fs.rmSync(tmp, { recursive: true })
 
-console.log(`\n✅  Deploy complete! SW v${newVer} — users will see refresh toast on next PWA open\n`)
+console.log(`\n✅  Deploy complete! SW v${newVer} — users will see refresh toast on next PWA open`)
+console.log(`🌐  Live at https://${PROD_DOMAIN} (≤1 min for GitHub Pages to pick up)\n`)
+
+}  // end of main()
+
+main().catch(err => { console.error(err); process.exit(1) })
