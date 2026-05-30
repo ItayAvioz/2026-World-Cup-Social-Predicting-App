@@ -1,8 +1,9 @@
 # Supabase — Deployed State
 
-## Migrations (104 local + 3 MCP-only — all deployed)
+## Migrations (105 local + 3 MCP-only — all deployed)
 
-> **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
+> **Tracking note**: M1–M26 applied before Supabase migration tracking began. M39–M45, M52, M95, M96 applied via Supabase dashboard (deployed, not in schema_migrations). All others tracked in DB. Stub files = comment-only, no SQL (applied via MCP without local file at the time).
+> **Parity rule (post-M117)**: All NEW changes must go through `apply_migration` (writes to schema_migrations + survives pg_dump cleanly). Dashboard SQL editor for hotfixes is OK only if a migration file is also added in the same commit.
 
 | # | File | Description |
 |---|---|---|
@@ -125,6 +126,7 @@
 | 114 | 20260528000114_backfill_ai_summary_global_ranks.sql | One-time backfill: rewrites `ai_summaries.display_data.global_ranks` AND `input_json.leaderboard[].global_rank` for **every existing row** from the canonical `get_leaderboard()`. Fixes historical rank values that were wrong due to the JS 1000-row cap bug (root cause + permanent fix shipped in nightly-summary EF v35 — RPC replaces JS recompute). Roast TEXT untouched. Idempotent. Verified: Test3/2026-05-27 went from stored Itay=1/zac=14/bob=16 → live 2/15/20 ✓. |
 | 115 | 20260530000115_top_scorer_candidates_add_position_and_apiid_unique.sql | top_scorer_candidates schema update for bulk seed (both dev + prod): ADD COLUMN position (nullable, stores api-football Attacker/Midfielder/Defender/Goalkeeper). DROP CONSTRAINT name UNIQUE (1383 WC2026 players have 11 name collisions). ADD CONSTRAINT api_player_id UNIQUE (natural key, NOT NULL since M51). Pairs with football-api-sync v4 (setup_lineups onConflict→api_player_id) + supabase/migrations-prod/20260530000002 (prod-only reseed with all 1383 players + position). |
 | 116 | 20260530000116_ai_summary_schedule_daily_safety_cron.sql | Daily safety cron `ai-summary-schedule-daily` @ **14:00 UTC = 17:00 Israel**. Empirically confirmed gap: `fn_schedule_ai_summaries` only fires on game INSERT (via trg_auto_schedule_game), but groups + group_members have NO trigger. INSERTing a group + 3 members creates 0 ai-summary crons → group-stage AI summaries permanently lost for groups formed after all games inserted. 14:00 UTC fires BEFORE earliest WC group-stage KO (16:00 UTC = 19:00 Israel) → user rule: group created **before 17:00 Israel** gets same-day roast; **after 17:00** gets next day onwards. Applied to both dev + prod. Idempotent. |
+| 117 | 20260530000117_fix_player_tournament_stats_security_invoker.sql | Closes last dev↔prod parity gap from 2026-05-30 audit. M97 had fixed only `team_tournament_stats`; `player_tournament_stats` was fixed dashboard-direct on dev (no migration file) → prod pg_dump captured the pre-fix state. M117 recreates the view `WITH (security_invoker = true)`. Body is verbatim from `pg_get_viewdef` on dev — zero new SQL. Applied to BOTH dev (formally tracked now) + prod via `apply_migration`. Idempotent (DROP IF EXISTS + CREATE). Closes Supabase advisor `security_definer_view` ERROR on prod. |
 
 ## Edge Functions
 
