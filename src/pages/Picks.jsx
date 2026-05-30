@@ -74,6 +74,7 @@ export default function Picks() {
   const [champSearch, setChampSearch]     = useState('')
   const [search, setSearch]               = useState('')
   const [playerTeamFilter, setPlayerTeamFilter] = useState('')
+  const [positionFilter, setPositionFilter] = useState('')  // '' | 'Attacker' | 'Midfielder' | 'Defender' | 'Goalkeeper'
   const pillRowRef = useRef(null)
 
   // ── Predictions tab state ─────────────────────────────────────
@@ -107,11 +108,11 @@ export default function Picks() {
   async function loadCandidates() {
     const [{ data: t }, { data: p }, { data: o }] = await Promise.all([
       supabase.from('teams').select('name, flag_code, group_name, is_tbd').order('group_name').order('is_tbd'),
-      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id').eq('is_active', true).order('name'),
+      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id, position').eq('is_active', true).order('name'),
       supabase.from('champion_odds').select('team_name, odds'),
     ])
     if (t) setDbTeams(t)
-    if (p) setDbPlayers(p.map(r => ({ name: r.name, team: r.team_name, code: r.flag_code, apiId: r.api_player_id })))
+    if (p) setDbPlayers(p.map(r => ({ name: r.name, team: r.team_name, code: r.flag_code, apiId: r.api_player_id, position: r.position })))
     if (o) {
       const map = {}
       for (const row of o) map[row.team_name] = parseFloat(row.odds)
@@ -170,7 +171,7 @@ export default function Picks() {
     try {
       let q1 = supabase.from('champion_pick').select('team').eq('user_id', user.id)
       q1 = groupId !== null ? q1.eq('group_id', groupId) : q1.is('group_id', null)
-      let q2 = supabase.from('top_scorer_pick').select('player_name').eq('user_id', user.id)
+      let q2 = supabase.from('top_scorer_pick').select('player_name, top_scorer_api_id').eq('user_id', user.id)
       q2 = groupId !== null ? q2.eq('group_id', groupId) : q2.is('group_id', null)
       const [{ data: cp, error: e1 }, { data: ts, error: e2 }] = await Promise.all([
         q1.maybeSingle(), q2.maybeSingle()
@@ -180,7 +181,11 @@ export default function Picks() {
       setSavedChampion(cp?.team ?? null)
       setSelChampion(cp?.team ?? null)
       setSavedPlayer(ts ?? null)
-      setSelPlayer(ts ? (dbPlayers.find(s => s.name === ts.player_name) ?? null) : null)
+      setSelPlayer(ts ? (
+        (ts.top_scorer_api_id && dbPlayers.find(s => s.apiId === ts.top_scorer_api_id))
+        ?? dbPlayers.find(s => s.name === ts.player_name)
+        ?? null
+      ) : null)
     } catch {
       if (activeGroupRef.current !== groupId) return
       setPicksError(true)
@@ -215,6 +220,7 @@ export default function Picks() {
     setChampSearch('')
     setSearch('')
     setPlayerTeamFilter('')
+    setPositionFilter('')
   }
 
   // ── Picks save handlers ───────────────────────────────────────
@@ -252,7 +258,7 @@ export default function Picks() {
       if (error.code === '42501') showToast('Picks are locked', 'error')
       else showToast('Failed to save — try again', 'error')
     } else {
-      setSavedPlayer({ player_name: selPlayer.name })
+      setSavedPlayer({ player_name: selPlayer.name, top_scorer_api_id: selPlayer.apiId ?? null })
       cache.invalidate()  // clear all — picks/predictions appear in Dashboard AND Groups leaderboard caches
       showToast('Top scorer pick saved!', 'success')
       logEvent(supabase, user.id, 'pick_submit', 'picks')
@@ -393,13 +399,13 @@ export default function Picks() {
   ), [dbPlayers])
 
   const filteredPlayers = useMemo(() => {
-    let list = playerTeamFilter
-      ? dbPlayers.filter(p => p.team === playerTeamFilter)
-      : dbPlayers
+    let list = dbPlayers
+    if (playerTeamFilter) list = list.filter(p => p.team === playerTeamFilter)
+    if (positionFilter)   list = list.filter(p => p.position === positionFilter)
     const q = search.toLowerCase()
     if (q) list = list.filter(p => p.name.toLowerCase().includes(q))
     return list
-  }, [search, playerTeamFilter, dbPlayers])
+  }, [search, playerTeamFilter, positionFilter, dbPlayers])
 
   const gamesByPhase = useMemo(() => {
     const map = {}
@@ -466,7 +472,9 @@ export default function Picks() {
   }, [games, myPreds])
 
   const champChanged  = selChampion !== savedChampion
-  const playerChanged = selPlayer?.name !== savedPlayer?.player_name
+  const playerChanged = (selPlayer?.apiId != null && savedPlayer?.top_scorer_api_id != null)
+    ? selPlayer.apiId !== savedPlayer.top_scorer_api_id
+    : selPlayer?.name !== savedPlayer?.player_name
 
   const savedChampCode = savedChampion
     ? (dbTeams.find(t => t.name === savedChampion)?.flag_code ?? teamCodeMap[savedChampion] ?? null)
@@ -737,6 +745,15 @@ export default function Picks() {
                             onChange={e => setSearch(e.target.value)}
                             aria-label="Search top scorer candidates"
                           />
+                          <div className="pk-group-tabs" style={{ marginBottom:'.5rem' }}>
+                            {['', 'Attacker', 'Midfielder', 'Defender', 'Goalkeeper'].map(pos => (
+                              <button
+                                key={pos || 'all'}
+                                className={`pk-group-tab${positionFilter === pos ? ' pk-group-tab--active' : ''}`}
+                                onClick={() => setPositionFilter(pos)}
+                              >{pos || 'All positions'}</button>
+                            ))}
+                          </div>
                           <div className="pk-pills-wrap">
                             <button className="pk-pills-arrow pk-pills-arrow--left" aria-hidden="true" tabIndex={-1}
                               onClick={() => pillRowRef.current?.scrollBy({ left: -200, behavior: 'smooth' })}>‹</button>
@@ -767,21 +784,24 @@ export default function Picks() {
                               <p style={{ color:'var(--muted)', fontSize:'.85rem', padding:'.5rem .7rem' }}>
                                 No players match your search.
                               </p>
-                            ) : filteredPlayers.map(p => (
-                              <button
-                                key={p.name}
-                                className={`pk-player-row${selPlayer?.name === p.name ? ' pk-player-row--selected' : ''}`}
-                                onClick={() => setSelPlayer(p.name === selPlayer?.name ? null : p)}
-                                role="option"
-                                aria-selected={selPlayer?.name === p.name}
-                              >
-                                <FlagImg name={p.team} code={p.code} className="pk-player-flag" />
-                                <span className={`pk-player-name${selPlayer?.name === p.name ? ' pk-player-name--sel' : ''}`}>
-                                  {p.name}
-                                </span>
-                                <span className="pk-player-team">{p.team}</span>
-                              </button>
-                            ))}
+                            ) : filteredPlayers.map(p => {
+                              const sel = selPlayer && (p.apiId != null ? selPlayer.apiId === p.apiId : selPlayer.name === p.name)
+                              return (
+                                <button
+                                  key={p.apiId ?? p.name}
+                                  className={`pk-player-row${sel ? ' pk-player-row--selected' : ''}`}
+                                  onClick={() => setSelPlayer(sel ? null : p)}
+                                  role="option"
+                                  aria-selected={sel}
+                                >
+                                  <FlagImg name={p.team} code={p.code} className="pk-player-flag" />
+                                  <span className={`pk-player-name${sel ? ' pk-player-name--sel' : ''}`}>
+                                    {p.name}
+                                  </span>
+                                  <span className="pk-player-team">{p.team}</span>
+                                </button>
+                              )
+                            })}
                           </div>
                           <div className="pk-save-row" style={{ marginTop:'.5rem' }}>
                             <p className="pk-current-pick">
