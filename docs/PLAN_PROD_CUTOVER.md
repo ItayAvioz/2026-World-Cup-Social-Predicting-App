@@ -14,10 +14,23 @@ The app is a single Supabase project (`World_Cup_App` in **Tokyo / ap-northeast-
 - Execution style: **stop at every step, verify, report, wait for user "go", then continue.**
 - **Phase 0 (Backup & Audit) is mandatory before any prod work begins.**
 
+## 🟢 SOURCE OF TRUTH RULE
+
+**Supabase dev DB is the single source of truth for schema. Local files are documentation only.**
+
+For prod cutover, do NOT replay individual migration files. Instead:
+1. `pg_dump` (or Supabase CLI `db dump`) the live dev schema as one authoritative bundle.
+2. Apply the bundle to fresh prod.
+3. Backfill `supabase_migrations.schema_migrations` table with the 86 historical records so future MCP `apply_migration` works.
+
+**Why:** verified comparison (2026-05-30) shows 86 DB-tracked migrations vs 120 local files with name drift, bundled splits, missing entries, and 26 pre-tracking files that built the base schema before `schema_migrations` existed. Replaying files file-by-file would miss dashboard-applied SQL and risk order-dependent failures. The pg_dump captures the live ground truth exactly.
+
+**Applies to all schema decisions throughout this plan.** Migration triage report (B5, `docs/MIGRATION_TRIAGE.md`) is now reference-only — not actionable steps.
+
 **Agent-discovered corrections vs earlier conversation:**
 - Vault holds only `app_edge_function_url` and `app_service_role_key`. The external API keys (Football, OpenAI, Resend, VAPID, OddsAPI) are set as **Edge Function environment variables** in the Supabase dashboard, NOT vault rows.
 - Dev has **706** active cron jobs, not ~104 (per-date×per-group ai-summary alone = 312; trivia-miss per-question = 53).
-- 36 local migration files exist that were never applied to the DB. Must triage before treating "migrations folder" as authoritative.
+- **86 DB-tracked migrations** + 26 pre-tracking files + dashboard-applied SQL = current dev schema. Cannot be cleanly file-by-file replayed → use pg_dump approach.
 - Security advisors returned 128 KB output — saved to `C:\Users\yonatanam\.claude\projects\...\tool-results\mcp-supabase-get_advisors-1780134594257.txt`. Must be reviewed before cutover.
 
 ---
@@ -81,10 +94,10 @@ Every step has a verification gate. Nothing in Phase 1+ runs until Phase 0 is si
 | **B2** | Clone full repo to `C:\Users\yonatanam\Desktop\wc2026-backup-2026-05-30\` (full history mirror, `git clone --mirror`). | Folder exists, `git --git-dir=... log --oneline -1` returns current main commit. | — |
 | **B3** | Decide on 10 untracked files (root: `amit_feedback_5.png`, `icon-*.txt`, `nav-*.png`, `picks-upcoming.png`, etc.). Two options: (a) move to new `archive/` subfolder and commit, (b) add to `.gitignore`. Recommended (a) so they survive backup. | `git status` shows zero untracked (or all in `.gitignore`). | — |
 | **B4** | Copy `.claude/settings.local.json` → backup folder + verify it contains no secrets. Read first 50 lines. | File copied; content reviewed; no API keys / tokens present. | — |
-| **B5** | **Migration triage**: spawn Explore agent to compare `supabase/migrations/*.sql` filenames (120) vs `mcp__supabase__list_migrations` versions (84). For each of the 36 orphans, agent reads first 10 lines and categorizes as: (i) stub/local-only, (ii) replaced by a later migration, (iii) genuinely pending and needs applying, (iv) experimental — never apply. Output: a table of 36 rows with verdict. | Agent report present at `docs/MIGRATION_TRIAGE.md` (we create this file in Phase 0; it's documentation, not code). Every orphan has a verdict. | **Explore agent** — triage |
+| **B5** | **Migration reality check** (REFERENCE ONLY — pg_dump strategy supersedes this). Compare `supabase/migrations/*.sql` filenames vs DB `supabase_migrations.schema_migrations`. Authoritative finding (2026-05-30): 86 DB-tracked + ~26 pre-tracking files (M1-M26 base schema) + dashboard-applied SQL = current dev state. **120 local files cannot be cleanly re-applied to prod** due to name drift, bundled splits, ordering. Triage report saved at `docs/MIGRATION_TRIAGE.md` for documentation. **No action items derive from B5 anymore** — P3 uses pg_dump instead. | Report exists; team aware that local files are documentation, not source of truth. | (already run) |
 | **B6** | **Read security advisors output**: read the 128 KB file at the path the audit agent saved. Summarize ERROR + WARN level findings. Decide: which to fix in dev now, which to fix in prod-only, which to defer. | Summary table created in `docs/SECURITY_ADVISORS_PRE_CUTOVER.md`. Each ERROR has a decision. | **Explore agent** — read advisor file, group by severity |
 | **B7** | **Supabase Dashboard**: trigger a manual on-demand backup of dev project (PRO plan includes this). Verify backup appears in dashboard with today's timestamp. | Screenshot or dashboard confirmation. | — |
-| **B8** | **Local pg_dump** of dev DB. Schema-only first: `supabase db dump --project-ref ftryuvfdihmhlzvbpfeu --schema public > backup/schema.sql`. Then data of small reference tables: `supabase db dump --data-only -t teams -t trivia_questions -t trivia_secrets -t top_scorer_candidates > backup/reference-data.sql`. | Both files exist, non-empty, valid SQL syntax (open in editor, verify). | — |
+| **B8** | **Canonical pg_dump of dev DB.** Schema-only: `supabase db dump --db-url <DEV_DB_URL> --schema-only -f backup/dev-schema-2026-05-30.sql`. **This file is the source of truth for P3 — also serves as a recovery backup.** Then a separate small data-only dump of the tables we'll copy/seed-from in P8: `supabase db dump --db-url <DEV_DB_URL> --data-only -t trivia_questions -t trivia_secrets -f backup/dev-trivia-data.sql` (45 non-test rows + matching secrets filtered later). | Both files exist, schema dump ≥ 200 KB and contains `CREATE TABLE public.games`, trivia dump non-empty. Open in editor, verify SQL is well-formed. | — |
 | **B9** | **EF source backup**: confirm all 5 EFs (`football-api-sync`, `sync-odds`, `nightly-summary`, `notify-admin`, `send-push`) are in `supabase/functions/*/index.ts` in git. Compare local `index.ts` mtime + size against dev EF version metadata from `list_edge_functions` audit. Flag drift. | Each EF: local SHA vs dev SHA reported. Drift → must reconcile before deploying to prod. | — |
 | **B10** | **Capture EF env vars from dev**: you go to Supabase dashboard → Edge Functions → Settings (per function) and screenshot the env var **names** (NOT values). Expected names per the audit: `FOOTBALL_API_KEY`, `OPENAI_API_KEY` (or `AI_Summary_GPT_Key`), `theoddsapi`, `RESEND_API_KEY`, `Notification_Key`, `ADMIN_EMAIL`, `FROM_ADDRESS`, plus auto-provided `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`. Save names to `backup/ef-env-vars.md`. | File exists, lists ≥ 7 secret names. | — |
 | **B11** | **Capture Auth dashboard settings from dev**: Site URL, redirect allowlist, email templates (confirm + invite + recovery), JWT expiry, refresh-token rotation, password min length, rate limits, third-party providers. You screenshot each tab. Save to `backup/auth-settings/`. | Folder contains ≥ 5 screenshots. | — |
@@ -150,8 +163,10 @@ PROD URL + anon key in S1.1/S1.2 get filled in **after** P2 creates the prod pro
 |---|---|---|
 | **P2** | MCP `create_project` (name `pickyguessers-prod`, region `eu-central-1`, org `gkubhajttcjseekpwoiy`, plan PRO). | `get_project` returns `ACTIVE_HEALTHY`, region matches. |
 | **V2** | Show project id, URL, anon key. STOP, wait. | — |
-| **P3** | Loop over the 84 applied dev migrations. For each: read local SQL file from `supabase/migrations/`, MCP `apply_migration` against prod. Stop on first error. Skip the 36 orphans per the B5 verdicts (none should be applied unless verdict said so). | `list_migrations` count = 84; first + last 3 names match dev; `list_tables` shows 27 tables. **Explore agent** runs row-by-row parity vs dev. |
-| **V3** | Show migration count, parity report. STOP, wait. | — |
+| **P3a** | **Use the dump produced in B8** (`backup/dev-schema-2026-05-30.sql`). No new dump needed. Quickly re-verify file integrity (size, SHA, first/last line) before applying. | SHA matches B8's; file still ≥ 200 KB; no edits since B8. |
+| **P3b** | **Apply bundle to fresh prod.** Use `psql` or MCP `execute_sql` in chunks to run `backup/dev-schema-2026-05-30.sql` against the new prod project. Stop on any error. | All CREATE statements complete. MCP `list_tables` on prod returns same 27 table names as dev. Same routine count, trigger count, RLS policy count. |
+| **P3c** | **Backfill migration tracking** (so future MCP `apply_migration` works on prod). Copy `supabase_migrations.schema_migrations` rows from dev → prod via `INSERT … SELECT` (just metadata: version + name; statements already executed via the dump). | Prod `SELECT COUNT(*) FROM supabase_migrations.schema_migrations` returns 86, identical version + name set to dev. |
+| **V3** | Show: dump file size, prod table count, prod routine count, prod migration tracking count. All match dev. **Explore agent** runs full row-set parity (tables, routines, triggers, RLS) dev↔prod and reports zero diffs. STOP, wait. | — |
 | **P4** | **You** set EF env vars in prod dashboard, per function, using the names captured in B10. Same values as dev (copy from dev dashboard). | I run a no-op invocation of each EF that touches each env var; if EF returns 200, env var is set. |
 | **V4** | Show curl smoke output per function. STOP, wait. | — |
 | **P5** | MCP `deploy_edge_function` for all 5 EFs from local `supabase/functions/*/index.ts`. | `list_edge_functions` → 5 ACTIVE, each at v1 (initial prod deploy). |
@@ -531,7 +546,8 @@ Every concern from this conversation → which step covers it.
 | Backups (GitHub + Supabase) | B1–B15 | Phase 0 |
 | Backup of `.claude/settings.local.json` | B4 | Phase 0 |
 | Backup of storage bucket | B12 | Phase 0 |
-| Migration orphan triage (36 files) | B5 | Phase 0 |
+| Migration reality check (Supabase is source of truth, files are documentation) | B5 + SOURCE OF TRUTH RULE | Phase 0 + Context |
+| Prod schema build via pg_dump (not file replay) | B8 → P3a/b/c | Phase 0 → Phase 2 |
 | Security advisor review (128 KB) | B6 | Phase 0 |
 | Auth dashboard settings export | B11 | Phase 0 |
 | EF env var names captured | B10 | Phase 0 |
