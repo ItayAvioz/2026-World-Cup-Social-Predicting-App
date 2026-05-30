@@ -244,6 +244,18 @@ body { overflow-x:hidden !important; overscroll-behavior-x:none !important; widt
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-msg">Done!</span></div>
 
+<script>
+  // DEV badge — fixed top-right red "DEV" pill, only on localhost/127.0.0.1
+  // Mirrors src/components/EnvBadge.jsx for the vanilla landing page.
+  (function() {
+    var h = location.hostname
+    if (h !== 'localhost' && h !== '127.0.0.1' && h !== '') return
+    var d = document.createElement('div')
+    d.textContent = 'DEV'
+    d.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;padding:3px 8px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none;font-family:system-ui,-apple-system,sans-serif'
+    document.body.appendChild(d)
+  })()
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script src="js/supabase.js"></script>
