@@ -164,11 +164,12 @@ All OTHER source changes (S1.1-S1.6, S1.8-S1.13) move to Phase 3.
 | **V6b** | Show cron list. STOP, wait. | — |
 | **P8** | Run `seed-prod.mjs` step **8a**: load 42 trivia questions + 42 trivia_secrets from `backup/dev-trivia-data.sql`. | Prod counts = 42 / 42. |
 | **V8** | Show counts. STOP, wait. | — |
-| **P9** | Invoke prod's `football-api-sync` EF `{mode:"setup_fixtures", league:<WC2026>, season:2026}`. `trg_auto_schedule_game` auto-creates per-game crons. | Prod `games` count ≈ 104, all rows have `api_fixture_id NOT NULL`. Phase distribution: 72 group + 16 r32 + 8 r16 + 4 qf + 2 sf + 1 third + 1 final. |
+| **P9** | Insert **72 group-stage games only** via probe-based SQL gen (mode:"probe" returns api-football fixtures → I convert to INSERTs with `api_fixture_id` set). `trg_auto_schedule_game` auto-creates 4 crons per game. **Do NOT insert knockout TBDs** — see Option C below. | Prod `games` count = 72 (group only). All have `api_fixture_id NOT NULL`. Phase = `'group'`. |
 | **V9** | Show fixture count + phase breakdown. STOP, wait. | — |
-| **P10** | Invoke prod's `football-api-sync` EF `{mode:"setup_rosters"}`. | Prod players ≥ 1100. |
-| **V10** | Show roster count + outliers. STOP, wait. | — |
-| **P11** | Verify all 4 per-game cron categories exist (auto-predict, ai-summary, ko-notif, sync-game) ≥ future-game count. | All ≥ 104. |
+| **P9b** | **Knockout insertion = Option C (per-round, on-demand).** Insert each KO row with real teams + api_fixture_id at INSERT time (not TBD). Insert as soon as matchup is confirmed (often before previous round ENDS). See `memory/feedback_knockout_insert_strategy.md`. **Option A (UPDATE trigger for self-healing on TBD rows) is documented as backup — apply only if Option C becomes operationally painful.** | Each KO INSERT verified via `SELECT jobname FROM cron.job WHERE jobname LIKE '%<game_id>%'` returns 4 rows. |
+| **P10** | Bootstrap rosters via new EF mode `bootstrap_squads` (added 2026-05-30, prod only). Invoke prod `football-api-sync` `{mode:"bootstrap_squads"}` → 49 api-football calls (1 /teams + 48 /players/squads) → returns teams + 360 forwards. Then apply seed SQL `supabase/migrations-prod/20260530000001_seed_teams_and_top_scorer_candidates.sql` (48 teams + name-mapping fix on `games` + 360 top_scorer_candidates). | `teams` = 48 (all api_team_id), `top_scorer_candidates` ≥ 350 (all api_player_id), `games` orphan team names = 0. |
+| **V10** | Show counts + verify. STOP, wait. | — |
+| **P11** | Verify all 4 per-game cron categories exist (auto-predict, ai-summary, ko-notif, sync-game) per group game ≥ 72 each. KO crons added per-round at P9b. | All group crons ≥ 72. |
 | **V11** | Show cron coverage table. STOP, wait. | — |
 | **P13** | Run parity-check (Explore agent): dev↔prod schema diff. | Zero functional diffs. |
 | **V13** | Show parity report. STOP, wait. | — |

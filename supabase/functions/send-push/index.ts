@@ -4,7 +4,16 @@ import webpush from 'npm:web-push'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const VAPID_PRIVATE_KEY = Deno.env.get('Notification_Key')!
-const VAPID_PUBLIC_KEY = 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'
+
+// Project-aware constants. Detected via SUPABASE_URL (auto-injected per project).
+// Each project has its own VAPID keypair + frontend origin for icon/badge URLs.
+const isProd = SUPABASE_URL.includes('asugxlvgcmkx')
+const VAPID_PUBLIC_KEY = isProd
+  ? 'BHqSjdXYn7Q8igXYPUtg9NXpKoGPVitpn1SXcKBUx627JiLT6MuoNR5UsH52Yz0cAljnzTVbVhShJrJTD-jG3BA'  // prod (pickyguessers.com)
+  : 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'  // dev (itayavioz.github.io)
+const ICON_BASE = isProd
+  ? 'https://pickyguessers.com'
+  : 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App'
 
 webpush.setVapidDetails('mailto:itayavioz1@gmail.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 
@@ -12,7 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 Deno.serve(async (req) => {
   try {
-    const { title, body, url = '/2026-World-Cup-Social-Predicting-App/app.html#/dashboard', user_ids } = await req.json()
+    const { title, body, url = '/app.html#/dashboard', user_ids } = await req.json()
 
     if (!title || !body) return new Response(JSON.stringify({ error: 'title and body required' }), { status: 400 })
 
@@ -25,8 +34,8 @@ Deno.serve(async (req) => {
       title,
       body,
       url,
-      icon: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png?v=3',
-      badge: 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-badge.png?v=3'
+      icon: `${ICON_BASE}/icon-notif.png?v=4`,
+      badge: `${ICON_BASE}/icon-badge.png?v=4`
     })
 
     // urgency:'high' is the only "Time Sensitive" lever PWAs have (Apple's native entitlement is locked).

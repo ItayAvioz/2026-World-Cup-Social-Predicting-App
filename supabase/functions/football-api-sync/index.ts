@@ -8,8 +8,10 @@
  *   probe_stats    — TEST: fetch full stats + players for one fixture
  *   probe_odds     — TEST: check API Football odds for a fixture
  *   snap_stats     — TEST: fetch team stats (no DB write) — red_cards player-derived
- *   setup          — one-time: map WC2026 fixture IDs to games table
- *   setup_lineups  — one-time: pull lineups → update top_scorer_candidates
+ *   setup            — one-time: map WC2026 fixture IDs to games table
+ *   setup_lineups    — one-time per-fixture: pull lineups → update top_scorer_candidates
+ *   bootstrap_squads — one-time PROD setup: pull all 48 teams + squads from api-football
+ *                       → returns raw data for `teams` + `top_scorer_candidates` seed
  *   verify         — 30min before KO: check API kickoff time matches DB
  *   sync           — KO+120min: write score + stats + unschedule crons
  *   sync_af_odds   — daily: write API Football pre-match h2h + over/under to game_odds
@@ -385,6 +387,63 @@ async function handleProbeOdds(fixture_id: number): Promise<Response> {
     pre_match:  { total: preOdds.length,  data: parseBookmakers(preOdds) },
     live:       { total: liveOdds.length, data: parseBookmakers(liveOdds) },
     live_today: { total: inplay.length,   sample: inplay.slice(0, 5).map((r: any) => ({ fixture_id: r.fixture?.id, home: r.teams?.home?.name, away: r.teams?.away?.name, status: r.fixture?.status?.short })) },
+  })
+}
+
+// ─── Mode: bootstrap_squads ───────────────────────────────────────────────────
+// One-time prod setup: pulls all 48 teams (with api_team_id) + each team's full
+// squad (with api_player_id) from api-football. Returns raw data — caller
+// generates SQL inserts for `teams` + `top_scorer_candidates` (filter forwards).
+// 49 api-football calls total (1 /teams + 48 /players/squads).
+
+async function handleBootstrapSquads(): Promise<Response> {
+  // 1. All 48 teams in the WC2026 league
+  const teamsRaw = await footballApiGet(`/teams?league=${WC_LEAGUE_ID}&season=${WC_SEASON}`)
+  const teams = teamsRaw.map((t: { team: { id: number; name: string; code: string | null; country: string; logo: string } }) => ({
+    api_team_id: t.team.id,
+    name:        t.team.name,
+    code:        t.team.code,
+    country:     t.team.country,
+    logo:        t.team.logo,
+  })).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+
+  // 2. Squad per team (serial — avoid 7500/day burst limits)
+  const squads: Array<{ api_team_id: number; team_name: string; players: Array<{ api_player_id: number; name: string; position: string; number: number | null; age: number | null }> }> = []
+  const errors: Array<{ api_team_id: number; team_name: string; error: string }> = []
+
+  for (const team of teams) {
+    try {
+      const squadRaw = await footballApiGet(`/players/squads?team=${team.api_team_id}`)
+      // /players/squads returns: [{ team: {id,name,...}, players: [{id, name, age, number, position, photo}] }]
+      const players = squadRaw[0]?.players ?? []
+      squads.push({
+        api_team_id: team.api_team_id,
+        team_name:   team.name,
+        players: players.map((p: { id: number; name: string; age: number; number: number | null; position: string; photo: string }) => ({
+          api_player_id: p.id,
+          name:          p.name,
+          position:      p.position,
+          number:        p.number,
+          age:           p.age,
+        })),
+      })
+    } catch (e) {
+      errors.push({ api_team_id: team.api_team_id, team_name: team.name, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const total_players = squads.reduce((s, q) => s + q.players.length, 0)
+  const total_forwards = squads.reduce((s, q) => s + q.players.filter(p => p.position === 'Attacker').length, 0)
+
+  return json({
+    status:         'bootstrap_squads_ok',
+    teams_count:    teams.length,
+    squads_count:   squads.length,
+    total_players,
+    total_forwards,
+    errors,
+    teams,
+    squads,
   })
 }
 
@@ -935,6 +994,8 @@ Deno.serve(async (req) => {
         return await handleSetup(supabase)
       case 'setup_lineups':
         return await handleSetupLineups(supabase, body.fixture_id)
+      case 'bootstrap_squads':
+        return await handleBootstrapSquads()
       case 'sync_stats':
         return await handleSyncStats(supabase, body.game_id)
       case 'sync_af_odds':
@@ -947,7 +1008,7 @@ Deno.serve(async (req) => {
         return await handleSync(supabase, body.game_id, phase, body.stage ?? 'initial')
       }
       default:
-        return json({ error: 'Unknown mode. Use: probe_date | probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | sync_af_odds | verify | sync' }, 400)
+        return json({ error: 'Unknown mode. Use: probe_date | probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | bootstrap_squads | sync_af_odds | verify | sync' }, 400)
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
