@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "cp index.html dist/ && cp host.html dist/ && cp team.html dist/ && cp -r css dist/ && cp -r js dist/ && cp assets/Trophy.webp dist/assets/",
+    "postbuild": "node scripts/postbuild.cjs",
     "preview": "vite preview",
     "deploy": "node scripts/deploy.cjs"
   },
