@@ -128,61 +128,67 @@ C:\Users\yonatanam\Desktop\wc2026-backup-2026-05-30\
 
 ---
 
-# PHASE 1 — Source changes (1 commit on `main`, after Phase 0 sign-off)
+# PHASE 1 — Create prod Supabase project (after Phase 0 sign-off)
+
+**Order flip (2026-05-30):** prod project is created FIRST so source files (Phase 2) can be written ONCE with the real PROD URL + anon key embedded. Avoids placeholder-then-edit double work.
+
+| # | Action | Verification |
+|---|---|---|
+| **P2** | MCP `create_project` (name `pickyguessers-prod`, region `eu-central-1`, org `gkubhajttcjseekpwoiy`, plan PRO). | `get_project` returns `ACTIVE_HEALTHY`, region matches. |
+| **V2** | Capture project id, URL, anon key. STOP, wait for "go". | — |
+
+---
+
+# PHASE 2 — Source changes (1 commit on `main`, after V2 sign-off)
+
+All edits use the real prod URL + anon key from V2 — no placeholders.
 
 | # | File | Change |
 |---|---|---|
-| S1.1 | `js/supabase.js` | Hostname switch with DEV + PROD constants. |
+| S1.1 | `js/supabase.js` | Hostname switch with DEV + PROD constants (PROD URL + anon key from V2). |
 | S1.2 | `src/lib/supabase.js` | Same pattern, ESM. |
 | S1.3 | `manifest.json` | `start_url: "/app.html#/dashboard"`, `scope: "/"`. |
 | S1.4 | `sw.js` | `ICON` → root-relative `/icon-notif.png?v=4`. SW_VERSION auto-bumped by deploy script. |
 | S1.5 | `src/app.html` | Strip `/2026-World-Cup-Social-Predicting-App/` prefix from preconnect, apple-touch-icon, manifest link, SW register. |
 | S1.6 | `src/pages/Groups.jsx` line 331 | Invite link → `https://pickyguessers.com/index.html?invite=${code}`. |
 | S1.7 | `supabase/functions/send-push/index.ts` | `icon`, `badge`, default URL → root-relative. |
-| S1.8 | `supabase/migrations-dev/.gitkeep` + `README.md` | NEW folder + convention doc. |
-| S1.9 | `scripts/seed-prod.mjs` | NEW: trivia copy + EF-triggered fixture/squad pull. |
-| S1.10 | `scripts/parity-check.mjs` | NEW: dev↔prod parity diff (used in V13). |
-| S1.11 | `scripts/deploy.cjs` | Patch: (a) write `CNAME` file to gh-pages root, (b) **prompt for typed `deploy` confirmation** before pushing (env tag shown in prompt). |
-| S1.12 | `src/components/EnvBadge.jsx` | NEW: fixed-position badge — red "DEV" on `localhost`/`127.0.0.1`, hidden on `pickyguessers.com`. Reads `window.location.hostname` once on mount. |
-| S1.13 | `src/components/Layout.jsx` | Mount `<EnvBadge />` so it shows on every page. |
-| S1.14 | `index.html` (vanilla landing) | Inline `<script>` injects the same DEV badge `<div>` for the non-React pages when hostname is localhost. |
-| S1.15 | `scripts/seed-prod.mjs` | Requires `--confirm-prod-write` CLI flag AND interactive typed confirmation matching the prod project ref. Refuses to run without both. |
-| S1.16 | `scripts/parity-check.mjs` | Refuses to run if `project_id` arg is missing or both args refer to the same project (prevents accidental "prod vs prod" comparison). |
-
-PROD URL + anon key in S1.1/S1.2 get filled in **after** P2 creates the prod project (step S7 in the cutover).
+| S1.8 | `scripts/seed-prod.mjs` | NEW: trivia load from `backup/dev-trivia-data.sql` + EF-triggered fixture/squad pull. Requires `--confirm-prod-write` flag. |
+| S1.9 | `scripts/parity-check.mjs` | NEW: dev↔prod parity diff (used in V13). Refuses if both args same project. |
+| S1.10 | `scripts/deploy.cjs` | Patch: (a) write `CNAME` file to gh-pages root, (b) typed `deploy` confirmation prompt. |
+| S1.11 | `src/components/EnvBadge.jsx` | NEW: fixed-position badge — red "DEV" on `localhost`/`127.0.0.1`, hidden on `pickyguessers.com`. |
+| S1.12 | `src/components/Layout.jsx` | Mount `<EnvBadge />` so it shows on every page. |
+| S1.13 | `index.html` (vanilla landing) | Inline `<script>` injects DEV badge for non-React pages when hostname is localhost. |
 
 | Gate | What |
 |---|---|
-| **V1** | `git diff` shown. Grep `2026-World-Cup-Social-Predicting-App` returns 0 hits across `src/`, `js/`, `supabase/functions/`. Grep hostname switch present in both supabase.js files. STOP, wait for "go". |
+| **V1** | `git diff` shown. Grep `2026-World-Cup-Social-Predicting-App` returns 0 hits across `src/`, `js/`, `supabase/functions/`. Both supabase.js files contain PROD URL from V2. STOP, wait. |
 
 ---
 
-# PHASE 2 — Prod Supabase project (after V1 sign-off)
+# PHASE 3 — Apply dev schema to prod (after V1 sign-off)
 
 | # | Action | Verification |
 |---|---|---|
-| **P2** | MCP `create_project` (name `pickyguessers-prod`, region `eu-central-1`, org `gkubhajttcjseekpwoiy`, plan PRO). | `get_project` returns `ACTIVE_HEALTHY`, region matches. |
-| **V2** | Show project id, URL, anon key. STOP, wait. | — |
-| **P3a** | **Use the dump produced in B8** (`backup/dev-schema-2026-05-30.sql`). No new dump needed. Quickly re-verify file integrity (size, SHA, first/last line) before applying. | SHA matches B8's; file still ≥ 200 KB; no edits since B8. |
-| **P3b** | **Apply bundle to fresh prod.** Use `psql` or MCP `execute_sql` in chunks to run `backup/dev-schema-2026-05-30.sql` against the new prod project. Stop on any error. | All CREATE statements complete. MCP `list_tables` on prod returns same 27 table names as dev. Same routine count, trigger count, RLS policy count. |
-| **P3c** | **Backfill migration tracking** (so future MCP `apply_migration` works on prod). Copy `supabase_migrations.schema_migrations` rows from dev → prod via `INSERT … SELECT` (just metadata: version + name; statements already executed via the dump). | Prod `SELECT COUNT(*) FROM supabase_migrations.schema_migrations` returns 86, identical version + name set to dev. |
-| **V3** | Show: dump file size, prod table count, prod routine count, prod migration tracking count. All match dev. **Explore agent** runs full row-set parity (tables, routines, triggers, RLS) dev↔prod and reports zero diffs. STOP, wait. | — |
-| **P4** | **You** set EF env vars in prod dashboard, per function, using the names captured in B10. Same values as dev (copy from dev dashboard). | I run a no-op invocation of each EF that touches each env var; if EF returns 200, env var is set. |
+| **P3a** | **Use the dump produced in B8** (`backup/dev-schema-2026-05-30.sql`). Quickly re-verify file integrity (size, SHA). | SHA matches B8's; file still ≥ 100 KB. |
+| **P3b** | **Apply bundle to fresh prod.** Use MCP `execute_sql` (chunked if needed) or `apply_migration` against the new prod project. Stop on first error. | All CREATE statements complete. MCP `list_tables` on prod returns same 27 table names as dev. |
+| **P3c** | **Backfill migration tracking** so future MCP `apply_migration` works on prod. Copy `supabase_migrations.schema_migrations` rows from dev → prod via `INSERT … SELECT` (metadata only). | Prod `SELECT COUNT(*) FROM supabase_migrations.schema_migrations` returns 86. |
+| **V3** | Show prod table count, routine count, trigger count, RLS policy count, migration tracking count. Explore agent runs full row-set parity dev↔prod and reports zero diffs. STOP, wait. | — |
+| **P4** | **You** set 5 EF env vars in prod dashboard, per `backup/ef-env-vars.md` checklist (same values as dev). | I curl-smoke each EF; 200 = env var set correctly. |
 | **V4** | Show curl smoke output per function. STOP, wait. | — |
-| **P5** | MCP `deploy_edge_function` for all 5 EFs from local `supabase/functions/*/index.ts`. | `list_edge_functions` → 5 ACTIVE, each at v1 (initial prod deploy). |
+| **P5** | MCP `deploy_edge_function` for all 5 EFs from local `supabase/functions/*/index.ts`. | `list_edge_functions` → 5 ACTIVE, each at v1. |
 | **V5** | Show name + version + status. STOP, wait. | — |
-| **P6** | **You** configure Auth in prod dashboard, using B11 screenshots as template: Site URL `https://pickyguessers.com`, redirect allowlist `https://pickyguessers.com/**` + `http://localhost:5173/**`, email templates (paste from B11), JWT expiry, rate limits. | You confirm visually; I sanity-check via `auth.config` introspection where possible. |
+| **P6** | **You** configure Auth in prod dashboard, per `backup/auth-settings.md`: Site URL `https://pickyguessers.com`, redirect allowlist, Confirm email OFF, HIBP password protection ON, percentage-based DB connections. | You confirm visually; I sanity-check via `auth.config`. |
 | **V6** | Confirm. STOP, wait. | — |
-| **S7** | Fill PROD URL + anon key into `js/supabase.js` and `src/lib/supabase.js`. | Grep both files show the new URL. |
-| **V7** | Show diff. STOP, wait. | — |
+| **P6b** | Run `backup/cron-globals-prod-bootstrap.sql` on prod (5 GLOBAL crons). | `SELECT COUNT(*) FROM cron.job WHERE jobname IN (...)` returns 5. |
+| **V6b** | Show cron list. STOP, wait. | — |
 
 ---
 
-# PHASE 3 — Seed prod data (after V7 sign-off)
+# PHASE 4 — Seed prod data (after V6b sign-off)
 
 | # | Action | Verification |
 |---|---|---|
-| **P8** | Run `seed-prod.mjs` step **8a**: copy 45 trivia questions + 45 trivia_secrets from dev → prod. Filter: `question_text NOT ILIKE '%[TEST]%'`. | Prod `SELECT COUNT(*) FROM trivia_questions` = 45, `trivia_secrets` = 45. **Explore agent** runs row hash diff dev↔prod (excluding test rows). |
+| **P8** | Run `seed-prod.mjs` step **8a**: load 42 trivia questions + 42 trivia_secrets from `backup/dev-trivia-data.sql` to prod. (Test rows already filtered during B8.) | Prod `SELECT COUNT(*) FROM trivia_questions` = 42, `trivia_secrets` = 42. |
 | **V8** | Show counts + sample diff. STOP, wait. | — |
 | **P9** | Run seed step **8b**: invoke prod's `football-api-sync` EF `{mode:"setup_fixtures", league:<WC2026>, season:2026}`. Inserts ~104 games; `trg_auto_schedule_game` auto-creates per-game crons. | Prod `games` count = ~104, all rows have `api_fixture_id NOT NULL`. **Explore agent** verifies phase distribution: 72 group + 16 r32 + 8 r16 + 4 qf + 2 sf + 1 third + 1 final. |
 | **V9** | Show fixture count + phase breakdown. STOP, wait. | — |
