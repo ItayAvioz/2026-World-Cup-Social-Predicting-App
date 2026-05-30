@@ -540,8 +540,8 @@ async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fix
     // Add new forwards not yet in candidates
     if (p.position === 'F') {
       const { error } = await supabase.from('top_scorer_candidates').upsert(
-        { name: p.name, team_name: p.team_name, api_player_id: p.api_player_id, is_active: true },
-        { onConflict: 'name', ignoreDuplicates: true }
+        { name: p.name, team_name: p.team_name, api_player_id: p.api_player_id, position: 'Attacker', is_active: true },
+        { onConflict: 'api_player_id', ignoreDuplicates: true }
       )
       if (!error) added++
     } else {
