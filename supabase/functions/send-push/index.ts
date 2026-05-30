@@ -11,9 +11,11 @@ const isProd = SUPABASE_URL.includes('asugxlvgcmkx')
 const VAPID_PUBLIC_KEY = isProd
   ? 'BHqSjdXYn7Q8igXYPUtg9NXpKoGPVitpn1SXcKBUx627JiLT6MuoNR5UsH52Yz0cAljnzTVbVhShJrJTD-jG3BA'  // prod (pickyguessers.com)
   : 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'  // dev (itayavioz.github.io)
-const ICON_BASE = isProd
-  ? 'https://pickyguessers.com'
-  : 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App'
+// Icons are identical between envs and only PROD hosts them at a public URL
+// (gh-pages serves pickyguessers.com after cutover; old itayavioz.github.io
+// subpath no longer exists). Use prod for both envs so dev push tests show
+// the right icon. VAPID stays env-specific (different keypairs per project).
+const ICON_BASE = 'https://pickyguessers.com'
 
 webpush.setVapidDetails('mailto:itayavioz1@gmail.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 
