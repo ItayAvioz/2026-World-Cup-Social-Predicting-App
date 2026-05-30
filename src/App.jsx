@@ -68,7 +68,17 @@ function AuthGuard({ children }) {
   return children
 }
 
-const VAPID_PUBLIC_KEY = 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'
+// Env-aware VAPID public key — MUST match the send-push EF's keypair for the
+// active Supabase project. Mismatch = push subscriptions created against the
+// wrong public key, push service rejects with signature mismatch.
+// Mirrors the hostname switch in src/lib/supabase.js + js/supabase.js.
+const _vapidIsProd = typeof window !== 'undefined' && (
+  window.location.hostname === 'pickyguessers.com' ||
+  window.location.hostname === 'www.pickyguessers.com'
+)
+const VAPID_PUBLIC_KEY = _vapidIsProd
+  ? 'BHqSjdXYn7Q8igXYPUtg9NXpKoGPVitpn1SXcKBUx627JiLT6MuoNR5UsH52Yz0cAljnzTVbVhShJrJTD-jG3BA'  // prod (pickyguessers.com)
+  : 'BJ20vvrlNRoYvxDAes6ZRhNx76MDWV-Oblzbohn98B2vGLZMSVQSbCG9CiVyqewFFFvV2E0WqPKmPiHmH0MMTac'  // dev (localhost / itayavioz.github.io)
 
 // Capture beforeinstallprompt at module level — fires before React mounts, would be missed by component-level listeners
 let _deferredInstallPrompt = null
