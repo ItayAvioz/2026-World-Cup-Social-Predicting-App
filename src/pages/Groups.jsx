@@ -328,7 +328,7 @@ export default function Groups() {
 
   // ── Invite: WhatsApp on mobile, copy link on desktop ──────────────────
   const copyInvite = async code => {
-    const link = `https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/index.html?invite=${code}`
+    const link = `https://pickyguessers.com/index.html?invite=${code}`
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
     if (isMobile) {
       const text = `Join my World Cup 2026 predictions group! 🏆\n${link}`
