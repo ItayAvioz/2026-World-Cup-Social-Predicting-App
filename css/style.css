@@ -1053,9 +1053,10 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .pk-result-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:.85rem 1rem; display:flex; flex-direction:column; gap:.5rem; }
 .pk-result-card-title { font-family:'Oswald',sans-serif; font-size:.78rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
 .pk-result-card-val { display:flex; align-items:center; gap:.45rem; font-size:.88rem; font-weight:600; color:var(--text); }
-.pk-result-card-scorers { display:flex; flex-direction:column; gap:.35rem; max-height:calc(5 * 2rem); overflow-y:auto; }
+.pk-result-card-scorers { display:flex; flex-direction:column; gap:.35rem; max-height:calc(4 * 1.25rem + 3 * .35rem); overflow-y:auto; }
 .pk-result-card-empty { font-size:.78rem; color:var(--muted); font-style:italic; }
 .pk-result-card-skeleton { height:1.2rem; border-radius:6px; background:var(--bg3); animation:sk-pulse 1.4s ease-in-out infinite; }
+.pk-result-rank { font-size:.72rem; color:var(--muted); font-weight:700; min-width:1rem; text-align:center; }
 .pk-result-goals { font-size:.75rem; color:var(--accent); font-weight:700; margin-left:auto; }
 @media (min-width:640px) {
   .pk-result-cards { grid-template-columns:1fr 1fr; }
@@ -1246,7 +1247,8 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .af-tab { padding:.45rem .8rem; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:'Inter',sans-serif; font-size:.82rem; cursor:pointer; white-space:nowrap; transition:all .15s; min-height:38px; max-width:120px; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
 .af-tab.active { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
 .af-tab:hover:not(.active) { border-color:var(--muted); color:var(--text); }
-.af-card-header { position:sticky; top:calc(58px + env(safe-area-inset-top)); z-index:5; background:var(--bg2); margin:-1.25rem -1rem .75rem; padding:.75rem 1rem; border-radius:var(--radius) var(--radius) 0 0; border-bottom:1px solid rgba(255,255,255,.05); display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+/* NOTE: header is NOT position:sticky — an opaque sticky header inside .af-card{overflow:hidden} overlapped/hid the summary text while scrolling (2026-05-27 fix). Keep it in normal flow. */
+.af-card-header { background:var(--bg2); margin:-1.25rem -1rem .75rem; padding:.75rem 1rem; border-radius:var(--radius) var(--radius) 0 0; border-bottom:1px solid rgba(255,255,255,.05); display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
 .af-new-badge { font-size:.6rem; font-weight:700; background:var(--accent); color:#000; border-radius:20px; padding:.1rem .45rem; letter-spacing:.4px; margin-left:.45rem; vertical-align:middle; flex-shrink:0; }
 .af-read-more { display:block; background:none; border:none; color:var(--accent); font-size:.82rem; cursor:pointer; padding:.45rem 0 0; font-family:'Inter',sans-serif; transition:opacity .15s; }
 .af-read-more:hover { opacity:.75; }
@@ -1416,3 +1418,28 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .htp-footer { padding-top:1.2rem; display:flex; flex-direction:column; gap:.5rem; }
 .htp-footer p { font-size:.84rem; color:var(--muted); line-height:1.65; }
 .htp-footer-cta { font-family:'Oswald',sans-serif; font-size:1.1rem; font-weight:700; color:var(--accent); letter-spacing:.5px; margin-top:.4rem; }
+
+/* ── Skeleton placeholders ─────────────────────────────────────────── */
+@keyframes wc-skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, #1a1a1a 0%, #232323 50%, #1a1a1a 100%);
+  background-size: 800px 100%;
+  border-radius: 6px;
+  animation: wc-skeleton-shimmer 1.4s linear infinite;
+}
+.skeleton-row { height: 1.4rem; margin: .55rem 0; }
+.skeleton-row.short { width: 55%; }
+.skeleton-row.medium { width: 75%; }
+.skeleton-card {
+  height: 5.5rem;
+  margin: .6rem 0;
+  border-radius: 12px;
+}
+.skeleton-stack { padding: .4rem 0; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
