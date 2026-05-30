@@ -4,14 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>⚽ WorldCup 2026 — Predict & Win</title>
+  <link rel="preconnect" href="https://flagcdn.com" crossorigin>
+  <link rel="dns-prefetch" href="https://flagcdn.com">
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#0a0a0a">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="WC2026">
-  <link rel="apple-touch-icon" href="/2026-World-Cup-Social-Predicting-App/icon-180.png">
-  <link rel="manifest" href="/2026-World-Cup-Social-Predicting-App/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="css/style.css?v=16">
   <style>
     /* ── INLINE CRITICAL MOBILE FIXES (always fresh, no cache) ── */
@@ -40,7 +42,7 @@ body { overflow-x:hidden !important; overscroll-behavior-x:none !important; widt
 
 <!-- HERO -->
 <section id="hero">
-  <img src="assets/Trophy.jfif" alt="" aria-hidden="true" class="hero-trophy-bg">
+  <img src="assets/Trophy.webp" alt="" aria-hidden="true" class="hero-trophy-bg">
   <div class="hero-badge">🏆 Official Prediction Game</div>
   <h1 class="hero-title">WORLD CUP<br><span class="gold">2026</span></h1>
   <p class="hero-sub">Predict. Compete. Dominate the leaderboard.</p>
@@ -242,6 +244,18 @@ body { overflow-x:hidden !important; overscroll-behavior-x:none !important; widt
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-msg">Done!</span></div>
 
+<script>
+  // DEV badge — fixed top-right red "DEV" pill, only on localhost/127.0.0.1
+  // Mirrors src/components/EnvBadge.jsx for the vanilla landing page.
+  (function() {
+    var h = location.hostname
+    if (h !== 'localhost' && h !== '127.0.0.1' && h !== '') return
+    var d = document.createElement('div')
+    d.textContent = 'DEV'
+    d.style.cssText = 'position:fixed;top:8px;right:8px;z-index:9999;padding:3px 8px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;letter-spacing:.5px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.5);pointer-events:none;font-family:system-ui,-apple-system,sans-serif'
+    document.body.appendChild(d)
+  })()
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script src="js/supabase.js"></script>
