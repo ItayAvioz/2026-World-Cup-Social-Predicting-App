@@ -134,8 +134,25 @@ const cnamePath = path.join(ROOT, 'CNAME')
 fs.writeFileSync(cnamePath, `${PROD_DOMAIN}\n`)
 console.log(`📍  CNAME → ${PROD_DOMAIN}`)
 
-// ── 9. Restore vanilla pages from main ──────────────────────────
-run('git checkout main -- team.html host.html')
+// ── 9. Restore vanilla pages + assets from main ─────────────────
+// The vanilla landing surface lives on main, not in dist/. Without explicit
+// restoration here, gh-pages keeps stale copies forever (the original Phase 3
+// cutover deploy missed updates to js/supabase.js, manifest.json, index.html
+// for exactly this reason — pickyguessers.com served stale dev-URL Supabase
+// client until we manually hotfixed via direct gh-pages commit).
+const vanillaFiles = [
+  'index.html',
+  'host.html',
+  'team.html',
+  'manifest.json',
+  'js/supabase.js',
+  'js/auth2.js',
+  'js/main.js',
+  'css/style.css',
+]
+for (const f of vanillaFiles) {
+  try { run(`git checkout main -- ${f}`) } catch { /* file may not exist on main */ }
+}
 
 // ── 10. Verify app.html ─────────────────────────────────────────
 const deployed = fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8')
@@ -158,7 +175,10 @@ if (failed.length) {
 console.log('✅  app.html verified')
 
 // ── 11. Commit ──────────────────────────────────────────────────
-const filesToAdd = ['app.html', 'sw.js', 'team.html', 'host.html', 'CNAME']
+const filesToAdd = [
+  'app.html', 'sw.js', 'CNAME',
+  ...vanillaFiles,  // index.html, host.html, team.html, manifest.json, js/*, css/style.css
+]
 for (const f of copiedAssets) filesToAdd.push(`assets/${f}`)
 run(`git add ${filesToAdd.join(' ')}`)
 
