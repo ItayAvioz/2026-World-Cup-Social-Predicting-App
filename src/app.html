@@ -4,7 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>WC2026 — Predict &amp; Win</title>
-  <link rel="preconnect" href="https://ftryuvfdihmhlzvbpfeu.supabase.co" crossorigin>
+  <script>
+    // Hostname-aware Supabase preconnect — must run before any other resource hints below
+    (function() {
+      var h = location.hostname
+      var isProd = h === 'pickyguessers.com' || h === 'www.pickyguessers.com'
+      var url = isProd ? 'https://asugxlvgcmkxspzokydk.supabase.co' : 'https://ftryuvfdihmhlzvbpfeu.supabase.co'
+      var l = document.createElement('link')
+      l.rel = 'preconnect'; l.href = url; l.crossOrigin = 'anonymous'
+      document.head.appendChild(l)
+    })()
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://flagcdn.com" crossorigin>
@@ -15,8 +25,8 @@
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="WC2026">
-  <link rel="apple-touch-icon" href="/2026-World-Cup-Social-Predicting-App/icon-180.png">
-  <link rel="manifest" href="/2026-World-Cup-Social-Predicting-App/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
   <div id="root"></div>
