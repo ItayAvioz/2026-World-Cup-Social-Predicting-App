@@ -12,15 +12,19 @@
 --   - First knockout INSERT (~Jun 27) eventually re-fires fn_schedule_ai_summaries
 --     but past dates can't backfire → group-stage AI summaries permanently lost
 --
--- FIX: daily safety cron at 06:30 UTC (before earliest WC kickoff at 07:30+ UTC).
+-- FIX: daily safety cron at 14:00 UTC = 17:00 Israel.
 -- Picks up any new qualifying groups (≥3 active members) and creates their
 -- per-group ai-summary crons for that day + all future match-days.
+-- 14:00 UTC chosen because:
+--   - Earliest WC group-stage KO is 16:00 UTC (Jun 15/18/21) → fires BEFORE any game starts
+--   - After work-hours user signups in Israel (most groups created before 17:00)
+--   - Rule: group created BEFORE 17:00 Israel = same-day roast works; AFTER = next day onwards
 --
 -- Idempotent: cron.schedule re-runs replace by jobname; fn_schedule_ai_summaries
 -- uses cron.schedule per (date, group) which is also idempotent. Safe to re-apply.
 
 SELECT cron.schedule(
   'ai-summary-schedule-daily',
-  '30 6 * * *',
+  '0 14 * * *',
   'SELECT public.fn_schedule_ai_summaries()'
 );
