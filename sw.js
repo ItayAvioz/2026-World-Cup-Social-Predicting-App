@@ -1,5 +1,5 @@
-const SW_VERSION = '31'
-const ICON = 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/icon-notif.png'
+const SW_VERSION = '32'
+const ICON = '/icon-notif.png'
 
 self.addEventListener('install', (event) => {
   self.skipWaiting()
@@ -28,7 +28,7 @@ self.addEventListener('push', (event) => {
       body: data.body ?? '',
       icon: data.icon ?? ICON,
       badge: data.badge ?? ICON,
-      data: { url: data.url ?? 'https://itayavioz.github.io/2026-World-Cup-Social-Predicting-App/app.html#/dashboard' }
+      data: { url: data.url ?? '/app.html#/dashboard' }
     })
   })())
 })
