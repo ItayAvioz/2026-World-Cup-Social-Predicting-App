@@ -619,51 +619,59 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* No groups — full template with placeholders */}
-          {!loading && !groupRanksLoading && groupRanks.length === 0 && (
-            <div className="dash-group-card">
-              <div className="dash-gc-name dash-stats-empty">Group Name</div>
-              <div className="dash-gc-ranks">
-                <div className="dash-gc-rank-item">
-                  <span className="dash-gc-rank-val dash-stats-empty">—</span>
-                  <span className="dash-gc-rank-label">Group Rank</span>
-                </div>
-                <div className="dash-gc-divider" />
-                <div className="dash-gc-rank-item">
-                  <span className="dash-gc-rank-val dash-stats-empty">—</span>
-                  <span className="dash-gc-rank-label">Global Rank</span>
-                </div>
-              </div>
-              <div className="dash-gc-divider-h" />
-              <div className="dash-stats-rows">
-                <div className="dash-stats-row">
-                  <span className="dash-stats-label">Champion</span>
-                  <div className="dash-stats-pick">
-                    <span className="dash-stats-val dash-stats-empty">—</span>
+          {/* No groups — Personal card with the user's solo picks + ungrouped stats */}
+          {!loading && !groupRanksLoading && groupRanks.length === 0 && (() => {
+            const personalChamp = champPickMap[null] ?? champPickMap['null']
+            const personalTs    = topScorerMap[null] ?? topScorerMap['null']
+            const personalStats = predStats?.[null] ?? predStats?.['null']
+            const personalLb    = lb.find(r => r.user_id === user?.id && r.group_id === null)
+            const champFlag     = personalChamp?.team ? TEAM_CODE[personalChamp.team] : null
+            return (
+              <div className="dash-group-card">
+                <div className="dash-gc-name">Personal</div>
+                <div className="dash-gc-ranks">
+                  <div className="dash-gc-rank-item">
+                    <span className="dash-gc-rank-val dash-stats-empty">—</span>
+                    <span className="dash-gc-rank-label">Group Rank</span>
+                  </div>
+                  <div className="dash-gc-divider" />
+                  <div className="dash-gc-rank-item">
+                    <span className="dash-gc-rank-val">{personalLb?.rank ? `#${personalLb.rank}` : (lbLoading ? '…' : '—')}</span>
+                    <span className="dash-gc-rank-label">Global Rank</span>
                   </div>
                 </div>
-                <div className="dash-stats-row">
-                  <span className="dash-stats-label">Top Scorer</span>
-                  <span className="dash-stats-val dash-stats-empty">—</span>
+                <div className="dash-gc-divider-h" />
+                <div className="dash-stats-rows">
+                  <div className="dash-stats-row">
+                    <span className="dash-stats-label">Champion</span>
+                    <div className="dash-stats-pick">
+                      {champFlag && <img src={`https://flagcdn.com/w40/${champFlag}.png`} alt={personalChamp.team + ' flag'} className="dash-stats-flag" />}
+                      <span className="dash-stats-val">{personalChamp?.team ?? <span className="dash-stats-empty">—</span>}</span>
+                    </div>
+                  </div>
+                  <div className="dash-stats-row">
+                    <span className="dash-stats-label">Top Scorer</span>
+                    <span className="dash-stats-val">{personalTs?.player_name ?? <span className="dash-stats-empty">—</span>}</span>
+                  </div>
+                </div>
+                <div className="dash-gc-divider-h" />
+                <div className="dash-metrics">
+                  <div className="dash-metric">
+                    <span className="dash-metric-val">{personalStats?.exactPct ?? 0}%</span>
+                    <span className="dash-metric-label">Exact</span>
+                  </div>
+                  <div className="dash-metric">
+                    <span className="dash-metric-val">{personalStats?.predictPct ?? 0}%</span>
+                    <span className="dash-metric-label">Predicted</span>
+                  </div>
+                  <div className="dash-metric">
+                    <span className="dash-metric-val">{personalStats?.streak ?? 0}</span>
+                    <span className="dash-metric-label">Streak {(personalStats?.streak ?? 0) < 0 ? '❄️' : '🔥'}</span>
+                  </div>
                 </div>
               </div>
-              <div className="dash-gc-divider-h" />
-              <div className="dash-metrics">
-                <div className="dash-metric">
-                  <span className="dash-metric-val">{predStats?.predictPct ?? 0}%</span>
-                  <span className="dash-metric-label">Predicted</span>
-                </div>
-                <div className="dash-metric">
-                  <span className="dash-metric-val">{predStats?.exactPct ?? 0}%</span>
-                  <span className="dash-metric-label">Exact</span>
-                </div>
-                <div className="dash-metric">
-                  <span className="dash-metric-val">{predStats?.streak ?? 0}</span>
-                  <span className="dash-metric-label">Streak {(predStats?.streak ?? 0) < 0 ? '❄️' : '🔥'}</span>
-                </div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </aside>
 
       </div>{/* end dash-layout */}
