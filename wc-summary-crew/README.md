@@ -89,8 +89,10 @@ cp .env.example .env
 #   OPENAI_API_KEY        → the same key the EF uses
 #   (Start with the DEV project, ftryuvfdihmhlzvbpfeu, to play safely)
 
-# 3. A test that needs no keys at all — verifies the Stats agent
-python -m tests.test_stats
+# 3. Tests — no keys needed for unit + integration (e2e is opt-in, see below)
+pip install -r requirements-dev.txt
+pytest                       # 20 tests in ~2s
+python -m tests.test_stats   # or a zero-dependency quick check (Stats only, no pytest)
 
 # 4. Shadow mode — run on a real (group, date) and compare to the EF
 python -m scripts.run_shadow --recent                   # list available (group_id, date)
@@ -104,6 +106,28 @@ uvicorn app.main:app --reload
 
 Deploying it to a real always-on host (Railway, ~$5/mo) is covered in
 [`docs/01-server-and-deploy.md`](docs/01-server-and-deploy.md).
+
+---
+
+## Testing 🧪
+
+The full pyramid — run it all with `pytest` (20 tests, no keys needed; the 2 live tests skip
+unless you opt in):
+
+| Layer | What it covers | Keys? |
+|---|---|---|
+| **Unit** | Stats agent (incl. empty group, no-finished-games, null prediction, mover≠flop), the `JudgeVerdict` weighting + `PlayerStyle` validation, the match-day window math | none |
+| **Integration** | the crew **retry loop** with mocked agents (ships-on-good / retries-and-keeps-best / stops-at-max), and the **API** via `TestClient` (the auth gate → 401, errors don't leak internals) | none (mocked) |
+| **E2E** | the real crew against live Supabase + OpenAI — produces Hebrew, valid judge score | yes (opt-in) |
+
+```bash
+pytest                                  # unit + integration (offline, ~2s)
+RUN_E2E=1 SUPABASE_SERVICE_KEY=... OPENAI_API_KEY=... \
+  E2E_GROUP_ID=<uuid> E2E_DATE=2026-06-15 pytest tests/test_e2e.py   # the live run
+```
+
+The LLM and DB are mocked in the integration layer, so the suite is fast, free, and
+deterministic — only the explicit `RUN_E2E` test spends tokens.
 
 ---
 

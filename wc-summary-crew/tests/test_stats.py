@@ -120,6 +120,38 @@ def test_null_prediction_does_not_crash():
     assert brazil.group_exact_n == 1  # alice still nailed 2-1; bob's null pred is ignored
 
 
+def test_empty_group_does_not_crash():
+    gd = {
+        "group_id": "g",
+        "date": "2026-06-15",
+        "global_rank": {},
+        "group": {"group_name": "Empty FC", "members": [], "games": [], "leaderboard": []},
+    }
+    block = stats.run(gd)
+    assert block.members == []
+    assert block.games == []
+    assert block.leader is None and block.biggest_mover is None
+    assert block.group_name == "Empty FC"
+
+
+def test_no_finished_games_are_skipped():
+    gd = copy.deepcopy(GROUP_DAY)
+    for g in gd["group"]["games"]:
+        g["score_home"] = None  # not played yet
+        g["score_away"] = None
+    block = stats.run(gd)
+    assert block.games == []      # nothing finished → no GameStats
+    assert block.members          # members are still reported
+
+
+def test_mover_and_flop_differ_with_multiple_active():
+    # GROUP_DAY has alice + bob active (carol inactive); the dedup keeps them distinct.
+    block = stats.run(GROUP_DAY)
+    assert block.biggest_mover == "alice"
+    assert block.most_painful_miss == "bob"
+    assert block.biggest_mover != block.most_painful_miss
+
+
 def _run_all() -> int:
     failures = 0
     for name, fn in sorted(globals().items()):
