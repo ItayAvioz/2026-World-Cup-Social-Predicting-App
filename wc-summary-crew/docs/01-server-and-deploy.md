@@ -68,7 +68,7 @@ cron / HTTP  ──▶  FastAPI service (Python, always-on)
 
 ### למה בכלל לעבור?
 
-1. **אוריינות backend** — לבנות service אמיתי זו הקפיצה של Track F (Production).
+1. **אוריינות backend** — לבנות service אמיתי זו יכולת חשובה לשחרור מוצרים ל Production.
 2. **ארכיטקטורה נקייה** — מקום אחד אחראי על שפה, במקום לכוונן 5 prompts.
 3. **תשתית אחת פותחת 3 פיצ'רים** — אותו service יכול להריץ בעתיד גם את ה-chatbot (RAG) וגם
    את ה-gate לנרשמים.
