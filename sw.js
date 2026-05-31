@@ -1,4 +1,4 @@
-const SW_VERSION = '35'
+const SW_VERSION = '36'
 const ICON = '/icon-notif.png'
 
 self.addEventListener('install', (event) => {
