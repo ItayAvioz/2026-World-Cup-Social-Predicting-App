@@ -213,7 +213,7 @@ export default function Dashboard() {
       const groupById = Object.fromEntries(groupsList.map(g => [g.id, g.name]))
       const myMap = {}
       dayPreds.forEach(p => {
-        const groupName = groupById[p.group_id]
+        const groupName = p.group_id === null ? 'Personal' : groupById[p.group_id]
         if (!groupName) return
         if (!myMap[p.game_id]) myMap[p.game_id] = []
         myMap[p.game_id].push({ groupId: p.group_id, groupName, pred_home: p.pred_home, pred_away: p.pred_away })
@@ -513,15 +513,16 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      {/* Per-group prediction chips */}
-                      {!finished && groups.length > 0 && (
+                      {/* Per-group prediction chips (solo user: single "Personal" chip → group_id=NULL) */}
+                      {!finished && (
                         <div className="tg-group-preds">
-                          {groups.map(grp => {
-                            const gp = gamePreds.find(p => p.groupId === grp.id)
+                          {(groups.length > 0 ? groups : [{ id: null, name: 'Personal' }]).map(grp => {
+                            const gp = gamePreds.find(p => (p.groupId ?? null) === grp.id)
+                            const groupParam = grp.id ? `?group=${grp.id}` : ''
                             return (
-                              <button key={grp.id}
+                              <button key={grp.id ?? 'solo'}
                                 className={`tg-group-chip${gp ? ' tg-group-chip--predicted' : ''}`}
-                                onClick={() => navigate(`/game/${game.id}?group=${grp.id}`)}>
+                                onClick={() => navigate(`/game/${game.id}${groupParam}`)}>
                                 <span className="tg-chip-group">{grp.name}</span>
                                 {gp
                                   ? <span className="tg-chip-score">{gp.pred_home}–{gp.pred_away}</span>
