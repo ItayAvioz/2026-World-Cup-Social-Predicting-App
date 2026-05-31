@@ -17,7 +17,7 @@ BEGIN;
 UPDATE public.top_scorer_candidates SET is_active = false;
 
 -- Chunk 1/4: 300 rows
-INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position, is_active)
+INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position)
 VALUES
   (34374,'Song Bumkeun','South Korea','Goalkeeper'),
   (2890,'Jo Hyeonwoo','South Korea','Goalkeeper'),
@@ -326,7 +326,7 @@ ON CONFLICT (api_player_id) DO UPDATE SET
   is_active = true;
 
 -- Chunk 2/4: 300 rows
-INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position, is_active)
+INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position)
 VALUES
   (1138,'Timothy Weah','United States','Midfielder'),
   (51248,'Alejandro Zendejas','United States','Midfielder'),
@@ -635,7 +635,7 @@ ON CONFLICT (api_player_id) DO UPDATE SET
   is_active = true;
 
 -- Chunk 3/4: 300 rows
-INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position, is_active)
+INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position)
 VALUES
   (16871,'Ahmed Sayed "Zizo"','Egypt','Midfielder'),
   (70535,'Ibrahim Adel','Egypt','Attacker'),
@@ -944,7 +944,7 @@ ON CONFLICT (api_player_id) DO UPDATE SET
   is_active = true;
 
 -- Chunk 4/4: 151 rows
-INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position, is_active)
+INSERT INTO public.top_scorer_candidates (api_player_id, name, team_name, position)
 VALUES
   (47237,'Luis Suarez','Colombia','Attacker'),
   (24810,'Jhon Cordoba','Colombia','Attacker'),
@@ -1102,6 +1102,15 @@ ON CONFLICT (api_player_id) DO UPDATE SET
   team_name = EXCLUDED.team_name,
   position = EXCLUDED.position,
   is_active = true;
+
+-- Backfill flag_code from teams table (M124b fix 2026-05-31).
+-- Reason: INSERT VALUES rows above do not carry flag_code per-player, so newly inserted players
+-- were left with flag_code = NULL (140 of 1051 rows on first apply). teams.flag_code is the source
+-- of truth — every team_name in this seed exists in public.teams.
+UPDATE public.top_scorer_candidates tsc
+SET flag_code = t.flag_code
+FROM public.teams t
+WHERE tsc.team_name = t.name AND tsc.flag_code IS NULL AND tsc.is_active = true;
 
 COMMIT;
 

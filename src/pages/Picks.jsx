@@ -21,6 +21,16 @@ const PHASE_LABEL = {
 }
 const PHASE_ORDER = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final']
 
+const TEAM_SHORT = {
+  'Bosnia-Herzegovina': 'Bosnia',
+  'Czech Republic':     'Czechia',
+  'United States':      'USA',
+  'Saudi Arabia':       'Saudi',
+  'South Africa':       'S. Africa',
+  'Ivory Coast':        'Ivory C.',
+  'New Zealand':        'N. Zealand',
+}
+
 function FlagImg({ name, code, className }) {
   const [broken, setBroken] = useState(false)
   if (!code || broken) return <div className={`${className}-ph`} />
@@ -771,7 +781,7 @@ export default function Picks() {
                                     onClick={() => setPlayerTeamFilter(playerTeamFilter === t ? '' : t)}
                                   >
                                     {code && <FlagImg name={t} code={code} className="pk-player-flag" style={{ marginRight:4, verticalAlign:'middle' }} />}
-                                    {t}
+                                    {TEAM_SHORT[t] ?? t}
                                   </button>
                                 )
                               })}

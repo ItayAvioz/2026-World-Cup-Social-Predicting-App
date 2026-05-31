@@ -39,7 +39,13 @@ EF used for enrichment: `football-api-sync v9` on PROD (`/players/squads`, `/pla
    - `C:\tmp\enrich_squads3.py` — fallback against `/players?team&season=2026`
    - `C:\tmp\apply_lookup_strict.py` — final fallback via `/players/profiles`
 4. **Apply incremental SQL** to PROD: same UPSERT pattern as M124, but only for newly-matched players or teams that changed
-5. **Verify**: every team has between 23-26 active rows in `top_scorer_candidates`
+5. **ALWAYS append the flag backfill** (M124 hit this — 140/1051 rows landed without flag_code):
+   ```sql
+   UPDATE public.top_scorer_candidates tsc SET flag_code = t.flag_code
+   FROM public.teams t
+   WHERE tsc.team_name = t.name AND tsc.flag_code IS NULL AND tsc.is_active = true;
+   ```
+6. **Verify**: every team has between 23-26 active rows in `top_scorer_candidates`; `COUNT(*) FILTER (WHERE flag_code IS NULL) = 0`
 
 ### Expected outcome
 - Match rate ≥ 99%
