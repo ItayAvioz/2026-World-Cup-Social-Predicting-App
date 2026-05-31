@@ -10,8 +10,9 @@
  *   snap_stats     — TEST: fetch team stats (no DB write) — red_cards player-derived
  *   setup            — one-time: map WC2026 fixture IDs to games table
  *   setup_lineups    — one-time per-fixture: pull lineups → update top_scorer_candidates
- *   bootstrap_squads — one-time PROD setup: pull all 48 teams + squads from api-football
- *                       → returns raw data for `teams` + `top_scorer_candidates` seed
+ *   bootstrap_squads — (v3 PROD) pull /players/squads for each WC team (current call-up only — incomplete for national teams)
+ *   probe_wc_team    — (v5) TEST: paginate /players?team=X&league=1&season=2026 for ONE team — verify Kane-class players present
+ *   bootstrap_wc_players — (v5) one-time PROD seed: paginate /players?league=1&season=2026 for all 48 teams — registered WC2026 squads, includes foreign-league players
  *   verify         — 30min before KO: check API kickoff time matches DB
  *   sync           — KO+120min: write score + stats + unschedule crons
  *   sync_af_odds   — daily: write API Football pre-match h2h + over/under to game_odds
@@ -28,8 +29,6 @@ const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const FOOTBALL_API_KEY = Deno.env.get('FOOTBALL_API_KEY')!
 
-// ─── CORS + Response helpers ──────────────────────────────────────────────────
-
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -42,8 +41,6 @@ function json(data: unknown, status = 200): Response {
     headers: { 'Content-Type': 'application/json', ...CORS }
   })
 }
-
-// ─── EF error reporter ────────────────────────────────────────────────────────
 
 async function reportEfError(
   supabase: ReturnType<typeof createClient>,
@@ -63,8 +60,6 @@ async function reportEfError(
   }
 }
 
-// ─── Team name normalisation ──────────────────────────────────────────────────
-
 const TEAM_ALIASES: Record<string, string> = {
   "cote divoire":   "ivory coast",
   "korea republic": "south korea",
@@ -78,14 +73,12 @@ function normalizeTeam(name: string): string {
   let n = name
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   return TEAM_ALIASES[n] ?? n
 }
-
-// ─── API-Football fetch ───────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function footballApiGet(path: string): Promise<any[]> {
@@ -102,7 +95,38 @@ async function footballApiGet(path: string): Promise<any[]> {
   return data.response ?? []
 }
 
-// ─── Derive knockout winner ───────────────────────────────────────────────────
+// v5: full response (includes paging) — needed for /players endpoint
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function footballApiGetRaw(path: string): Promise<any> {
+  const res = await fetch(`${FOOTBALL_API_BASE}${path}`, {
+    headers: { 'x-apisports-key': FOOTBALL_API_KEY }
+  })
+  if (res.status === 429) throw new Error('RATE_LIMIT')
+  if (res.status === 401 || res.status === 403) throw new Error('AUTH_FAILED: check FOOTBALL_API_KEY secret')
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  if (data.errors && typeof data.errors === 'object' && Object.keys(data.errors).length > 0) {
+    throw new Error(`API returned errors: ${JSON.stringify(data.errors)}`)
+  }
+  return data
+}
+
+// v5: paginate /players?team=X&league=Y&season=Z until paging.total
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function footballApiPaginate(basePath: string, maxPages = 20): Promise<any[]> {
+  const all: any[] = []
+  let page = 1
+  while (page <= maxPages) {
+    const sep  = basePath.includes('?') ? '&' : '?'
+    const data = await footballApiGetRaw(`${basePath}${sep}page=${page}`)
+    const arr  = data.response ?? []
+    all.push(...arr)
+    const total = data.paging?.total ?? 1
+    if (page >= total) break
+    page++
+  }
+  return all
+}
 
 function deriveKnockoutWinner(
   status: string,
@@ -125,10 +149,6 @@ function deriveKnockoutWinner(
   }
   return goals.home > goals.away ? teams.home.name : teams.away.name
 }
-
-// ─── Mode: probe_date ─────────────────────────────────────────────────────────
-// Fetch fixtures for given dates + league IDs (default PL=39, La Liga=140)
-// Useful for testing nightly-summary with real fixture data.
 
 async function handleProbeDate(
   dates: string[],
@@ -163,8 +183,6 @@ async function handleProbeDate(
   return json({ status: 'probe_date_ok', dates, league_ids: leagueIds, season, total, results })
 }
 
-// ─── Mode: probe_ns ───────────────────────────────────────────────────────────
-
 async function handleProbeNs(limit: number): Promise<Response> {
   const today = new Date().toISOString().split('T')[0]
   const fixtures = await footballApiGet(`/fixtures?date=${today}&status=NS`)
@@ -184,8 +202,6 @@ async function handleProbeNs(limit: number): Promise<Response> {
   }))
   return json({ status: 'probe_ns_ok', today, total_ns: fixtures.length, fixtures: mapped })
 }
-
-// ─── Mode: probe ──────────────────────────────────────────────────────────────
 
 async function handleProbe(league_id: number, season: number, limit: number): Promise<Response> {
   const status   = await footballApiGet('/status')
@@ -240,8 +256,6 @@ async function handleProbe(league_id: number, season: number, limit: number): Pr
     today_sample:    todaySample,
   })
 }
-
-// ─── Mode: probe_stats ────────────────────────────────────────────────────────
 
 async function handleProbeStats(fixture_id: number): Promise<Response> {
   const [teamStatsArr, playerStatsArr, topScorers] = await Promise.all([
@@ -299,10 +313,6 @@ async function handleProbeStats(fixture_id: number): Promise<Response> {
   return json({ status: 'probe_stats_ok', fixture_id, team_stats, all_players, total_players: all_players.length, top_scorers })
 }
 
-// ─── Mode: snap_stats ────────────────────────────────────────────────────────
-// Lightweight probe — no DB write. Used for post-game polling CSV.
-// red_cards derived from player stats (VAR-correct), not team stat aggregate.
-
 async function handleSnapStats(fixture_id: number, snap_label: string): Promise<Response> {
   const [statsArr, playerStatsArr] = await Promise.all([
     footballApiGet(`/fixtures/statistics?fixture=${fixture_id}`),
@@ -310,14 +320,10 @@ async function handleSnapStats(fixture_id: number, snap_label: string): Promise<
   ])
   const pulled_at = new Date().toISOString()
 
-  // Derive red_cards per team from player data (VAR-correct)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const redCardsByTeam: Record<string, number> = {}
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const te of playerStatsArr) {
     const teamName: string = te.team?.name ?? ''
     let count = 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const pe of (te.players ?? [])) {
       count += pe.statistics?.[0]?.cards?.red ?? 0
     }
@@ -347,7 +353,7 @@ async function handleSnapStats(fixture_id: number, snap_label: string): Promise<
       corners:          stat('Corner Kicks'),
       fouls:            stat('Fouls'),
       yellow_cards:     stat('Yellow Cards'),
-      red_cards:        redCardsByTeam[ts.team.name] ?? 0,  // player-derived, VAR-correct
+      red_cards:        redCardsByTeam[ts.team.name] ?? 0,
       offsides:         stat('Offsides'),
       possession:       stat('Ball Possession'),
       passes_total:     stat('Total passes'),
@@ -359,8 +365,6 @@ async function handleSnapStats(fixture_id: number, snap_label: string): Promise<
 
   return json({ status: 'snap_ok', fixture_id, snap_label, pulled_at, teams })
 }
-
-// ─── Mode: probe_odds ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleProbeOdds(fixture_id: number): Promise<Response> {
@@ -390,14 +394,7 @@ async function handleProbeOdds(fixture_id: number): Promise<Response> {
   })
 }
 
-// ─── Mode: bootstrap_squads ───────────────────────────────────────────────────
-// One-time prod setup: pulls all 48 teams (with api_team_id) + each team's full
-// squad (with api_player_id) from api-football. Returns raw data — caller
-// generates SQL inserts for `teams` + `top_scorer_candidates` (filter forwards).
-// 49 api-football calls total (1 /teams + 48 /players/squads).
-
 async function handleBootstrapSquads(): Promise<Response> {
-  // 1. All 48 teams in the WC2026 league
   const teamsRaw = await footballApiGet(`/teams?league=${WC_LEAGUE_ID}&season=${WC_SEASON}`)
   const teams = teamsRaw.map((t: { team: { id: number; name: string; code: string | null; country: string; logo: string } }) => ({
     api_team_id: t.team.id,
@@ -407,14 +404,12 @@ async function handleBootstrapSquads(): Promise<Response> {
     logo:        t.team.logo,
   })).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
 
-  // 2. Squad per team (serial — avoid 7500/day burst limits)
   const squads: Array<{ api_team_id: number; team_name: string; players: Array<{ api_player_id: number; name: string; position: string; number: number | null; age: number | null }> }> = []
   const errors: Array<{ api_team_id: number; team_name: string; error: string }> = []
 
   for (const team of teams) {
     try {
       const squadRaw = await footballApiGet(`/players/squads?team=${team.api_team_id}`)
-      // /players/squads returns: [{ team: {id,name,...}, players: [{id, name, age, number, position, photo}] }]
       const players = squadRaw[0]?.players ?? []
       squads.push({
         api_team_id: team.api_team_id,
@@ -447,7 +442,100 @@ async function handleBootstrapSquads(): Promise<Response> {
   })
 }
 
-// ─── Mode: setup ──────────────────────────────────────────────────────────────
+// v7: probe ONE team via /players?team=X&season=Y (paginated; no league filter — that limits to
+// already-played WC tournament matches and is empty until June 11). Union 2026 + 2025 → covers
+// players who have played in either qualifiers/friendlies (2026) or last year (2025), incl. Kane.
+async function handleProbeWcTeam(api_team_id: number): Promise<Response> {
+  if (!api_team_id) return json({ error: 'api_team_id required' }, 400)
+
+  const raw2026 = await footballApiPaginate(`/players?team=${api_team_id}&season=2026`)
+  const raw2025 = await footballApiPaginate(`/players?team=${api_team_id}&season=2025`)
+  const merged: Map<number, any> = new Map()
+  for (const r of [...raw2026, ...raw2025]) {
+    const id = r.player?.id
+    if (!id) continue
+    const existing = merged.get(id)
+    const pos = r.statistics?.[0]?.games?.position ?? existing?.position ?? null
+    if (!existing) {
+      merged.set(id, {
+        api_player_id: id,
+        name:          r.player.name,
+        firstname:     r.player.firstname,
+        lastname:      r.player.lastname,
+        nationality:   r.player.nationality,
+        team:          r.statistics?.[0]?.team?.name,
+        position:      pos,
+        appearences:   r.statistics?.[0]?.games?.appearences,
+      })
+    } else if (!existing.position && pos) {
+      existing.position = pos
+    }
+  }
+  const players = Array.from(merged.values())
+
+  return json({
+    status:        'probe_wc_team_ok',
+    api_team_id,
+    total_players: players.length,
+    players,
+  })
+}
+
+// v8: PROD bulk pull — all 48 WC2026 teams via /players?team=X&season=2026 (paginated).
+// Serial team loop with 200ms throttle to stay under api-football rate limit.
+// Probe verified Kane is in 2026 data, so we skip the 2025 union (was hitting rate limit).
+// Dedupe by api_player_id (safe — national-team rosters don't have within-team duplicates).
+async function handleBootstrapWcPlayers(): Promise<Response> {
+  const teamsRaw = await footballApiGet(`/teams?league=${WC_LEAGUE_ID}&season=${WC_SEASON}`)
+  const teams = teamsRaw.map((t: { team: { id: number; name: string } }) => ({
+    api_team_id: t.team.id,
+    name:        t.team.name,
+  })).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+
+  const squads: Array<{ api_team_id: number; team_name: string; players: Array<{ api_player_id: number; name: string; position: string | null }> }> = []
+  const errors: Array<{ api_team_id: number; team_name: string; error: string }> = []
+
+  for (const team of teams) {
+    try {
+      const raw = await footballApiPaginate(`/players?team=${team.api_team_id}&season=${WC_SEASON}`)
+      const merged: Map<number, { api_player_id: number; name: string; position: string | null }> = new Map()
+      for (const r of raw) {
+        const id = r.player?.id
+        if (!id) continue
+        const pos = r.statistics?.[0]?.games?.position ?? null
+        const existing = merged.get(id)
+        if (!existing) {
+          merged.set(id, { api_player_id: id, name: r.player.name, position: pos })
+        } else if (!existing.position && pos) {
+          existing.position = pos
+        }
+      }
+      squads.push({
+        api_team_id: team.api_team_id,
+        team_name:   team.name,
+        players:     Array.from(merged.values()),
+      })
+    } catch (e) {
+      errors.push({ api_team_id: team.api_team_id, team_name: team.name, error: e instanceof Error ? e.message : String(e) })
+    }
+    // Throttle: 200ms between teams (~5 teams/sec) to respect api-football rate limit
+    await new Promise(r => setTimeout(r, 200))
+  }
+
+  const total_players  = squads.reduce((s, q) => s + q.players.length, 0)
+  const total_forwards = squads.reduce((s, q) => s + q.players.filter(p => p.position === 'Attacker').length, 0)
+
+  return json({
+    status:         'bootstrap_wc_players_ok',
+    teams_count:    teams.length,
+    squads_count:   squads.length,
+    total_players,
+    total_forwards,
+    errors,
+    teams,
+    squads,
+  })
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleSetup(supabase: ReturnType<typeof createClient>): Promise<Response> {
@@ -456,7 +544,7 @@ async function handleSetup(supabase: ReturnType<typeof createClient>): Promise<R
   const { data: games, error: dbErr } = await supabase
     .from('games')
     .select('id, team_home, team_away, kick_off_time, api_fixture_id')
-    .range(0, 99999)   // defensive: bypass Supabase JS-client 1000-row default cap
+    .range(0, 99999)
   if (dbErr) throw new Error(`DB error: ${dbErr.message}`)
 
   const matched: Array<{ game_id: string; api_fixture_id: number }> = []
@@ -486,16 +574,10 @@ async function handleSetup(supabase: ReturnType<typeof createClient>): Promise<R
   return json({ status: 'done', matched: matched.length, skipped, unmatched })
 }
 
-// ─── Mode: setup_lineups ──────────────────────────────────────────────────────
-// Fetches lineups for a played fixture → updates top_scorer_candidates:
-//   - Fills missing api_player_id for existing candidates (name match)
-//   - Adds new F (forward) players not yet in the table
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fixture_id: number): Promise<Response> {
   const lineups = await footballApiGet(`/fixtures/lineups?fixture=${fixture_id}`)
 
-  // Flatten all players from both teams
   const allPlayers: Array<{ api_player_id: number; name: string; position: string; team_name: string; number: number }> = []
   for (const team of lineups) {
     for (const entry of [...(team.startXI ?? []), ...(team.substitutes ?? [])]) {
@@ -514,7 +596,6 @@ async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fix
   let updated = 0, added = 0, skipped = 0
 
   for (const p of allPlayers) {
-    // Already in table by api_player_id?
     const { data: byId } = await supabase
       .from('top_scorer_candidates')
       .select('id')
@@ -522,7 +603,6 @@ async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fix
       .maybeSingle()
     if (byId) { skipped++; continue }
 
-    // Existing candidate missing api_player_id — match by last name
     const lastName = p.name.split(' ').pop() ?? p.name
     const { data: byName } = await supabase
       .from('top_scorer_candidates')
@@ -537,7 +617,6 @@ async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fix
       continue
     }
 
-    // Add new forwards not yet in candidates
     if (p.position === 'F') {
       const { error } = await supabase.from('top_scorer_candidates').upsert(
         { name: p.name, team_name: p.team_name, api_player_id: p.api_player_id, position: 'Attacker', is_active: true },
@@ -553,14 +632,12 @@ async function handleSetupLineups(supabase: ReturnType<typeof createClient>, fix
     status: 'lineups_done',
     fixture_id,
     total_players: allPlayers.length,
-    updated,   // filled missing api_player_id for existing candidates
-    added,     // new forwards added to top_scorer_candidates
+    updated,
+    added,
     skipped,
     players: allPlayers,
   })
 }
-
-// ─── Mode: verify ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleVerify(supabase: ReturnType<typeof createClient>, game_id: string): Promise<Response> {
@@ -580,18 +657,12 @@ async function handleVerify(supabase: ReturnType<typeof createClient>, game_id: 
   if (diffMin > 5) {
     await supabase.from('games').update({ kick_off_time: apiDate.toISOString() }).eq('id', game_id)
     await supabase.rpc('fn_schedule_game_sync', { p_game_id: game_id })
-    // KO moved >5min — also move the auto-predict + kickoff-notification crons to the new time.
     await supabase.rpc('fn_reschedule_game', { p_game_id: game_id })
     return json({ status: 'updated', db_time: dbDate.toISOString(), api_time: apiDate.toISOString(), diff_minutes: diffMin })
   }
 
   return json({ status: 'match', kick_off_time: dbDate.toISOString(), diff_minutes: diffMin })
 }
-
-// ─── Mode: sync_stats ────────────────────────────────────────────────────────
-// Backfill: re-runs writeStats for all finished games (score_home IS NOT NULL)
-// that have api_fixture_id set. Writes team stats, player stats, and events.
-// Pass game_id to run for a single game only.
 
 async function handleSyncStats(
   supabase: ReturnType<typeof createClient>,
@@ -602,7 +673,7 @@ async function handleSyncStats(
     .select('id, api_fixture_id, team_home, team_away')
     .not('score_home', 'is', null)
     .not('api_fixture_id', 'is', null)
-    .range(0, 99999)   // defensive: finished games grow season-to-season; bypass 1000-row JS cap
+    .range(0, 99999)
 
   if (game_id) query = query.eq('id', game_id)
 
@@ -622,10 +693,6 @@ async function handleSyncStats(
 
   return json({ status: 'done', total: games.length, results })
 }
-
-// ─── Mode: sync_af_odds ───────────────────────────────────────────────────────
-// Daily: fetches API Football pre-match h2h + Over/Under 2.5 for upcoming games
-// Writes to game_odds table with source = 'bet365' (prefers bookmaker ID 8, fallback to first)
 
 const BET365_ID = 8
 
@@ -655,7 +722,6 @@ async function handleSyncAfOdds(supabase: ReturnType<typeof createClient>): Prom
       if (!oddsEntry) continue
 
       const bookmakers: any[] = oddsEntry.bookmakers ?? []
-      // Prefer Bet365 (ID 8), fall back to first available bookmaker
       const bookmaker = bookmakers.find((b: any) => b.id === BET365_ID) ?? bookmakers[0]
       if (!bookmaker) continue
 
@@ -665,15 +731,10 @@ async function handleSyncAfOdds(supabase: ReturnType<typeof createClient>): Prom
       const totalsBet = (bookmaker.bets ?? []).find((b: any) => b.name === 'Goals Over/Under')
       if (!h2hBet) continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const homeOdds = parseFloat(h2hBet.values?.find((v: any) => v.value === 'Home')?.odd) || null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const drawOdds = parseFloat(h2hBet.values?.find((v: any) => v.value === 'Draw')?.odd) || null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const awayOdds = parseFloat(h2hBet.values?.find((v: any) => v.value === 'Away')?.odd) || null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const over25   = parseFloat(totalsBet?.values?.find((v: any) => v.value === 'Over 2.5')?.odd)  || null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const under25  = parseFloat(totalsBet?.values?.find((v: any) => v.value === 'Under 2.5')?.odd) || null
 
       const usedBookmaker = bookmaker.id === BET365_ID ? 'bet365' : `af_${bookmaker.id}`
@@ -699,8 +760,6 @@ async function handleSyncAfOdds(supabase: ReturnType<typeof createClient>): Prom
 
   return json({ status: 'done', games_checked: games.length, matched, errors })
 }
-
-// ─── Mode: sync ───────────────────────────────────────────────────────────────
 
 async function handleSync(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -808,8 +867,6 @@ async function handleSync(
     return json({ status: 'penalty_in_progress', game_id })
   }
 
-  // Terminal statuses — game will never reach FT (postponed/abandoned/cancelled/etc).
-  // Stop retrying + alert admin to handle manually, instead of looping +5min forever.
   const TERMINAL_STATUSES = ['PST', 'SUSP', 'ABD', 'CANC', 'AWD', 'WO', 'INT']
   if (TERMINAL_STATUSES.includes(status)) {
     await supabase.rpc('fn_unschedule_game_sync', { p_game_id: game_id })
@@ -817,7 +874,6 @@ async function handleSync(
     return json({ status: 'terminal_stopped', game_id, api_status: status })
   }
 
-  // Safety net: hard-stop if still unfinished 6h after kickoff (covers any unknown status).
   if (game.kick_off_time && Date.now() > new Date(game.kick_off_time as string).getTime() + 6 * 60 * 60 * 1000) {
     await supabase.rpc('fn_unschedule_game_sync', { p_game_id: game_id })
     await reportEfError(supabase, 'crash', `Game still unfinished 6h after KO (status '${status}') — sync stopped, manual handling required`, { game_id, api_status: status })
@@ -827,11 +883,6 @@ async function handleSync(
   await supabase.rpc('fn_schedule_retry_sync', { p_game_id: game_id, p_stage: stage, p_delay_minutes: 5 })
   return json({ status: 'retry_scheduled', game_id, api_status: status })
 }
-
-// ─── Combined stats writer ────────────────────────────────────────────────────
-// Fetches /fixtures/statistics + /fixtures/players in one parallel call.
-// red_cards in game_team_stats derived from player data (VAR-correct):
-//   team stat aggregate counts the card event; player stat reflects final decision.
 
 async function writeStats(
   supabase: ReturnType<typeof createClient>,
@@ -844,7 +895,6 @@ async function writeStats(
       footballApiGet(`/fixtures/players?fixture=${api_fixture_id}`),
     ])
 
-    // ── Derive red_cards per team from player stats (VAR-correct) ──
     const redCardsByTeam: Record<string, number> = {}
     for (const teamEntry of playerStatsArr) {
       const teamName: string = teamEntry.team?.name ?? ''
@@ -855,7 +905,6 @@ async function writeStats(
       redCardsByTeam[teamName] = count
     }
 
-    // ── Write game_team_stats ──
     for (const teamStats of teamStatsArr) {
       const team = teamStats.team.name
 
@@ -883,7 +932,7 @@ async function writeStats(
         corners:          stat('Corner Kicks')    ?? 0,
         fouls:            stat('Fouls')           ?? 0,
         yellow_cards:     stat('Yellow Cards')    ?? 0,
-        red_cards:        redCardsByTeam[team]    ?? 0,  // player-derived, VAR-correct
+        red_cards:        redCardsByTeam[team]    ?? 0,
         offsides:         stat('Offsides')        ?? 0,
         passes_total:     stat('Total passes'),
         passes_accuracy:  stat('Passes %'),
@@ -891,7 +940,6 @@ async function writeStats(
       }, { onConflict: 'game_id,team' })
     }
 
-    // ── Write game_player_stats ──
     const rows = []
     for (const teamEntry of playerStatsArr) {
       const teamName = teamEntry.team?.name ?? ''
@@ -925,7 +973,6 @@ async function writeStats(
       await supabase.from('game_player_stats').upsert(rows, { onConflict: 'game_id,api_player_id' })
     }
 
-    // ── Write game_events (goals + red cards with minute data) ──
     const eventsRaw = await footballApiGet(`/fixtures/events?fixture=${api_fixture_id}`)
     const eventRows: Array<{
       game_id: string; team: string; player_name: string | null
@@ -964,8 +1011,6 @@ async function writeStats(
   }
 }
 
-// ─── Entry point ─────────────────────────────────────────────────────────────
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -996,6 +1041,10 @@ Deno.serve(async (req) => {
         return await handleSetupLineups(supabase, body.fixture_id)
       case 'bootstrap_squads':
         return await handleBootstrapSquads()
+      case 'probe_wc_team':
+        return await handleProbeWcTeam(body.api_team_id)
+      case 'bootstrap_wc_players':
+        return await handleBootstrapWcPlayers()
       case 'sync_stats':
         return await handleSyncStats(supabase, body.game_id)
       case 'sync_af_odds':
@@ -1008,7 +1057,7 @@ Deno.serve(async (req) => {
         return await handleSync(supabase, body.game_id, phase, body.stage ?? 'initial')
       }
       default:
-        return json({ error: 'Unknown mode. Use: probe_date | probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | bootstrap_squads | sync_af_odds | verify | sync' }, 400)
+        return json({ error: 'Unknown mode. Use: probe_date | probe | probe_stats | snap_stats | probe_odds | setup | setup_lineups | bootstrap_squads | probe_wc_team | bootstrap_wc_players | sync_af_odds | verify | sync' }, 400)
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

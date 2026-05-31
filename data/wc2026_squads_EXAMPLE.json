@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "purpose": "Example of how ONE team should look when filled — use as reference for wc2026_squads.json. Do NOT import this file; it's documentation only.",
+    "fifa_source_url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/all-world-cup-squad-announcements"
+  },
+  "example_team": {
+    "team_name": "England",
+    "group": "L",
+    "flag_code": "gb-eng",
+    "team_status": "announced",
+    "announced_date": "2026-05-29",
+    "players": [
+      { "number": 1,  "name": "Jordan Pickford",          "position": "GK", "club": "Everton",            "dob": "1994-03-07", "api_player_id": null },
+      { "number": 12, "name": "Dean Henderson",           "position": "GK", "club": "Crystal Palace",     "dob": "1997-03-12", "api_player_id": null },
+      { "number": 23, "name": "Aaron Ramsdale",           "position": "GK", "club": "Southampton",        "dob": "1998-05-14", "api_player_id": null },
+      { "number": 2,  "name": "Kyle Walker",              "position": "DF", "club": "Manchester City",    "dob": "1990-05-28", "api_player_id": null },
+      { "number": 3,  "name": "Luke Shaw",                "position": "DF", "club": "Manchester United",  "dob": "1995-07-12", "api_player_id": null },
+      { "number": 4,  "name": "Declan Rice",              "position": "MF", "club": "Arsenal",            "dob": "1999-01-14", "api_player_id": null },
+      { "number": 5,  "name": "John Stones",              "position": "DF", "club": "Manchester City",    "dob": "1994-05-28", "api_player_id": null },
+      { "number": 6,  "name": "Marc Guéhi",               "position": "DF", "club": "Crystal Palace",     "dob": "2000-07-13", "api_player_id": null },
+      { "number": 7,  "name": "Bukayo Saka",              "position": "FW", "club": "Arsenal",            "dob": "2001-09-05", "api_player_id": null },
+      { "number": 8,  "name": "Jude Bellingham",          "position": "MF", "club": "Real Madrid",        "dob": "2003-06-29", "api_player_id": null },
+      { "number": 9,  "name": "Harry Kane",               "position": "FW", "club": "Bayern Munich",      "dob": "1993-07-28", "api_player_id": null },
+      { "number": 10, "name": "Phil Foden",               "position": "MF", "club": "Manchester City",    "dob": "2000-05-28", "api_player_id": null },
+      { "number": 11, "name": "Anthony Gordon",           "position": "FW", "club": "Newcastle United",   "dob": "2001-02-24", "api_player_id": null }
+    ],
+    "_filler_note": "This is only 13 of 26 — fill all 26 per team. Order doesn't matter; sorting by number is convenient but not required. dob is OPTIONAL (use empty string if FIFA doesn't show it). api_player_id stays null — it's filled automatically by the enrichment pass on June 4-6."
+  },
+  "what_NOT_to_change": [
+    "team_name — must match the canonical name in our DB exactly (don't change 'Bosnia-Herzegovina' to 'Bosnia & Herzegovina')",
+    "group, flag_code — pre-filled, do not edit",
+    "Field names (number, name, position, club, dob, api_player_id) — keep as-is"
+  ],
+  "what_to_change": [
+    "team_status: pending → announced (when FIFA publishes)",
+    "announced_date: null → 'YYYY-MM-DD'",
+    "players: [] → fill with 26 player objects"
+  ]
+}
