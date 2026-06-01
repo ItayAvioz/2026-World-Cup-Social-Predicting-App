@@ -472,11 +472,15 @@ export default function Game() {
                   const isHome = ev.team === game.team_home
                   const icon   = ev.event_type === 'goal' ? '⚽' : '🟥'
                   const min    = ev.minute_extra ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
+                  // Tag goal type from api detail: penalty (P) / own goal (OG).
+                  // Own goal is tagged by api to the beneficiary team, so it already
+                  // renders on the correct side — no remap needed.
+                  const tag    = ev.detail === 'Own Goal' ? ' (OG)' : ev.detail === 'Penalty' ? ' (P)' : ''
                   return (
                     <div className="gm-event-row" key={i}>
-                      <span className="gm-event-home">{isHome ? `${ev.player_name ?? '?'} ${min}` : ''}</span>
+                      <span className="gm-event-home">{isHome ? `${ev.player_name ?? '?'} ${min}${tag}` : ''}</span>
                       <span className="gm-event-icon">{icon}</span>
-                      <span className="gm-event-away">{!isHome ? `${min} ${ev.player_name ?? '?'}` : ''}</span>
+                      <span className="gm-event-away">{!isHome ? `${min}${tag} ${ev.player_name ?? '?'}` : ''}</span>
                     </div>
                   )
                 })}
