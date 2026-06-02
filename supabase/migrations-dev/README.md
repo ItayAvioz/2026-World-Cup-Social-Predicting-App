@@ -29,6 +29,8 @@ mcp__supabase__apply_migration project_id=ftryuvfdihmhlzvbpfeu
 
 Never with `project_id=<PROD_REF>` (that would leak experimental schema to prod).
 
-## Folder is currently empty
+## Applied dev-only migrations
 
-Use it when you start chatbot R&D.
+| File | Purpose |
+|---|---|
+| `20260602120000_disable_noisy_dev_crons.sql` | Unschedules 510 noisy cron jobs (ai-summary daily, ai-summary-push, ai-summary-schedule-daily, ko-notif, trivia, af-odds-daily, verify-game, sync-game) + `admin-daily-digest` so dev makes **zero** external calls (push / OpenAI / api-football / odds / admin email) while used only for screen-recording demos. Keeps DB-only jobs (auto-predict, auto-assign-picks, cleanup-push-subs-daily). Pattern-based + idempotent. Applied to dev `ftryuvfdihmhlzvbpfeu` 2026-06-02. **To re-enable** later: re-run the scheduling functions (`SELECT fn_schedule_ai_summaries();`, re-add `admin-daily-digest` / `af-odds-daily` / `trivia-push-daily` crons, and re-seed ko-notif/verify/sync via `trg_auto_schedule_game` or the backfill loops). |
