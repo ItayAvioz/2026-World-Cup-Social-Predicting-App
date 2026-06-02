@@ -38,7 +38,7 @@
       "group": "A",
       "flag_code": "mx",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -281,7 +281,7 @@
       "group": "A",
       "flag_code": "kr",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -343,8 +343,8 @@
           "position": "DF",
           "club": "Gangwon",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -52,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -389,15 +389,6 @@
           "club": "Crvena Zvezda",
           "dob": "",
           "api_player_id": 197985,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Cho Yumin",
-          "position": "DF",
-          "club": "Sharjah",
-          "dob": "",
-          "api_player_id": 34239,
           "id_verification": "fully_verified"
         },
         {
@@ -516,6 +507,15 @@
           "dob": "",
           "api_player_id": 34710,
           "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Cho Wije",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": -51,
+          "id_verification": "placeholder_lineup_pending"
         }
       ]
     },
@@ -524,7 +524,7 @@
       "group": "A",
       "flag_code": "cz",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -550,8 +550,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 66347,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -636,15 +636,6 @@
         },
         {
           "number": null,
-          "name": "Pavel Bucha",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 66249,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
           "name": "Lukas Cerv",
           "position": "MF",
           "club": "",
@@ -659,15 +650,6 @@
           "club": "",
           "dob": "",
           "api_player_id": 25348,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Tomas Ladra",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 66253,
           "id_verification": "fully_verified"
         },
         {
@@ -762,15 +744,6 @@
         },
         {
           "number": null,
-          "name": "Christophe Kabongo",
-          "position": "FW",
-          "club": "",
-          "dob": "",
-          "api_player_id": 271869,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
           "name": "Jan Kuchta",
           "position": "FW",
           "club": "",
@@ -794,7 +767,7 @@
       "group": "A",
       "flag_code": "za",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -883,8 +856,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -50,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1037,7 +1010,7 @@
       "group": "B",
       "flag_code": "ca",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -1072,8 +1045,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 407017,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -1117,8 +1090,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -21,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1181,15 +1154,6 @@
           "club": "",
           "dob": "",
           "api_player_id": 35570,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Marcelo Flores",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 284061,
           "id_verification": "fully_verified"
         },
         {
@@ -1280,7 +1244,7 @@
       "group": "B",
       "flag_code": "ba",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -1315,8 +1279,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -20,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1567,8 +1531,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 534032,
-          "id_verification": "fully_verified"
+          "api_player_id": -84,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1585,8 +1549,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -42,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1603,8 +1567,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -43,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1630,8 +1594,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -46,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1702,8 +1666,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -44,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1720,8 +1684,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -45,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1792,8 +1756,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -41,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -1838,7 +1802,7 @@
       "group": "B",
       "flag_code": "ch",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -2081,7 +2045,7 @@
       "group": "C",
       "flag_code": "br",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -2134,8 +2098,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 618,
-          "id_verification": "fully_verified"
+          "api_player_id": -66,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -2324,7 +2288,7 @@
       "group": "C",
       "flag_code": "ma",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -2341,8 +2305,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -40,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -2350,8 +2314,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 2703,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -2567,7 +2531,7 @@
       "group": "C",
       "flag_code": "gb-sct",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -2719,17 +2683,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
-        },
-        {
-          "number": null,
-          "name": "Billy Gilmour",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 130423,
-          "id_verification": "fully_verified"
+          "api_player_id": 343576,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -2802,6 +2757,15 @@
           "dob": "",
           "api_player_id": 430201,
           "id_verification": "squad_missing_name_flagged"
+        },
+        {
+          "number": null,
+          "name": "Tyler Fletcher",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": -49,
+          "id_verification": "placeholder_lineup_pending"
         }
       ]
     },
@@ -2810,7 +2774,7 @@
       "group": "C",
       "flag_code": "ht",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -3053,7 +3017,7 @@
       "group": "D",
       "flag_code": "us",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -3178,8 +3142,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 1150,
+          "id_verification": "lookup_match"
         },
         {
           "number": null,
@@ -3296,34 +3260,242 @@
       "group": "D",
       "flag_code": "py",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
-        { "number": null, "name": "Orlando Gill",        "position": "GK", "club": "", "dob": "", "api_player_id": 70852,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Roberto Fernandez",   "position": "GK", "club": "", "dob": "", "api_player_id": 535737, "id_verification": "squad_missing_name_ok" },
-        { "number": null, "name": "Gaston Olveira",      "position": "GK", "club": "", "dob": "", "api_player_id": 51733,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Juan Cáceres",        "position": "DF", "club": "", "dob": "", "api_player_id": 195992, "id_verification": "fully_verified" },
-        { "number": null, "name": "Gustavo Velázquez",   "position": "DF", "club": "", "dob": "", "api_player_id": 35808,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Gustavo Gómez",       "position": "DF", "club": "", "dob": "", "api_player_id": 2502,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Junior Alonso",       "position": "DF", "club": "", "dob": "", "api_player_id": 2499,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Jose Canale",         "position": "DF", "club": "", "dob": "", "api_player_id": 70732,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Omar Alderete",       "position": "DF", "club": "", "dob": "", "api_player_id": 6168,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Alexandro Maidana",   "position": "DF", "club": "", "dob": "", "api_player_id": 425020, "id_verification": "fully_verified" },
-        { "number": null, "name": "Fabian Balbuena",     "position": "DF", "club": "", "dob": "", "api_player_id": 2500,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Diego Gómez",         "position": "MF", "club": "", "dob": "", "api_player_id": 278370, "id_verification": "fully_verified" },
-        { "number": null, "name": "Mauricio Magalhães",  "position": "MF", "club": "", "dob": "", "api_player_id": 106485, "id_verification": "fully_verified" },
-        { "number": null, "name": "Damián Bobadilla",    "position": "MF", "club": "", "dob": "", "api_player_id": 195107, "id_verification": "fully_verified" },
-        { "number": null, "name": "Braian Ojeda",        "position": "MF", "club": "", "dob": "", "api_player_id": 70767,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Andrés Cubas",        "position": "MF", "club": "", "dob": "", "api_player_id": 6236,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Matías Galarza",      "position": "MF", "club": "", "dob": "", "api_player_id": 305832, "id_verification": "fully_verified" },
-        { "number": null, "name": "Alejandro Gamarra",   "position": "MF", "club": "", "dob": "", "api_player_id": null,   "id_verification": "no_api_id" },
-        { "number": null, "name": "Gustavo Caballero",   "position": "FW", "club": "", "dob": "", "api_player_id": 119128, "id_verification": "fully_verified" },
-        { "number": null, "name": "Ramón Sosa",          "position": "FW", "club": "", "dob": "", "api_player_id": 196298, "id_verification": "fully_verified" },
-        { "number": null, "name": "Alex Arce",           "position": "FW", "club": "", "dob": "", "api_player_id": 95460,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Isidro Pitta",        "position": "FW", "club": "", "dob": "", "api_player_id": 70670,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Gabriel Ávalos",      "position": "FW", "club": "", "dob": "", "api_player_id": 6483,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Miguel Almirón",      "position": "FW", "club": "", "dob": "", "api_player_id": 2507,   "id_verification": "fully_verified" },
-        { "number": null, "name": "Julio Enciso",        "position": "FW", "club": "", "dob": "", "api_player_id": 70747,  "id_verification": "fully_verified" },
-        { "number": null, "name": "Antonio Sanabria",    "position": "FW", "club": "", "dob": "", "api_player_id": 2522,   "id_verification": "fully_verified" }
+        {
+          "number": null,
+          "name": "Orlando Gill",
+          "position": "GK",
+          "club": "",
+          "dob": "",
+          "api_player_id": 70852,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Roberto Fernandez",
+          "position": "GK",
+          "club": "",
+          "dob": "",
+          "api_player_id": 535737,
+          "id_verification": "squad_missing_name_ok"
+        },
+        {
+          "number": null,
+          "name": "Gaston Olveira",
+          "position": "GK",
+          "club": "",
+          "dob": "",
+          "api_player_id": 51733,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Juan Cáceres",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 195992,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Gustavo Velázquez",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 35808,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Gustavo Gómez",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 2502,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Junior Alonso",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 2499,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Jose Canale",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 70732,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Omar Alderete",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 6168,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Alexandro Maidana",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 425020,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Fabian Balbuena",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 2500,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Diego Gómez",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 278370,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Mauricio Magalhães",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 106485,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Damián Bobadilla",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 195107,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Braian Ojeda",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 70767,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Andrés Cubas",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 6236,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Matías Galarza",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 305832,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Alejandro Gamarra",
+          "position": "MF",
+          "club": "",
+          "dob": "",
+          "api_player_id": -19,
+          "id_verification": "placeholder_lineup_pending"
+        },
+        {
+          "number": null,
+          "name": "Gustavo Caballero",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 119128,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Ramón Sosa",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 196298,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Alex Arce",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 95460,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Isidro Pitta",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 70670,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Gabriel Ávalos",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 6483,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Miguel Almirón",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 2507,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Julio Enciso",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 70747,
+          "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Antonio Sanabria",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 2522,
+          "id_verification": "fully_verified"
+        }
       ]
     },
     {
@@ -3331,7 +3503,7 @@
       "group": "D",
       "flag_code": "tr",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -3375,8 +3547,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 49866,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3384,8 +3556,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 61837,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3411,8 +3583,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 50057,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3420,8 +3592,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 1361,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3429,8 +3601,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -57,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -3474,8 +3646,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 412703,
-          "id_verification": "fully_verified"
+          "api_player_id": -83,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -3501,8 +3673,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -56,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -3573,8 +3745,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 63274,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3609,8 +3781,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 339883,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -3627,8 +3799,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 222557,
+          "id_verification": "lookup_match"
         },
         {
           "number": null,
@@ -3655,7 +3827,7 @@
       "group": "D",
       "flag_code": "au",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -3898,7 +4070,7 @@
       "group": "E",
       "flag_code": "de",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -4023,8 +4195,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 18970,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -4141,7 +4313,7 @@
       "group": "E",
       "flag_code": "ci",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -4384,7 +4556,7 @@
       "group": "E",
       "flag_code": "ec",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -4627,7 +4799,7 @@
       "group": "E",
       "flag_code": "cw",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -4635,8 +4807,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -22,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -4870,7 +5042,7 @@
       "group": "F",
       "flag_code": "nl",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -4932,8 +5104,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 38747,
-          "id_verification": "squad_ok_name_suspect"
+          "api_player_id": -71,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -5013,8 +5185,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 36905,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -5113,7 +5285,7 @@
       "group": "F",
       "flag_code": "jp",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -5356,7 +5528,7 @@
       "group": "F",
       "flag_code": "se",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -5590,7 +5762,7 @@
       "group": "F",
       "flag_code": "tn",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -5598,8 +5770,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -55,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -5616,8 +5788,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -53,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -5634,8 +5806,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -54,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -5833,7 +6005,7 @@
       "group": "G",
       "flag_code": "be",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -6057,8 +6229,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 1417,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -6076,7 +6248,7 @@
       "group": "G",
       "flag_code": "ir",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -6089,21 +6261,12 @@
         },
         {
           "number": null,
-          "name": "Seyed Hossein Hosseini",
+          "name": "Hossein Hosseini",
           "position": "GK",
           "club": "",
           "dob": "",
           "api_player_id": 29755,
           "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Mohammad Khalifeh",
-          "position": "GK",
-          "club": "",
-          "dob": "",
-          "api_player_id": 409495,
-          "id_verification": "squad_missing_name_ok"
         },
         {
           "number": null,
@@ -6116,12 +6279,12 @@
         },
         {
           "number": null,
-          "name": "Danial Eiri",
+          "name": "Daniyal Eiri",
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -28,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6129,8 +6292,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -30,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6147,8 +6310,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -31,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6175,15 +6338,6 @@
           "club": "",
           "dob": "",
           "api_player_id": 533035,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Omid Noorafkan",
-          "position": "DF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 29775,
           "id_verification": "fully_verified"
         },
         {
@@ -6215,7 +6369,7 @@
         },
         {
           "number": null,
-          "name": "Mehdi Ghaedi",
+          "name": "Mehdi Ghayedi",
           "position": "MF",
           "club": "",
           "dob": "",
@@ -6300,17 +6454,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
-        },
-        {
-          "number": null,
-          "name": "Hadi Habibinejad",
-          "position": "FW",
-          "club": "",
-          "dob": "",
-          "api_player_id": 89912,
-          "id_verification": "squad_missing_name_ok"
+          "api_player_id": -29,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6323,30 +6468,21 @@
         },
         {
           "number": null,
-          "name": "Amirhossein Mahmoudi",
-          "position": "FW",
-          "club": "",
-          "dob": "",
-          "api_player_id": 613145,
-          "id_verification": "fully_verified"
-        },
-        {
-          "number": null,
-          "name": "Kasra Taheri",
-          "position": "FW",
-          "club": "",
-          "dob": "",
-          "api_player_id": 423759,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
           "name": "Mehdi Taremi",
           "position": "FW",
           "club": "",
           "dob": "",
           "api_player_id": 42315,
           "id_verification": "fully_verified"
+        },
+        {
+          "number": null,
+          "name": "Shahriyar Moghanlou",
+          "position": "FW",
+          "club": "",
+          "dob": "",
+          "api_player_id": 89982,
+          "id_verification": "lookup_match"
         }
       ]
     },
@@ -6355,7 +6491,7 @@
       "group": "G",
       "flag_code": "nz",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -6598,7 +6734,7 @@
       "group": "G",
       "flag_code": "eg",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -6669,8 +6805,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -23,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6759,8 +6895,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -25,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6804,8 +6940,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -24,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6841,7 +6977,7 @@
       "group": "H",
       "flag_code": "es",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -6867,8 +7003,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": 182718,
-          "id_verification": "fully_verified"
+          "api_player_id": -76,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6912,8 +7048,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 47380,
-          "id_verification": "squad_ok_name_mismatch"
+          "api_player_id": -74,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -6975,8 +7111,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 328,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -6984,8 +7120,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": 47323,
-          "id_verification": "squad_ok_name_mismatch"
+          "api_player_id": -73,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -7065,8 +7201,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 183799,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -7084,7 +7220,7 @@
       "group": "H",
       "flag_code": "uy",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -7327,7 +7463,7 @@
       "group": "H",
       "flag_code": "sa",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -7362,8 +7498,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -47,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -7380,8 +7516,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 403087,
-          "id_verification": "fully_verified"
+          "api_player_id": -82,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -7488,8 +7624,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -48,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -7569,8 +7705,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": 44340,
-          "id_verification": "fully_verified"
+          "api_player_id": -72,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -7592,7 +7728,7 @@
         },
         {
           "number": null,
-          "name": "Saleh Al Shehr",
+          "name": "Saleh Al Shehri",
           "position": "FW",
           "club": "",
           "dob": "",
@@ -7606,7 +7742,7 @@
       "group": "H",
       "flag_code": "cv",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -7849,7 +7985,7 @@
       "group": "I",
       "flag_code": "fr",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -8092,7 +8228,7 @@
       "group": "I",
       "flag_code": "sn",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -8271,8 +8407,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": 14379,
-          "id_verification": "squad_ok_name_suspect"
+          "api_player_id": -70,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -8353,7 +8489,7 @@
       "group": "I",
       "flag_code": "no",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -8397,8 +8533,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 39058,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -8460,8 +8596,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 18967,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -8559,8 +8695,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 37127,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -8586,8 +8722,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 8492,
+          "id_verification": "club_match"
         }
       ]
     },
@@ -8596,7 +8732,7 @@
       "group": "I",
       "flag_code": "iq",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -8618,15 +8754,6 @@
         },
         {
           "number": null,
-          "name": "Kumel Saadi",
-          "position": "GK",
-          "club": "",
-          "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
-        },
-        {
-          "number": null,
           "name": "Fahad Talib",
           "position": "GK",
           "club": "",
@@ -8640,8 +8767,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 145465,
-          "id_verification": "fully_verified"
+          "api_player_id": -75,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -8663,33 +8790,6 @@
         },
         {
           "number": null,
-          "name": "Maytham Jabbar",
-          "position": "DF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 72132,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
-          "name": "Ahmed Maknzi",
-          "position": "DF",
-          "club": "",
-          "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
-        },
-        {
-          "number": null,
-          "name": "Dario Naamo",
-          "position": "DF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 340221,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
           "name": "Frans Putros",
           "position": "DF",
           "club": "",
@@ -8703,8 +8803,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -33,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -8739,17 +8839,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
-        },
-        {
-          "number": null,
-          "name": "Hasan Abdulkareem",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 542866,
-          "id_verification": "fully_verified"
+          "api_player_id": -32,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -8789,15 +8880,6 @@
         },
         {
           "number": null,
-          "name": "Peter Gwargis",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 100079,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
           "name": "Zidane Iqbal",
           "position": "MF",
           "club": "",
@@ -8820,26 +8902,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": 299813,
-          "id_verification": "squad_ok_name_mismatch"
-        },
-        {
-          "number": null,
-          "name": "Karar Nabeel",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 72134,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
-          "name": "Jussef Nasrawe",
-          "position": "MF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 567870,
-          "id_verification": "squad_missing_name_ok"
+          "api_player_id": -80,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -8901,8 +8965,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": 299813,
-          "id_verification": "squad_ok_name_mismatch"
+          "api_player_id": -79,
+          "id_verification": "placeholder_lineup_pending"
         }
       ]
     },
@@ -8911,7 +8975,7 @@
       "group": "J",
       "flag_code": "ar",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -8991,8 +9055,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 6000,
-          "id_verification": "squad_ok_name_suspect"
+          "api_player_id": -69,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9154,7 +9218,7 @@
       "group": "J",
       "flag_code": "at",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -9397,7 +9461,7 @@
       "group": "J",
       "flag_code": "dz",
       "team_status": "announced",
-      "announced_date": "2026-06-01",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -9640,7 +9704,7 @@
       "group": "J",
       "flag_code": "jo",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -9675,8 +9739,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -38,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9711,8 +9775,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -36,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9720,8 +9784,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 310785,
-          "id_verification": "fully_verified"
+          "api_player_id": -81,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9756,8 +9820,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -35,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9765,8 +9829,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -34,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9801,8 +9865,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -37,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9891,8 +9955,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -39,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9927,8 +9991,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": 190485,
-          "id_verification": "squad_ok_name_suspect"
+          "api_player_id": -77,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -9990,8 +10054,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": 2676,
-          "id_verification": "squad_ok_name_mismatch"
+          "api_player_id": -67,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10171,7 +10235,7 @@
       "group": "K",
       "flag_code": "co",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -10414,7 +10478,7 @@
       "group": "K",
       "flag_code": "cd",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -10657,7 +10721,7 @@
       "group": "K",
       "flag_code": "uz",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -10674,8 +10738,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -59,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10692,8 +10756,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -58,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10719,8 +10783,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -65,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10746,8 +10810,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -63,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10755,8 +10819,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -64,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10809,8 +10873,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -60,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10818,8 +10882,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 53834,
+          "id_verification": "lookup_match"
         },
         {
           "number": null,
@@ -10845,8 +10909,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -61,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -10926,8 +10990,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -62,
+          "id_verification": "placeholder_lineup_pending"
         }
       ]
     },
@@ -10936,7 +11000,7 @@
       "group": "L",
       "flag_code": "gb-eng",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -11016,8 +11080,8 @@
           "position": "DF",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 307123,
+          "id_verification": "club_match"
         },
         {
           "number": null,
@@ -11179,7 +11243,7 @@
       "group": "L",
       "flag_code": "hr",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -11295,8 +11359,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": 260865,
-          "id_verification": "squad_ok_name_suspect"
+          "api_player_id": -78,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -11422,7 +11486,7 @@
       "group": "L",
       "flag_code": "gh",
       "team_status": "provisional",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -11430,8 +11494,8 @@
           "position": "GK",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -27,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -11440,15 +11504,6 @@
           "club": "",
           "dob": "",
           "api_player_id": 480108,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
-          "name": "Solomon Agbasi",
-          "position": "GK",
-          "club": "",
-          "dob": "",
-          "api_player_id": 434273,
           "id_verification": "squad_missing_name_ok"
         },
         {
@@ -11462,15 +11517,6 @@
         },
         {
           "number": null,
-          "name": "Paul Reverson",
-          "position": "GK",
-          "club": "",
-          "dob": "",
-          "api_player_id": 392258,
-          "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
           "name": "Jonas Adjetey",
           "position": "DF",
           "club": "",
@@ -11480,21 +11526,12 @@
         },
         {
           "number": null,
-          "name": "Abdul Rahman Baba",
+          "name": "Baba Abdul Rahman",
           "position": "DF",
           "club": "",
           "dob": "",
           "api_player_id": 21996,
           "id_verification": "squad_missing_name_ok"
-        },
-        {
-          "number": null,
-          "name": "Alexander Djiku",
-          "position": "DF",
-          "club": "",
-          "dob": "",
-          "api_player_id": 21633,
-          "id_verification": "fully_verified"
         },
         {
           "number": null,
@@ -11525,7 +11562,7 @@
         },
         {
           "number": null,
-          "name": "Kojo Peprah Oppong",
+          "name": "Kojo Oppong Peprah",
           "position": "DF",
           "club": "",
           "dob": "",
@@ -11664,8 +11701,8 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": -26,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -11673,8 +11710,17 @@
           "position": "FW",
           "club": "",
           "dob": "",
-          "api_player_id": null,
-          "id_verification": "no_api_id"
+          "api_player_id": 47294,
+          "id_verification": "club_match"
+        },
+        {
+          "number": null,
+          "name": "Derrick Luckassen",
+          "position": "DF",
+          "club": "",
+          "dob": "",
+          "api_player_id": 25341,
+          "id_verification": "lookup_match"
         }
       ]
     },
@@ -11683,7 +11729,7 @@
       "group": "L",
       "flag_code": "pa",
       "team_status": "announced",
-      "announced_date": "2026-05-31",
+      "announced_date": "2026-06-02",
       "players": [
         {
           "number": null,
@@ -11844,8 +11890,8 @@
           "position": "MF",
           "club": "",
           "dob": "",
-          "api_player_id": 2979,
-          "id_verification": "fully_verified"
+          "api_player_id": -68,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
