@@ -117,6 +117,33 @@ def fetch_group_day(group_id: str, date: str) -> dict:
     }
 
 
+def fetch_group_standings(group_id: str) -> list[dict]:
+    """One group's leaderboard rows — for the support agent's get_group_standings tool.
+
+    Uses the SAME canonical RPC as fetch_group_day (`get_leaderboard`, no args) and filters
+    to this group_id in Python. We deliberately do NOT call `get_group_leaderboard(p_group_id)`:
+    that one is plpgsql and enforces `is_group_member(p_group_id, auth.uid())`, raising
+    `not_a_member` under a service-role session that has no auth.uid(). Filtering get_leaderboard()
+    is the service-role-safe path (same trick the EF uses, see efFacts). Returns rows of:
+        {rank, username, total_points, champion_team, top_scorer_player}, sorted by rank.
+    """
+    sb = _client()
+    lb = sb.rpc("get_leaderboard").execute().data or []
+    rows = [
+        {
+            "rank": r.get("rank"),
+            "username": r.get("username"),
+            "total_points": r.get("total_points"),
+            "champion_team": r.get("champion_team"),
+            "top_scorer_player": r.get("top_scorer_player"),
+        }
+        for r in lb
+        if r.get("group_id") == group_id
+    ]
+    rows.sort(key=lambda r: (r["rank"] is None, r["rank"]))
+    return rows
+
+
 def fetch_ef_summary(group_id: str, date: str) -> str | None:
     """The EF's own summary for the same day — so shadow mode can show them side by side."""
     sb = _client()

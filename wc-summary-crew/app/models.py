@@ -122,3 +122,26 @@ class CrewResult(BaseModel):
     model: str
     seed: int
     temperature: float
+
+
+# ── Support agent output (LLM, structured) ────────────────────────────────────
+# NOTE: this belongs to the support AGENT (app/agents/support.py), not the crew.
+# The crew above is a fixed WORKFLOW (Stats→Personality→Writer→Judge). The support
+# agent is the contrast: a single agent that the LLM lets CHOOSE which tool to call.
+# This is just its typed output — same output_type idiom as the crew's stages.
+class SupportAnswer(BaseModel):
+    """The support agent's reply to a user question about how the app works."""
+    answer_he: str = Field(
+        description="The answer to the user, written in natural Hebrew."
+    )
+    used_tools: list[str] = Field(
+        default_factory=list,
+        description="Names of the tools the agent actually called to answer "
+                    "(e.g. ['search_rules', 'get_group_standings']). Empty if it "
+                    "answered from general knowledge without a tool.",
+    )
+    escalate: bool = Field(
+        default=False,
+        description="True if the question is outside the app's rules/standings scope "
+                    "and should be handed to a human admin.",
+    )

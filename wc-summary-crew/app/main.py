@@ -16,6 +16,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from . import models
+from .agents import support
 from .crew import run_crew
 
 logger = logging.getLogger("wc-summary-crew")
@@ -37,6 +38,11 @@ class SummaryRequest(BaseModel):
     date: str  # "YYYY-MM-DD"
 
 
+class AskRequest(BaseModel):
+    question: str
+    group_id: str | None = None  # supplies the standings tool; optional (rules need no group)
+
+
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
@@ -50,4 +56,18 @@ async def summary(req: SummaryRequest) -> models.CrewResult:
     except Exception as exc:
         # Log the real reason server-side; return a generic message (don't echo internals).
         logger.exception("crew run failed for group=%s date=%s", req.group_id, req.date)
+        raise HTTPException(status_code=500, detail="internal error — see server logs") from exc
+
+
+@app.post("/ask", response_model=models.SupportAnswer, dependencies=[Depends(_auth)])
+async def ask(req: AskRequest) -> models.SupportAnswer:
+    """Answer one user question via the tool-using SUPPORT agent.
+
+    Unlike /summary (which runs the fixed crew workflow), here the LLM chooses at runtime
+    which tool to call — search_rules and/or get_group_standings — then replies in Hebrew.
+    Same shared-secret gate as /summary (the standings tool can read live group data)."""
+    try:
+        return await support.run(req.question, req.group_id)
+    except Exception as exc:
+        logger.exception("support ask failed for group=%s", req.group_id)
         raise HTTPException(status_code=500, detail="internal error — see server logs") from exc

@@ -1,76 +1,28 @@
 # WC Summary Crew 🏆🤖
 
-A multi-agent crew that writes the WorldCup app's nightly roast — the reference
-implementation of the architecture from session 6. The pipeline runs end to end and
-produces **Hebrew**, it reads your **real data** from Supabase, and it never touches your
-live Edge Function.
+A small Python service that writes the WorldCup app's nightly roast. It reads your **real
+data** from Supabase, produces **Hebrew**, and never touches your live Edge Function (it runs
+in **shadow mode** — read-only, alongside the EF, so you can compare side by side at zero
+production risk).
 
-> Built so you learn it by running and extending it. Most of the code works as-is; one
-> piece — the **Writer** — is deliberately left for you. It's the heart, and it's the part
-> most worth writing yourself. Details below.
+> **The honest one-liner:** "crew" is just the project name. Under the hood this is a fixed
+> **workflow** of structured LLM calls (Stats → Personality → Writer → Judge) — the order is
+> hard-coded in [`app/crew.py`](app/crew.py) and none of those stages choose tools or loop on
+> their own. The one genuinely **tool-using agent** in this repo is
+> [`app/agents/support.py`](app/agents/support.py): a Q&A agent where the LLM decides at
+> runtime which tool to call. That contrast — fixed workflow vs. real agent — is the whole
+> lesson.
 
-> 📚 **Hebrew companion docs** (deeper, narrative) live in [`docs/`](docs/):
-> [the server & deploy guide](docs/01-server-and-deploy.md) ·
-> [the multi-agent system explained](docs/02-multi-agent-system.md) ·
-> [dev insights & bugs to crack yourself](docs/03-dev-insights.md).
+### 👉 Start here
 
----
+New to the project? Read **[`docs/00-LEARN.md`](docs/00-LEARN.md)** — the guided walkthrough
+that takes you from "run it once" to "understand every stage" in order. This README is just
+the front door: what it is, how to run it, and where each file lives.
 
-## What it is, and why
-
-Today's nightly summary is an **ensemble**: five variants of the *same role* (the same
-prompt with small tweaks) + a Judge that picks the best. It works — but to get good
-Hebrew you'd have to tune five prompts in parallel.
-
-This is a **crew** instead — split into distinct *roles*, each with one job:
-
-```
-   fetch (live, read-only from Supabase)
-        │
-        ▼
-   ┌──────────┐   facts     ┌──────────────┐  PlayerStyle   ┌──────────┐  Hebrew   ┌─────────┐
-   │  Stats   │ ──────────▶ │ Personality  │ ─────────────▶ │  Writer  │ ───────▶ │  Judge  │
-   │ (Python, │             │    (LLM)     │                │  (LLM,   │   ⇄      │  (LLM)  │
-   │  no LLM) │             │  tag players │                │  Hebrew) │  score+  │ 0–10 +  │
-   └──────────┘             └──────────────┘                └──────────┘  retry   │ feedback│
-                                                                                   └─────────┘
-```
-
-Each stage takes a **typed object** and returns a **typed object**. That's the whole point
-of the framework: because the handoff is structured, every agent does one thing — and you
-can tune / measure / swap each one independently.
-
----
-
-## The question this answers in code (Writer vs. a plain prompt) ⭐
-
-In the session you asked: *"what's the difference between a Writer agent and the prompt I
-write today?"* — and it never made it onto the screen. Here it is, in code:
-
-* Open [`app/models.py`](app/models.py) — that's where `PlayerStyle` lives (the tiny class you asked to see).
-* Open [`app/agents/writer.py`](app/agents/writer.py) — the Writer receives a `StatsBlock` +
-  `list[PlayerStyle]`: **facts and tags already computed**, not a blob of text.
-
-The difference is two things:
-1. **The INPUT is structured** — not "figure everything out and write," but a typed object that already did the thinking.
-2. **The responsibility is narrow** — one job: Hebrew. Only Hebrew.
-
-So you can tune this one prompt *in isolation*, measure it with the Judge, even swap its
-model — without touching Stats or Personality. One giant prompt never gave you that split.
-
----
-
-## The honest tradeoff (worth knowing) 🧠
-
-**LLM calls work great in TypeScript.** You don't *need* Python to get Hebrew — you could
-add a Writer step inside the existing EF. So why does this exist?
-
-1. **The career jump** — a real backend (FastAPI), a real framework (PydanticAI). This is Track F.
-2. **A cleaner architecture** — one place owns language, instead of five prompts.
-3. **A safe sandbox** — learn multi-agent on your real data *without risking* the live EF.
-
-It runs in **shadow mode**: the EF keeps producing the (English) summary as usual, and the
-crew runs alongside it reading the same data. You compare side by side. Zero production risk.
+The deeper Hebrew companion docs:
+[server & deploy](docs/01-server-and-deploy.md) ·
+[the workflow explained](docs/02-multi-agent-system.md) ·
+[dev insights & the 7 bugs we fixed](docs/03-dev-insights.md).
 
 ---
 
@@ -89,62 +41,50 @@ cp .env.example .env
 #   OPENAI_API_KEY        → the same key the EF uses
 #   (Start with the DEV project, ftryuvfdihmhlzvbpfeu, to play safely)
 
-# 3. Tests — no keys needed for unit + integration (e2e is opt-in, see below)
+# 3. Tests — no keys needed for unit + integration (e2e is opt-in)
 pip install -r requirements-dev.txt
-pytest                       # 20 tests in ~2s
+pytest                       # offline unit + integration, ~2s
 python -m tests.test_stats   # or a zero-dependency quick check (Stats only, no pytest)
 
 # 4. Shadow mode — run on a real (group, date) and compare to the EF
-python -m scripts.run_shadow --recent                   # list available (group_id, date)
+python -m scripts.run_shadow --recent                    # list available (group_id, date)
 python -m scripts.run_shadow --ef <group_id> 2026-06-15  # print ONLY the EF's English roast (no crew, no LLM cost)
 python -m scripts.run_shadow <group_id> 2026-06-15       # run the crew + print Hebrew vs the EF's English
 
-# 5. As a service (slide 5 — "a script that starts with app = FastAPI()")
+# 5. As a service
 uvicorn app.main:app --reload
-#   POST http://127.0.0.1:8000/summary   body: {"group_id":"...","date":"2026-06-15"}
+#   GET  /health  → {"ok": true}
+#   POST /summary body: {"group_id":"...","date":"2026-06-15"}            → the nightly roast (the workflow)
+#   POST /ask     body: {"question":"...","group_id":"..."|null}          → the support agent (tool-using)
 ```
 
-Deploying it to a real always-on host (Railway, ~$5/mo) is covered in
-[`docs/01-server-and-deploy.md`](docs/01-server-and-deploy.md).
+Both POST endpoints sit behind the same optional `x-crew-secret` header gate (enforced only
+when `CREW_API_SECRET` is set, so local dev on `127.0.0.1` stays friction-free).
 
----
-
-## Testing 🧪
-
-The full pyramid — run it all with `pytest` (20 tests, no keys needed; the 2 live tests skip
-unless you opt in):
-
-| Layer | What it covers | Keys? |
-|---|---|---|
-| **Unit** | Stats agent (incl. empty group, no-finished-games, null prediction, mover≠flop), the `JudgeVerdict` weighting + `PlayerStyle` validation, the match-day window math | none |
-| **Integration** | the crew **retry loop** with mocked agents (ships-on-good / retries-and-keeps-best / stops-at-max), and the **API** via `TestClient` (the auth gate → 401, errors don't leak internals) | none (mocked) |
-| **E2E** | the real crew against live Supabase + OpenAI — produces Hebrew, valid judge score | yes (opt-in) |
+The opt-in live end-to-end test (real Supabase + OpenAI, spends tokens):
 
 ```bash
-pytest                                  # unit + integration (offline, ~2s)
 RUN_E2E=1 SUPABASE_SERVICE_KEY=... OPENAI_API_KEY=... \
-  E2E_GROUP_ID=<uuid> E2E_DATE=2026-06-15 pytest tests/test_e2e.py   # the live run
+  E2E_GROUP_ID=<uuid> E2E_DATE=2026-06-15 pytest tests/test_e2e.py
 ```
 
-The LLM and DB are mocked in the integration layer, so the suite is fast, free, and
-deterministic — only the explicit `RUN_E2E` test spends tokens.
+Deploying to a real always-on host (Railway, ~$5/mo) is covered in
+[`docs/01-server-and-deploy.md`](docs/01-server-and-deploy.md).
 
 ---
 
 ## What's yours to do (learn by doing) ✍️
 
-* **★ The Writer is yours:** [`app/agents/writer.py`](app/agents/writer.py). The pipeline runs
-  and already emits Hebrew — but the prompt there is a deliberately flat starting point.
+* **★ The Writer is yours:** [`app/agents/writer.py`](app/agents/writer.py). The workflow
+  runs and already emits Hebrew — but the prompt there is a deliberately flat starting point.
   **Turning it into genuinely funny Hebrew (not a translation) is the highest-value work in
-  the project.** Inside there's a numbered `TODO(Itay)` by priority (tone, using the tags,
-  banning Hebrew clichés like the banned-words list in your EF, structure, edge cases). Use
+  the project.** The numbered `TODO(Itay)` inside the file is the single source of truth for
+  the task list (tone, using the tags, banning Hebrew clichés, structure, edge cases). Use
   [`app/agents/personality.py`](app/agents/personality.py) as the working pattern to copy.
 
-* **Stretch (once the Writer is good):**
-  * **self-improvement loop** — wire the Judge to per-agent `prompt_versions`, the exact
-    "closed loop" you derived in the session. The loop already exists in
-    [`app/crew.py`](app/crew.py); what's missing is persisting winning versions.
-  * **chatbot / RAG** over HowToPlay — same Python service, one more agent. The seed is here.
+* **Stretch goals** are listed in [`docs/02-multi-agent-system.md`](docs/02-multi-agent-system.md) §7
+  — the self-improvement loop (persist winning `prompt_versions`) and growing the support
+  agent into a fuller chatbot / RAG over HowToPlay.
 
 ---
 
@@ -152,22 +92,23 @@ deterministic — only the explicit `RUN_E2E` test spends tokens.
 
 | File | What it is |
 |---|---|
-| [`app/models.py`](app/models.py) | The typed contracts between agents — incl. `PlayerStyle` |
+| [`app/models.py`](app/models.py) | The typed contracts between stages — incl. `PlayerStyle`, `SupportAnswer` |
 | [`app/data.py`](app/data.py) | Live, read-only Supabase access (same RPCs as the EF) |
-| [`app/agents/stats.py`](app/agents/stats.py) | The Stats agent — pure Python, no LLM |
-| [`app/agents/personality.py`](app/agents/personality.py) | **Full worked PydanticAI example** |
+| [`app/agents/stats.py`](app/agents/stats.py) | The Stats **step** — pure Python, no LLM |
+| [`app/agents/personality.py`](app/agents/personality.py) | **Full worked PydanticAI example** (structured output) |
 | [`app/agents/writer.py`](app/agents/writer.py) | **★ yours to tune** — the Hebrew writer |
-| [`app/agents/judge.py`](app/agents/judge.py) | Your Judge, ported from the EF |
-| [`app/crew.py`](app/crew.py) | The pipeline: Stats→Personality→Writer→Judge + retry |
-| [`app/main.py`](app/main.py) | The FastAPI service |
+| [`app/agents/judge.py`](app/agents/judge.py) | The Judge, ported from the EF |
+| [`app/agents/support.py`](app/agents/support.py) | **The real tool-using agent** — LLM picks `search_rules` vs. `get_group_standings` |
+| [`app/crew.py`](app/crew.py) | The workflow: Stats→Personality→Writer→Judge + retry |
+| [`app/main.py`](app/main.py) | The FastAPI service — `/summary`, `/ask`, `/health` |
 | [`scripts/run_shadow.py`](scripts/run_shadow.py) | Shadow-mode runner + EF comparison |
 | [`tests/test_stats.py`](tests/test_stats.py) | Offline test (no keys) |
-| [`docs/`](docs/) | Hebrew companion docs (server, multi-agent, dev insights) |
+| [`docs/`](docs/) | Start at [`00-LEARN.md`](docs/00-LEARN.md); Hebrew companion guides alongside |
 
 ---
 
 ## Toward the June 22 session 📅
 
-Exactly as you said — *"play with the things a bit, then talk."* Play with shadow mode,
-tune the Writer until the Hebrew lands, and we'll go through it together: wire up the
-self-improvement loop and add the chatbot on the same service. 🤝
+Exactly as you said — *"play with the things a bit, then talk."* Play with shadow mode, tune
+the Writer until the Hebrew lands, and we'll go through it together: wire up the
+self-improvement loop and grow the support agent on the same service. 🤝
