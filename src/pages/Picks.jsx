@@ -118,7 +118,10 @@ export default function Picks() {
   async function loadCandidates() {
     const [{ data: t }, { data: p }, { data: o }] = await Promise.all([
       supabase.from('teams').select('name, flag_code, group_name, is_tbd').order('group_name').order('is_tbd'),
-      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id, position').eq('is_active', true).order('name'),
+      // .range() defeats PostgREST's ~1000-row default cap — top_scorer_candidates
+      // is 1248 active rows (26 × 48 teams), so an unbounded select silently drops
+      // the alphabetically-last ~248 players (e.g. Brazil lost Vinicius/Wesley/Weverton).
+      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id, position').eq('is_active', true).order('name').range(0, 99999),
       supabase.from('champion_odds').select('team_name, odds'),
     ])
     if (t) setDbTeams(t)
