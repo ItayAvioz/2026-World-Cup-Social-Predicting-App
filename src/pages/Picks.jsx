@@ -115,13 +115,33 @@ export default function Picks() {
     loadCandidates()
   }, [user])
 
+  // top_scorer_candidates is 1248 active rows (26 × 48 teams). PROD enforces a HARD
+  // PostgREST max-rows=1000 cap that .range() does NOT override (Range:0-99999 still
+  // returns only 1000), so an unbounded fetch silently drops the alphabetically-last
+  // ~248 players (e.g. Brazil lost Raphinha/Rayan/Vinicius/Wesley/Weverton). Must
+  // paginate in 1000-row pages and concatenate to get every candidate.
+  async function fetchAllCandidates() {
+    const PAGE = 1000
+    let from = 0, all = []
+    for (;;) {
+      const { data, error } = await supabase
+        .from('top_scorer_candidates')
+        .select('name, team_name, flag_code, api_player_id, position')
+        .eq('is_active', true)
+        .order('name')
+        .range(from, from + PAGE - 1)
+      if (error || !data) break
+      all = all.concat(data)
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    return all
+  }
+
   async function loadCandidates() {
-    const [{ data: t }, { data: p }, { data: o }] = await Promise.all([
+    const [{ data: t }, p, { data: o }] = await Promise.all([
       supabase.from('teams').select('name, flag_code, group_name, is_tbd').order('group_name').order('is_tbd'),
-      // .range() defeats PostgREST's ~1000-row default cap — top_scorer_candidates
-      // is 1248 active rows (26 × 48 teams), so an unbounded select silently drops
-      // the alphabetically-last ~248 players (e.g. Brazil lost Vinicius/Wesley/Weverton).
-      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id, position').eq('is_active', true).order('name').range(0, 99999),
+      fetchAllCandidates(),
       supabase.from('champion_odds').select('team_name, odds'),
     ])
     if (t) setDbTeams(t)
