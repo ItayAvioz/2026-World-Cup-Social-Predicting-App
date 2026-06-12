@@ -10,6 +10,12 @@ import { TEAMS } from '../lib/teams.js'
 
 const PICKS_DEADLINE = '2026-06-11T19:00:00Z'
 
+// Team name → flag code (e.g. 'South Korea' → 'kr'). Same map Dashboard/Groups/Game use.
+// Scorer flags are keyed off the canonical team string (player_tournament_stats.team),
+// NOT the player's name — api-football's stats spelling drifts from the squad-seed
+// spelling (e.g. "Hyeon-gyu Oh" vs "Oh Hyeongyu"), which silently broke a name match.
+const TEAM_CODE = Object.fromEntries(TEAMS.filter(t => t.code).map(t => [t.name, t.code]))
+
 const PHASE_LABEL = {
   group: 'Group Stage',
   r32:   'Round of 32',
@@ -626,7 +632,7 @@ export default function Picks() {
                     ) : topScorers.length > 0 ? (
                       <div className="pk-result-card-scorers">
                         {topScorers.map(p => {
-                          const code = dbPlayers.find(s => s.name === p.player_name)?.code ?? null
+                          const code = TEAM_CODE[p.team] ?? null
                           // Standard competition rank: players level on goals share a rank
                           const rank = topScorers.findIndex(r => r.total_goals === p.total_goals) + 1
                           return (

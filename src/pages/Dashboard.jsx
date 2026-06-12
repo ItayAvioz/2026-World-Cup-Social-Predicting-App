@@ -407,12 +407,6 @@ export default function Dashboard() {
                 {(showAllLb ? lb : lb.slice(0, 5)).map(row => {
                   const isMe     = row.user_id === user?.id
                   const flagCode = row.champion_team ? TEAM_CODE[row.champion_team] : null
-                  const stats    = row.champion_team ? teamStats[row.champion_team] : null
-                  const streak   = row.champion_team ? (streaks[row.champion_team] ?? 0) : 0
-                  const gp       = Number(stats?.games_played ?? 0)
-                  const winPct   = gp > 0 ? Math.round((Number(stats.wins) / gp) * 100) : null
-                  const shotAcc  = Number(stats?.avg_shots_total) > 0
-                    ? Math.round((Number(stats.avg_shots_on_target) / Number(stats.avg_shots_total)) * 100) : null
                   return (
                     <div key={`${row.user_id}-${row.group_id ?? 'nogroup'}`} className={`lb-row${isMe ? ' lb-row--me' : ''}`}>
                       <div className="lb-row-top">
@@ -429,18 +423,6 @@ export default function Dashboard() {
                         </span>
                         <span className="lb-pts">{row.total_points ?? 0}<span className="lb-pts-label"> {(row.total_points ?? 0) === 1 ? 'pt' : 'pts'}</span></span>
                       </div>
-                      {row.champion_team && stats && (
-                        <div className="lb-team-row">
-                          <span className="lb-team-name">{row.champion_team}</span>
-                          <div className="lb-stats-pills">
-                            <span className="lb-stat-pill">{stats.wins}W {stats.draws}D {stats.losses}L</span>
-                            {stats.avg_goals_scored != null && <span className="lb-stat-pill">⚽ {stats.avg_goals_scored}/g</span>}
-                            {winPct != null && <span className={`lb-stat-pill${winPct >= 60 ? ' lb-stat-green' : ''}`}>Win {winPct}%</span>}
-                            {shotAcc != null && <span className="lb-stat-pill lb-stat-gold">🎯 {shotAcc}%</span>}
-                            {streak > 1 && <span className="lb-stat-pill lb-stat-fire">🔥 {streak} streak</span>}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )
                 })}
