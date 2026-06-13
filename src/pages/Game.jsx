@@ -43,6 +43,13 @@ function fmtTime(iso) {
 }
 
 
+// compact per-member outcome badge for finished games (admin group-predictions list)
+function memberBadge(pe) {
+  if (pe === 3) return { text: '⭐ Exact',   color: '#4ade80' }
+  if (pe === 1) return { text: '✓ Correct', color: '#fbbf24' }
+  return { text: '✗ Miss', color: 'var(--muted)' }
+}
+
 function pointsLabel(pred, game) {
   if (!pred || game.score_home === null) return null
   if (pred.points_earned === 3) return { text: '⭐ Exact score — 3 pts', cls: 'gm-my-result--exact' }
@@ -57,6 +64,7 @@ export default function Game() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const cache = useDataCache()
+  const isAdmin = user?.email === 'itayavioz1@gmail.com'  // test-gated features (only visible to this user)
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'game') }, [])
 
   const [game,            setGame]            = useState(null)
@@ -73,6 +81,9 @@ export default function Game() {
   const [allGroups,       setAllGroups]       = useState([])   // [{ id, name }]
   const [allGroupPreds,   setAllGroupPreds]   = useState([])   // [{ groupId, groupName, pred }]
   const [teamForm,        setTeamForm]        = useState({})   // { teamName: ['W','L','D',...] }
+  // [admin test] revealed predictions of all members in the active group (after KO). null=N/A
+  const [memberPreds,        setMemberPreds]        = useState(null)
+  const [memberPredsLoading, setMemberPredsLoading] = useState(false)
 
   // Resolve which group this prediction belongs to.
   // Priority: (1) ?group= URL param  (2) user's first joined group  (3) null = ungrouped.
@@ -168,6 +179,23 @@ export default function Game() {
         pred:      (allPreds ?? []).find(p => p.group_id === grp.id) ?? null,
       }))
       setAllGroupPreds(mapped)
+    }
+
+    // [admin test] Group members' revealed predictions for the active group.
+    // RLS reveals other members' picks once kick_off_time <= now (incl. finished games).
+    // Per-game fetch only (≤ group size rows) — never hits the 1000-row PostgREST cap.
+    const isPastKO = new Date() >= new Date(g.kick_off_time)
+    if (isAdmin && isPastKO && resolvedGroupId) {
+      setMemberPredsLoading(true)
+      const { data: mPreds } = await supabase
+        .from('predictions')
+        .select('user_id, pred_home, pred_away, is_auto, points_earned, profiles(username)')
+        .eq('game_id', gameId)
+        .eq('group_id', resolvedGroupId)
+      setMemberPreds(mPreds ?? [])
+      setMemberPredsLoading(false)
+    } else {
+      setMemberPreds(null)
     }
 
     // Load team form (individual results in order)
@@ -280,6 +308,7 @@ export default function Game() {
   const pastKO   = new Date() >= new Date(game.kick_off_time)
   const finished = game.score_home !== null
   const isKO     = game.phase !== 'group'
+  const resolvedGroupName = allGroups.find(gp => gp.id === resolvedGroupId)?.name
   const oddsData = game.game_odds?.[0] ?? null
   const within3Days = (new Date(game.kick_off_time) - new Date()) <= 3 * 24 * 60 * 60 * 1000
   const odds = within3Days ? oddsData : null
@@ -663,6 +692,9 @@ export default function Game() {
         <div className="gm-section">
           <div className="gm-section-head">
             <span className="gm-section-label">Group Predictions</span>
+            {isAdmin && pastKO && resolvedGroupId && resolvedGroupName && (
+              <span style={{ fontSize:'.75rem', color:'var(--muted)' }}>{resolvedGroupName}</span>
+            )}
           </div>
           <div className="gm-section-body">
             {!pastKO ? (
@@ -674,6 +706,37 @@ export default function Game() {
                   👥 View your group's picks in the <strong>Groups</strong> page
                 </p>
               </>
+            ) : isAdmin && resolvedGroupId ? (
+              memberPredsLoading ? (
+                <p className="gm-reveal-msg">Loading group predictions…</p>
+              ) : !memberPreds || memberPreds.length === 0 ? (
+                <p className="gm-reveal-msg">No group predictions for this game.</p>
+              ) : (
+                <ul style={{ listStyle:'none', margin:0, padding:0, display:'flex', flexDirection:'column', gap:'.45rem' }}>
+                  {[...memberPreds]
+                    .sort((a, b) => (b.points_earned ?? -1) - (a.points_earned ?? -1))
+                    .map(p => {
+                      const badge = finished ? memberBadge(p.points_earned) : null
+                      return (
+                        <li key={p.user_id} style={{ display:'flex', alignItems:'center', gap:'.5rem', fontSize:'.9rem' }}>
+                          <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {p.profiles?.username ?? '—'}
+                            {p.user_id === user.id && <span style={{ color:'var(--muted)' }}> (you)</span>}
+                          </span>
+                          <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600 }}>
+                            {p.pred_home}–{p.pred_away}
+                          </span>
+                          {p.is_auto && (
+                            <span style={{ fontSize:'.65rem', color:'var(--muted)', textTransform:'uppercase' }}>auto</span>
+                          )}
+                          {badge && (
+                            <span style={{ fontSize:'.7rem', fontWeight:600, color:badge.color }}>{badge.text}</span>
+                          )}
+                        </li>
+                      )
+                    })}
+                </ul>
+              )
             ) : (
               <p className="gm-reveal-msg">
                 👥 See your group's predictions in the <strong>Groups</strong> page
