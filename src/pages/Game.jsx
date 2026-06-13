@@ -64,7 +64,6 @@ export default function Game() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const cache = useDataCache()
-  const isAdmin = user?.email === 'itayavioz1@gmail.com'  // test-gated features (only visible to this user)
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'game') }, [])
 
   const [game,            setGame]            = useState(null)
@@ -181,11 +180,11 @@ export default function Game() {
       setAllGroupPreds(mapped)
     }
 
-    // [admin test] Group members' revealed predictions for the active group.
+    // Group members' revealed predictions for the active group.
     // RLS reveals other members' picks once kick_off_time <= now (incl. finished games).
     // Per-game fetch only (≤ group size rows) — never hits the 1000-row PostgREST cap.
     const isPastKO = new Date() >= new Date(g.kick_off_time)
-    if (isAdmin && isPastKO && resolvedGroupId) {
+    if (isPastKO && resolvedGroupId) {
       setMemberPredsLoading(true)
       const { data: mPreds } = await supabase
         .from('predictions')
@@ -692,7 +691,7 @@ export default function Game() {
         <div className="gm-section">
           <div className="gm-section-head">
             <span className="gm-section-label">Group Predictions</span>
-            {isAdmin && pastKO && resolvedGroupId && resolvedGroupName && (
+            {pastKO && resolvedGroupId && resolvedGroupName && (
               <span style={{ fontSize:'.75rem', color:'var(--muted)' }}>{resolvedGroupName}</span>
             )}
           </div>
@@ -706,7 +705,7 @@ export default function Game() {
                   👥 View your group's picks in the <strong>Groups</strong> page
                 </p>
               </>
-            ) : isAdmin && resolvedGroupId ? (
+            ) : resolvedGroupId ? (
               memberPredsLoading ? (
                 <p className="gm-reveal-msg">Loading group predictions…</p>
               ) : !memberPreds || memberPreds.length === 0 ? (
