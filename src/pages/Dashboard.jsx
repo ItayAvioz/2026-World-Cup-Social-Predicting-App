@@ -496,19 +496,27 @@ export default function Dashboard() {
                         </div>
                       </div>
                       {/* Per-group prediction chips (solo user: single "Personal" chip → group_id=NULL) */}
-                      {!finished && (
+                      {/* [admin test] also render for finished games so the per-group filter stays + show result marker */}
+                      {(!finished || isAdmin) && (
                         <div className="tg-group-preds">
                           {(groups.length > 0 ? groups : [{ id: null, name: 'Personal' }]).map(grp => {
                             const gp = gamePreds.find(p => (p.groupId ?? null) === grp.id)
                             const groupParam = grp.id ? `?group=${grp.id}` : ''
+                            let marker = null
+                            if (finished && gp) {
+                              const exact = gp.pred_home === game.score_home && gp.pred_away === game.score_away
+                              const po = Math.sign(gp.pred_home - gp.pred_away)
+                              const so = Math.sign(game.score_home - game.score_away)
+                              marker = exact ? { t: '⭐', c: '#4ade80' } : (po === so ? { t: '✓', c: '#fbbf24' } : { t: '✗', c: 'var(--muted)' })
+                            }
                             return (
                               <button key={grp.id ?? 'solo'}
                                 className={`tg-group-chip${gp ? ' tg-group-chip--predicted' : ''}`}
                                 onClick={() => navigate(`/game/${game.id}${groupParam}`)}>
                                 <span className="tg-chip-group">{grp.name}</span>
                                 {gp
-                                  ? <span className="tg-chip-score">{gp.pred_home}–{gp.pred_away}</span>
-                                  : <span className="tg-chip-cta">→</span>
+                                  ? <span className="tg-chip-score">{gp.pred_home}–{gp.pred_away}{marker && <span style={{ marginLeft: 4, color: marker.c }}>{marker.t}</span>}</span>
+                                  : <span className="tg-chip-cta">{finished ? '–' : '→'}</span>
                                 }
                               </button>
                             )

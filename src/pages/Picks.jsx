@@ -57,6 +57,7 @@ export default function Picks() {
   const cache = useDataCache()
   const navigate = useNavigate()
   const user = session?.user
+  const isAdmin = user?.email === 'itayavioz1@gmail.com'  // test-gated features (only visible to this user)
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'picks') }, [user?.id])
 
   const isLocked = new Date() >= new Date(PICKS_DEADLINE)
@@ -194,8 +195,14 @@ export default function Picks() {
       const gs = (data ?? []).map(r => r.groups).filter(Boolean)
       setGroups(gs)
       if (gs.length > 0) {
-        activeGroupRef.current = gs[0].id
-        setSelectedGroupId(gs[0].id)
+        // [admin test] restore last-chosen group so History→game→back returns to it
+        let restore = gs[0].id
+        if (isAdmin) {
+          const saved = sessionStorage.getItem('picks_group')
+          if (saved && gs.some(g => g.id === saved)) restore = saved
+        }
+        activeGroupRef.current = restore
+        setSelectedGroupId(restore)
       }
     } catch {
       setGroupsError(true)
@@ -256,6 +263,7 @@ export default function Picks() {
     if (id === selectedGroupId) return
     activeGroupRef.current = id
     setSelectedGroupId(id)
+    if (isAdmin) sessionStorage.setItem('picks_group', id)  // [admin test] persist chosen group
     setChampSearch('')
     setSearch('')
     setPlayerTeamFilter('')
