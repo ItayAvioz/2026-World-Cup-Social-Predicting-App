@@ -55,3 +55,34 @@ champion/top-scorer awards.
 
 **If polished display stats are ever wanted:** run `sync_stats` (one game) **then
 verify `game_events` stayed at exactly 2 goal events**. Optional polish, not required.
+
+---
+
+## 2026-06-14 — Brazil 1–1 Morocco: missing team stats (passes + xG)
+
+**Game:** `2c551443-76d1-40f6-95f4-d68349b98d83` · api_fixture_id `1489371`
+**Symptom:** Game-page team stats showed blanks — **`passes_total`, `passes_accuracy`, and `xg` were NULL** for both teams.
+
+**Root cause:** at KO+120 sync, api-football had not yet populated **Total passes** and
+**expected_goals** for this fixture (both compute later than the score). `writeStats`
+preserves NULL for these (no `?? 0`), so they were stored blank. The api now has them.
+Goals/scorers were intact (Vinícius Júnior 1, I. Saibari 1) — this was stats-only.
+
+**Verification:** dev EF `probe_stats` (fixture 1489371) → Brazil passes 501 / 88% / xG 1.24,
+Morocco passes 432 / 87% / xG 1.28.
+
+**Correction applied (PROD) — minimal, fill the NULLs only:**
+```sql
+UPDATE game_team_stats SET passes_total=501, passes_accuracy=88, xg=1.24
+ WHERE game_id='2c551443-76d1-40f6-95f4-d68349b98d83' AND team='Brazil';
+UPDATE game_team_stats SET passes_total=432, passes_accuracy=87, xg=1.28
+ WHERE game_id='2c551443-76d1-40f6-95f4-d68349b98d83' AND team='Morocco';
+```
+Confirmed both rows now non-null. Touches only 2 `game_team_stats` rows (no events, no
+player rows) → zero risk.
+
+**Decision:** minimal manual UPDATE over re-pull. Re-sync would rewrite team + all 51
+player rows + re-pull `/fixtures/events` (dup risk) just to refresh display-only stats.
+Left the minor possession/shots/corners drift (52→54, 13→12, etc.) untouched — not
+"missing", purely cosmetic. Display-only fields; no scoring impact.
+
