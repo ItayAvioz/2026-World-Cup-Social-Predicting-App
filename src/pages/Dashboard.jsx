@@ -495,9 +495,8 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      {/* Per-group prediction chips (solo user: single "Personal" chip → group_id=NULL) */}
-                      {/* [admin test] also render for finished games so the per-group filter stays + show result marker */}
-                      {(!finished || isAdmin) && (
+                      {/* Per-group prediction chips — ALL today-games incl. finished (filter stays + result marker). solo user: single "Personal" chip → group_id=NULL */}
+                      {(
                         <div className="tg-group-preds">
                           {(groups.length > 0 ? groups : [{ id: null, name: 'Personal' }]).map(grp => {
                             const gp = gamePreds.find(p => (p.groupId ?? null) === grp.id)
