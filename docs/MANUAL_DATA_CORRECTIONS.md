@@ -120,3 +120,60 @@ FROM games g LEFT JOIN ev ON ev.game_id=g.id LEFT JOIN ps ON ps.game_id=g.id
 WHERE g.score_home IS NOT NULL AND coalesce(ev.c,0) <> coalesce(ps.g,0);
 ```
 
+---
+
+## 2026-06-15 — Spain 0–0 Cape Verde: missing Cape Verde stats (team-name mismatch)
+
+**Game:** `3f1fdcdb-2e6c-46d4-9e22-c1bfe1aeb587` · api_fixture_id `1489380`
+**Symptom:** Cape Verde's column on the Game page showed "—" (team + player stats), and
+its scorer flags were dropped. Spain rendered fine.
+
+**Root cause:** the api's **stats endpoints** (`/fixtures/statistics`, `/fixtures/players`)
+return the team as **`Cape Verde Islands`**, but the `games` table (and the frontend) use
+the canonical **`Cape Verde`**. `writeStats` `canon()` normalizes both names and compares;
+`TEAM_ALIASES` only had `cabo verde → cape verde`, not `cape verde islands → cape verde`,
+so `canon()` found no match and **fell through to the raw api name**, storing 27 rows under
+`Cape Verde Islands`. The frontend matches stats by the canonical name → no match → "—".
+This is the same class as the Bosnia mismatch (memory `bosnia-team-name-mismatch`); the
+data **was pulled correctly (26 players + 1 team row), only mislabeled**.
+
+A full scan of every finished game found this was the **only** mismatched game in the
+tournament (Bosnia already fixed).
+
+**Fix — two parts (EF for the future, DB for the past):**
+
+1. **EF (prevents recurrence)** — football-api-sync **PROD v15**: added one alias
+   `"cape verde islands":"cape verde"` to `TEAM_ALIASES` (only that line changed vs v14;
+   diacritic ranges rewritten as `̀-ͯ`, identical behavior). Now `canon()` maps
+   the stats-endpoint spelling to `Cape Verde` at sync time. Covers the upcoming Cape Verde
+   games — Uruguay (Jun 21, `e100e75f-…`) and Saudi Arabia (Jun 27, `73192fb4-…`).
+   Smoke-tested (unknown-mode → `{"error":"Unknown mode"}`, loads clean).
+
+2. **DB backfill (fixes the already-synced Spain game) — rename in place, NOT re-pull:**
+```sql
+UPDATE game_player_stats SET team='Cape Verde'
+  WHERE game_id='3f1fdcdb-2e6c-46d4-9e22-c1bfe1aeb587' AND team='Cape Verde Islands';  -- 26
+UPDATE game_team_stats SET team='Cape Verde'
+  WHERE game_id='3f1fdcdb-2e6c-46d4-9e22-c1bfe1aeb587' AND team='Cape Verde Islands';  -- 1
+-- game_events: 0 rows (0–0 game), nothing to do
+```
+Confirmed: 0 rows remain under `Cape Verde Islands`; both tables now read `Cape Verde`.
+
+**Decision: rename vs re-pull.** The data was complete and correct, only the label was
+wrong — a re-pull adds nothing and risks **duplicates**: `game_team_stats` upserts on
+`(game_id, team)`, so a re-pull writing `Cape Verde` would orphan the old `Cape Verde
+Islands` row (two rows); `game_events` keys on `team` too (same trap). A targeted UPDATE
+fixes all rows in place with zero duplication and no api quota.
+
+**Verify after Jun 21 / Jun 27 syncs** (alias holds in prod):
+```sql
+SELECT team, COUNT(*) FROM game_player_stats
+WHERE game_id='e100e75f-8ba9-4248-a886-85433f7a62d5' GROUP BY team;  -- expect Uruguay + Cape Verde
+```
+
+> **EF source note:** the repo `supabase/functions/football-api-sync/index.ts` is an
+> uncommitted WIP rewrite that matches **neither** deployed version (prod v15 / dev v39).
+> The v15 alias fix was applied to the **live deployed prod source**, not the repo file.
+> When the WIP rewrite eventually lands it must carry both the `cape verde islands` alias
+> **and** `canon()` (see memory `ef-repo-not-source-of-truth`, `bosnia-team-name-mismatch`).
+
