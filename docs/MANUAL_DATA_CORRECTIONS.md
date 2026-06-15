@@ -86,3 +86,37 @@ player rows + re-pull `/fixtures/events` (dup risk) just to refresh display-only
 Left the minor possession/shots/corners drift (52→54, 13→12, etc.) untouched — not
 "missing", purely cosmetic. Display-only fields; no scoring impact.
 
+---
+
+## 2026-06-15 — Ivory Coast 1–0 Ecuador: missing goal (Amad Diallo)
+
+**Game:** `42d347e5-e281-4d17-acdd-3f7afc74b769` · api_fixture_id `1489375`
+**Symptom:** Ivory Coast scorer **Amad Diallo** missing from Top Scorers.
+
+**Root cause:** same KO+120 player-stats lag as Khoukhi — `game_events` had
+`Ivory Coast:A. Diallo/Normal Goal`, but his `game_player_stats` row was `goals=0`
+(minutes also null), so he was absent from `player_tournament_stats`.
+Live api (dev `probe_stats` fixture 1489375) now reports Diallo `goals=1`.
+
+**Correction applied (PROD):**
+```sql
+UPDATE game_player_stats SET goals=1
+ WHERE game_id='42d347e5-e281-4d17-acdd-3f7afc74b769' AND api_player_id=157997; -- Amad Diallo
+```
+Confirmed: row `goals=1`, view total_goals=1.
+
+**Full-dataset verification (run this to find ALL such gaps):** compared, per finished
+game, scoring events (`event_type='goal'` AND `detail IN ('Normal Goal','Penalty')`)
+vs `SUM(game_player_stats.goals)`. After this fix, **every finished game matches**
+(Diallo was the only remaining gap; Khoukhi already fixed). Tunisia (Omar Rekik) was a
+false alarm — already correctly `goals=1`, just below nobody's cutoff; it shows fine.
+```sql
+-- gap scan: any row returned = a missing/extra scorer to investigate
+WITH ev AS (SELECT game_id, count(*) c FROM game_events
+            WHERE event_type='goal' AND detail IN ('Normal Goal','Penalty') GROUP BY game_id),
+     ps AS (SELECT game_id, coalesce(sum(goals),0) g FROM game_player_stats GROUP BY game_id)
+SELECT g.id, coalesce(ev.c,0) AS event_goals, coalesce(ps.g,0) AS playerstat_goals
+FROM games g LEFT JOIN ev ON ev.game_id=g.id LEFT JOIN ps ON ps.game_id=g.id
+WHERE g.score_home IS NOT NULL AND coalesce(ev.c,0) <> coalesce(ps.g,0);
+```
+
