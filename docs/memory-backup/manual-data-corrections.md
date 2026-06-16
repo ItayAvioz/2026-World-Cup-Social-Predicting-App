@@ -21,6 +21,8 @@ metadata:
 
 **Case 3 — 2026-06-15, Ivory Coast 1–0 Ecuador** (`game 42d347e5…`, fixture `1489375`): Amad Diallo (`api_player_id 157997`) scored (in events) but `goals=0`. Fixed `UPDATE game_player_stats SET goals=1`. Same lag as Case 1.
 
+**Case 5 — 2026-06-16, Iran 2–2 New Zealand** (`game 840b0883…`, fixture `1489378`): `passes_total`/`passes_accuracy`/`xg` NULL for both teams (same lag as Case 2). DEV `probe_stats` → Iran 405/77%/1.50, NZ 446/85%/1.24 (possession 48/52 + shots 17/14 matched existing rows). Filled via 2-row `UPDATE game_team_stats`. Display-only, zero scoring impact.
+
 **Case 4 — 2026-06-15, Spain 0–0 Cape Verde** (`game 3f1fdcdb…`, fixture `1489380`): DIFFERENT class — **team-name mismatch, not a stat revision** (see [[bosnia-team-name-mismatch]]). api stats endpoints returned `Cape Verde Islands`; canonical = `Cape Verde` → 27 rows stored unmatchable, CV stats column "—". Two-part fix: (1) EF football-api-sync **PROD v15** adds `TEAM_ALIASES` `cape verde islands→cape verde` (future games); (2) PROD backfill **rename in place, NOT re-pull**: `UPDATE game_player_stats/game_team_stats SET team='Cape Verde' WHERE game_id='3f1fdcdb…' AND team='Cape Verde Islands'` (26/1 rows, events=0). **Why rename not re-pull here:** data was complete, only mislabeled — and re-pull would DUPLICATE rows because `game_team_stats` upserts on `(game_id,team)` and `game_events` on a key incl. `team`, so a new canonical row orphans the old one. (Contrast Cases 1/3 where the missing field needed a value, not a relabel.)
 
 **Reusable gap-scan for ALL missing/extra scorers** (run periodically — any row = investigate): per finished game compare scoring events vs player-stat goals sum:

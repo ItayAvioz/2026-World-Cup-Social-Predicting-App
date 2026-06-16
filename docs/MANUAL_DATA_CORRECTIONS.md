@@ -177,3 +177,35 @@ WHERE game_id='e100e75f-8ba9-4248-a886-85433f7a62d5' GROUP BY team;  -- expect U
 > When the WIP rewrite eventually lands it must carry both the `cape verde islands` alias
 > **and** `canon()` (see memory `ef-repo-not-source-of-truth`, `bosnia-team-name-mismatch`).
 
+---
+
+## 2026-06-16 — Iran 2–2 New Zealand: missing team stats (passes + xG)
+
+**Game:** `840b0883-40c1-449b-b590-2a1a860cfc22` · api_fixture_id `1489378`
+**Symptom:** Game-page MATCH STATS showed "—" for **Total Passes, % Accuracy Passes, and xG**
+for both teams. Possession/shots/corners/cards all present and correct.
+
+**Root cause:** same KO+120 lag as Brazil v Morocco (Case above) — `Total passes` and
+`expected_goals` compute later than the score, so they were still NULL at sync time.
+`writeStats` preserves NULL for these (no `?? 0`). **Pattern A** (api timing lag), not a
+name issue — rows were under the correct team names, only three fields were NULL.
+Goals/scorers were intact (2–2).
+
+**Verification (read-only, DEV EF `probe_stats` fixture 1489378, no DB write):**
+Iran passes 405 / 77% / xG 1.50; New Zealand passes 446 / 85% / xG 1.24. Possession (48/52)
+and shots (17/14) matched the existing DB rows → same fixture, only passes/xG had lagged.
+
+**Correction applied (PROD) — fill the NULLs only:**
+```sql
+UPDATE game_team_stats SET passes_total=405, passes_accuracy=77, xg=1.50
+ WHERE game_id='840b0883-40c1-449b-b590-2a1a860cfc22' AND team='Iran';
+UPDATE game_team_stats SET passes_total=446, passes_accuracy=85, xg=1.24
+ WHERE game_id='840b0883-40c1-449b-b590-2a1a860cfc22' AND team='New Zealand';
+```
+Confirmed both rows now non-null. Touches only 2 `game_team_stats` rows (no events, no
+player rows) → zero risk. Minor possession/shots drift, if any, left untouched (cosmetic).
+
+**Decision:** minimal manual UPDATE over re-pull — display-only fields, no scoring impact;
+a re-sync would rewrite all player rows + re-pull `/fixtures/events` (dup risk) to refresh
+numbers no logic reads.
+
