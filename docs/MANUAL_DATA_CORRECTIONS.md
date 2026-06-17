@@ -243,3 +243,39 @@ DR Congo was the only remaining mismatch tournament-wide (Bosnia + Cape Verde al
 > Running list of api-stats-spelling aliases now in `TEAM_ALIASES`: `cabo verde`,
 > `cape verde islands`, `congo dr` (+ pre-existing cote divoire / korea republic / ir iran / turkiye / usa).
 
+---
+
+## 2026-06-17 — Austria 3–1 Jordan: entire player-stats block missing (Pattern A, extreme)
+
+**Game:** `634786fd-0a48-4224-9b98-48e379fd3845` · api_fixture_id `1489382`
+**Symptom:** 3 scorers (Schmid, Arnautović, Olwan) missing from **Top Scorers**, though all
+goals showed in game **history** (events). Found via goal-reconciliation: score 4 = events 4 ✓,
+but `SUM(game_player_stats.goals)` = 0 (should be 3).
+
+**Root cause:** **Pattern A, extreme** — the api `/fixtures/players` block was empty at KO+120
+sync, so **NOT A SINGLE `game_player_stats` row was written** for this game (0 rows, both teams).
+Events + team stats + score were captured fine; only the per-player block was absent → the 3
+real scorers were uncredited (the 76' own goal correctly needs no scorer row).
+
+**⚠️ KEY FINDING — re-pull on PROD does NOT work for this fixture.** Ran `sync_stats` (the EF
+re-pull) on PROD **3×** → each returned `status:ok` but **still 0 player rows** and **no
+`ef_errors`** → PROD's api-football account returns an **empty `/fixtures/players`** for fixture
+1489382. **DEV's api account, however, has the full 52-player block** (confirmed via DEV
+`probe_stats`). So DEV and PROD api sources diverge for this fixture; **PROD cannot self-heal via
+re-pull — the data must be inserted from the DEV pull.**
+
+**Correction applied (PROD) — manual INSERT of the full block, sourced from DEV `probe_stats`:**
+Generated a 52-row INSERT from the DEV pull (`scripts`-free: curl DEV probe → python → SQL),
+applied to PROD with `ON CONFLICT (game_id,api_player_id) DO NOTHING`. **51 rows inserted** (two
+Jordan bench players share api_id `0` → `DO NOTHING` collapses them to one; both non-playing,
+goals 0 — negligible). Scorers: Romano Schmid `7562`=1, Marko Arnautović `18830`=1, Ali Olwan
+`164026`=1 (**Olwan's api_id was previously unknown — resolved from the DEV pull**).
+
+**Verified:** player_rows 51, `SUM(goals)`=3, team_rows 2 (unchanged), event_rows **4 (no dups)**,
+no duplicate api_player_ids, and `player_tournament_stats` (Top Scorers) now shows all 3.
+
+**Why INSERT-from-DEV, not re-pull:** the block was *empty* (not stale), so full insert has no
+overwrite/dup risk on `game_player_stats`; and PROD's own re-pull returns nothing for this
+fixture, so re-pull was simply ineffective. This is the first case where the **manual fix
+sourced data from the DEV api** because PROD's api lacked it.
+
