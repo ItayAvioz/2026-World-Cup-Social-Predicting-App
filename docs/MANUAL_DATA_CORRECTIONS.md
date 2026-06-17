@@ -209,3 +209,37 @@ player rows) → zero risk. Minor possession/shots drift, if any, left untouched
 a re-sync would rewrite all player rows + re-pull `/fixtures/events` (dup risk) to refresh
 numbers no logic reads.
 
+---
+
+## 2026-06-17 — Portugal 1–1 DR Congo: missing DR Congo stats (team-name mismatch)
+
+**Game:** `ed00190a-10c9-48c7-9669-e3a0771a9d95` · api_fixture_id `1539003`
+**Symptom:** DR Congo's whole MATCH STATS column showed "—"; Portugal rendered fully.
+
+**Root cause:** **Pattern B**, same class as Cape Verde / Bosnia. The api stats endpoints
+return the team as **`Congo DR`**, but the `games` table / frontend use canonical **`DR Congo`**
+(different word order → `normalizeTeam` gives `congo dr` ≠ `dr congo`). `TEAM_ALIASES` had no
+entry, so `canon()` fell through to the raw api name → 28 rows stored under `Congo DR`. Data
+was complete (26 players + 1 team row + 1 goal event), only mislabeled.
+
+**Fix — two parts:**
+
+1. **EF (prevents recurrence)** — football-api-sync **PROD v16**: added one alias
+   `"congo dr":"dr congo"` to `TEAM_ALIASES` (only that line vs v15). Smoke-tested
+   (unknown-mode → `{"error":"Unknown mode"}`). Covers DR Congo's future games.
+
+2. **DB backfill (the already-synced game) — rename in place, NOT re-pull** (all 3 tables, incl. the 1 goal event so the scorer flag resolves):
+```sql
+UPDATE game_player_stats SET team='DR Congo' WHERE game_id='ed00190a-10c9-48c7-9669-e3a0771a9d95' AND team='Congo DR';  -- 26
+UPDATE game_team_stats   SET team='DR Congo' WHERE game_id='ed00190a-10c9-48c7-9669-e3a0771a9d95' AND team='Congo DR';  -- 1
+UPDATE game_events       SET team='DR Congo' WHERE game_id='ed00190a-10c9-48c7-9669-e3a0771a9d95' AND team='Congo DR';  -- 1
+```
+Confirmed: 0 rows remain under `Congo DR`; all three tables read `DR Congo`.
+
+**Full-scan after fix:** re-ran the all-finished-games team-name mismatch scan → **empty**.
+DR Congo was the only remaining mismatch tournament-wide (Bosnia + Cape Verde already fixed).
+
+> Same EF-source caveat as v15: applied to the **live deployed prod source**, not the repo WIP.
+> Running list of api-stats-spelling aliases now in `TEAM_ALIASES`: `cabo verde`,
+> `cape verde islands`, `congo dr` (+ pre-existing cote divoire / korea republic / ir iran / turkiye / usa).
+
