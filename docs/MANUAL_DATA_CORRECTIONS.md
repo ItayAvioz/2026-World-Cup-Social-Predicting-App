@@ -279,3 +279,43 @@ overwrite/dup risk on `game_player_stats`; and PROD's own re-pull returns nothin
 fixture, so re-pull was simply ineffective. This is the first case where the **manual fix
 sourced data from the DEV api** because PROD's api lacked it.
 
+---
+
+## 2026-06-17 — top_scorer_candidates: player-id verification + 27 corrections
+
+**What:** Verified every `top_scorer_candidates.api_player_id` against the **real api ids in
+match data** (`game_player_stats`, lineups of the 42 teams that have played). Quote-free, in-DB.
+
+**Method:** match by `api_player_id` first (definitive), then full-name normalized (accent/
+punctuation-stripped) against that team's lineup. Categorized the **active 26-man squads** on
+played teams (1,092 players): **SAME (verified) 994 · COMPLETE (placeholder→real id) 23 ·
+MISMATCH (wrong id) 18 · unconfirmable 57**.
+
+**Applied — 27 safe corrections** (12 placeholder completions + 15 mismatch fixes), e.g.:
+Lautaro Martínez `6000→217`, Frenkie de Jong `37524→538`, Bernardo Silva `119612→636`,
+Almoez Ali `534032→2543`, Ao Tanaka `33142→32966`, Mikel Merino `-73→47311`, Diogo Costa
+`-77→369`, Merih Demiral `-57→30521`, Lisandro Martínez `-69→2467`. Verified after:
+SAME 994→**1021**, placeholders 74→**62**, **dup_ids 0** (UNIQUE(api_player_id) intact).
+
+**⚠️ 14 NOT applied — UNIQUE(api_player_id) collisions.** Target id already on another candidate
+row → either **duplicate seed entries** (same player, two spellings: "Ehsan Hajsafi"/"E. Hajisafi",
+"Ahmed Fatouh"/"Ahmed Abou El Fotouh", "Abdallah Nasib"/"Abdallah Naseeb", "Khulumani Ndamane"/
+"K. Ndamase", "El Hadji Malick Diouf"/"E. Diouf", "Zaid Ismail"/"Z. Ismaeel", "Danley Jean Jacques"/
+"D. Jean-Jacques", "Mohannad Abu Taha"/"Mohammad Taha", "Mohammed Abu Al-Shamat"/"Saleh Abu Al Shamat")
+or **tangled ids** ("Eric Garcia" holds Joan García's `182718`; "Abdullah Al Salem" holds Salem
+Al-Dawsari's `44340`; "Mohanad Ali" holds Hussein Ali's `145465`; Brazil "Danilo Santos" holds
+Danilo's `618`). These need manual paired/dedup resolution — deferred.
+
+**57 unconfirmable** = active players not in any lineup yet (real players rotated/benched like
+Neymar `276`, Darwin Núñez `51617`, Ronald Araújo `101814`, Gavi `1697` — ids likely fine just
+unverified) + placeholders whose teams/players haven't appeared (Jurrien Timber, Hommam Al Amin,
+Uzbekistan etc.). Resolvable only once they play, or via live-api lookup.
+
+**Zero scoring impact:** no *picked* player (`top_scorer_pick`) had a placeholder or mismatched id
+— confirmed earlier. Picks store their own `top_scorer_api_id`, scored vs `game_player_stats`, so
+the candidate-table cleanup doesn't change any score.
+
+**JSON:** regenerated `data/wc2026_squads.json` via `scripts/regen-squads-json.cjs` (mirrors PROD
+active candidates 1:1) → 48 teams, 1,248 players, placeholders 60→**48**. Frontend Picks reads this
+JSON, so the corrected ids reach the UI on next deploy.
+
