@@ -448,3 +448,39 @@ option id verified vs `game_player_stats` ground truth + UNIQUE-collision checke
 unused subs / not in matchday squad; no match-data id to verify). They auto-resolve when fielded;
 list in session notes. Lesson: after a tangle reassign, RE-SCAN with a fuzzy (last-token) name match —
 the displaced twin's real id is often already in match data under a variant spelling.
+
+---
+
+## 2026-06-19 — Switzerland 4–1 Bosnia: ROOT CAUSE of recurring Bosnia mismatch found + fixed
+
+**Game:** `59640b6d-53f2-467f-b26e-5d84d2e069d5` · api_fixture_id `1539005` (round 2).
+**Symptom:** Bosnia's whole MATCH STATS column "—" + scorer flags gone — AGAIN. User: "it happens
+each game, doesn't make sense." It recurs on EVERY Bosnia game; aliases never helped. Found why.
+
+**ROOT CAUSE (a real bug in `normalizeTeam`, not a missing alias):**
+`normalizeTeam` does `.replace(/[^a-z0-9\s]/g,'')` — strips punctuation to the EMPTY string. So:
+- DB `"Bosnia-Herzegovina"` → the hyphen (no surrounding spaces) is deleted with nothing in its
+  place → **`"bosniaherzegovina"`** (two words FUSED, no space).
+- api `"Bosnia & Herzegovina"` → the `&` HAS spaces around it → **`"bosnia herzegovina"`** (a space
+  survives).
+`"bosniaherzegovina"` ≠ `"bosnia herzegovina"` → `canon()` can't match either side → it falls
+through to the raw api name and re-stores `"Bosnia & Herzegovina"` every single sync. Bosnia is the
+only WC team whose canonical name contains a hyphen, which is why ONLY Bosnia recurs and why no
+`TEAM_ALIASES` entry ever fixed it (the DB side normalized wrong too).
+
+**Fix (two parts):**
+1. **EF football-api-sync PROD v18** — added 2 `TEAM_ALIASES` entries that force BOTH normalized
+   forms to the same key: `"bosnia herzegovina"→"bosnia-herzegovina"` AND
+   `"bosniaherzegovina"→"bosnia-herzegovina"`. Now `normalizeTeam(api "Bosnia & Herzegovina")` and
+   `normalizeTeam(DB "Bosnia-Herzegovina")` both = `"bosnia-herzegovina"` → `canon()` resolves to the
+   DB games name. Durable for all future Bosnia games (next: Bosnia v Qatar, Jun 24). Smoke-tested OK.
+   (Deeper option — change the punctuation strip from `''` to `' '` so hyphens become spaces — left
+   for a future holistic cleanup; would also require re-keying the `cote divoire` alias. The alias
+   fix is the surgical, low-risk choice consistent with v15–v17.)
+2. **DB backfill (rename in place, NOT re-pull):** `game_player_stats` (26) + `game_team_stats` (1) +
+   `game_events` (2): `'Bosnia & Herzegovina' → 'Bosnia-Herzegovina'`. 0 bad rows remain. Full
+   tournament-wide mismatch scan = empty (Canada–Bosnia fix from 2026-06-13 still holding).
+
+**Zero scoring impact** — score 4–1 correct, points always read from `games.score_home/away`; only
+the display column + scorer flags were affected. ⚠️ Eyeball Bosnia v Qatar (Jun 24) to confirm v18
+holds.

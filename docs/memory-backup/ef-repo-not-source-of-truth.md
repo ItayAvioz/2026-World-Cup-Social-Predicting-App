@@ -9,7 +9,7 @@ metadata:
 
 The local `supabase/functions/**/index.ts` files are **NOT kept in sync** with the deployed Edge Functions. The **deployed PROD edge functions are the source of truth** (extends [[feedback_supabase_source_of_truth]] to EFs specifically).
 
-Confirmed 2026-06-13 for `football-api-sync`: three divergent versions coexist — PROD deployed **v17** (v15 Cape Verde / v16 DR Congo / v17 Czechia aliases, 2026-06-15..18 — see [[bosnia-team-name-mismatch]]), DEV deployed **v39**, and the repo `index.ts` is a large **uncommitted WIP rewrite** (978 lines changed) matching neither. The repo file has been stale/ahead for a while; nobody reconciles it.
+Confirmed 2026-06-13 for `football-api-sync`: three divergent versions coexist — PROD deployed **v18** (v15 Cape Verde / v16 DR Congo / v17 Czechia / **v18 Bosnia hyphen-normalize root-cause aliases**, 2026-06-15..19 — see [[bosnia-team-name-mismatch]]), DEV deployed **v39**, and the repo `index.ts` is a large **uncommitted WIP rewrite** (978 lines changed) matching neither. The repo file has been stale/ahead for a while; nobody reconciles it. (v18 deploy method: authored the full file from the fetched v17 source, rewriting diacritic ranges as `̀-ͯ`; smoke-tested `{"mode":"__smoke__"}`→`{"error":"Unknown mode"}`.)
 
 **Why:** **How to apply:**
 - Before editing or deploying ANY edge function, **fetch the live source first** via `get_edge_function` (prod project `asugxlvgcmkxspzokydk`, dev `ftryuvfdihmhlzvbpfeu`), make the minimal change to THAT, and `deploy_edge_function` from it. Verify by fetching the deployed copy back and diffing (only-intended-change check).
