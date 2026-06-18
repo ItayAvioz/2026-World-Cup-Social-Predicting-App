@@ -348,3 +348,30 @@ counted, just shown without his flag) — a display effect of the name mismatch.
 > congo dr, **czechia** (+ cote divoire / korea republic / ir iran / turkiye / usa).
 > Same EF-source caveat: applied to the live deployed prod source, not the repo WIP.
 
+
+---
+
+## 2026-06-18 — Ghana 1–0 Panama: scorer missing from Top Scorers (timing lag)
+
+**Game:** `1fa94b1f-d67b-4077-89aa-ba8d82e8577d` · api_fixture_id `1489385`
+**Symptom:** Found in the end-of-round-1 full verification (25 finished group games). Ghana's only
+goal (Caleb Yirenkyi) was in `game_events` but his `game_player_stats` row had `goals=0` →
+reconciliation failed (Σ player goals 0 ≠ score 1) and he was **absent from Top Scorers**
+(`player_tournament_stats` sums `game_player_stats.goals`).
+
+**Root cause:** **Pattern A** timing lag (same class as Case 1 Khoukhi / Case 3 Diallo). api
+attributed the goal in player stats after the KO+120 one-shot sync; never auto-picked-up. Team name
+was correct (`Ghana`) — NOT a Pattern B mismatch.
+
+**Verify-first (DEV probe):** `POST {mode:'probe_stats',fixture_id:1489385}` to the DEV
+football-api-sync EF → Caleb Yirenkyi (`api_player_id 475575`) now reports **`goals: 1`** (rating
+7.9, 90 min). Confirmed before touching PROD.
+
+**Fix (single field, NOT a re-sync):**
+`UPDATE game_player_stats SET goals=1 WHERE game_id='1fa94b1f-…' AND api_player_id=475575 AND goals=0`
+(1 row). Post-fix: Σ player goals = 1 = goal_events 1 = score 1–0 ✓. Yirenkyi now in Top Scorers.
+Display-only impact; prediction points were always correct (read from `games.score_home/away`).
+
+> End-of-round-1 verification result (2026-06-18, all 25 finished group games): zero name
+> mismatches, zero missing stat blocks, zero negative-id scorers, 24/25 reconciled — this was the
+> single gap, now closed. Tournament total: 77 goals.
