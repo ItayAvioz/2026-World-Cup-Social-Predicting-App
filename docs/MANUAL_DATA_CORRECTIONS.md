@@ -484,3 +484,31 @@ only WC team whose canonical name contains a hyphen, which is why ONLY Bosnia re
 **Zero scoring impact** — score 4–1 correct, points always read from `games.score_home/away`; only
 the display column + scorer flags were affected. ⚠️ Eyeball Bosnia v Qatar (Jun 24) to confirm v18
 holds.
+
+---
+
+## 2026-06-19 — Proactive team-name audit: ALL 26 played fixtures, all 48 teams (DEV read-only)
+
+Since all 48 teams have now played, ran a read-only DEV `probe_stats` sweep over **all 26 played
+fixtures** to catch any hidden team-name variant BEFORE it breaks a future game. For each fixture,
+pulled the api's team name from `/fixtures/statistics` + `/fixtures/players` and compared it
+(normalized with the exact v18 alias map) to our canonical home/away.
+
+**Result: 26/26 fixtures covered (both teams returned, no empty probes), 0 unmatched, 0 new aliases
+needed.** v18 + existing aliases cover every spelling the api has used so far.
+
+**The api spells exactly 6 teams differently from us — all already aliased:**
+| Canonical | api spelling | alias since |
+|---|---|---|
+| Czech Republic | `Czechia` | v17 |
+| Bosnia-Herzegovina | `Bosnia & Herzegovina` | v18 |
+| United States | `USA` | (orig) |
+| Turkey | `Türkiye` | (orig) |
+| Cape Verde | `Cape Verde Islands` | v15 |
+| DR Congo | `Congo DR` | v16 |
+
+The other 42 teams: api spelling == our canonical. **Conclusion: all teams are safe for their
+next games (round-3 group + knockouts).** The only residual risk is the unguessable "Czech-style
+flip" — a team that has only sent its canonical spelling so far suddenly switching to a new variant
+in a later game; the per-game eyeball still catches that. Scan method: DEV EF `probe_stats` per
+`api_fixture_id`; normalize = lowercase + NFD strip + remove non-alnum + collapse + v18 aliases.
