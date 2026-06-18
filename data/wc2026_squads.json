@@ -6,7 +6,7 @@
     "regenerated_by": "scripts/regen-squads-json.cjs",
     "team_count": 48,
     "total_players": 1248,
-    "placeholder_count": 48,
+    "placeholder_count": 33,
     "position_values": "FULL api-football form: Goalkeeper | Defender | Midfielder | Attacker (NOT GK/DF/MF/FW). DB stores these verbatim; never write short codes.",
     "note": "This file mirrors the finalized DB 1:1. Negative api_player_id = placeholder pending post-game lineup resolution (see docs/PLAN_LINEUP_VERIFICATION.md)."
   },
@@ -1534,8 +1534,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -66,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 618,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -1615,8 +1615,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": 618,
-          "id_verification": "fully_verified"
+          "api_player_id": -112,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -2582,8 +2582,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": -78,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 2763,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -3721,8 +3721,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -23,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 2649,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -4841,8 +4841,8 @@
           "position": "Attacker",
           "club": "",
           "dob": "",
-          "api_player_id": -26,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 82090,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5013,8 +5013,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": 237292,
-          "id_verification": "squad_missing_name_flagged"
+          "api_player_id": 338367,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5194,8 +5194,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -30,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 2685,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5203,8 +5203,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -31,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 2687,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5447,8 +5447,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -75,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 145465,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5573,8 +5573,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": 72131,
-          "id_verification": "squad_missing_name_flagged"
+          "api_player_id": 626479,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -5618,8 +5618,8 @@
           "position": "Attacker",
           "club": "",
           "dob": "",
-          "api_player_id": 145465,
-          "id_verification": "fully_verified"
+          "api_player_id": 154767,
+          "id_verification": "lineup_resolved"
         }
       ]
     },
@@ -6152,8 +6152,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -34,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 310835,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -6206,8 +6206,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -81,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 310785,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -7760,8 +7760,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": 554208,
-          "id_verification": "fully_verified"
+          "api_player_id": 50911,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -7769,8 +7769,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": -68,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 2979,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -7814,8 +7814,8 @@
           "position": "Attacker",
           "club": "",
           "dob": "",
-          "api_player_id": 2979,
-          "id_verification": "fully_verified"
+          "api_player_id": -113,
+          "id_verification": "placeholder_lineup_pending"
         }
       ]
     },
@@ -9098,8 +9098,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": 176541,
-          "id_verification": "squad_missing_name_ok"
+          "api_player_id": 409303,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -9369,8 +9369,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -50,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 474630,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -9794,8 +9794,8 @@
           "position": "Goalkeeper",
           "club": "",
           "dob": "",
-          "api_player_id": -76,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 182718,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -9830,8 +9830,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": 182718,
-          "id_verification": "fully_verified"
+          "api_player_id": -114,
+          "id_verification": "placeholder_lineup_pending"
         },
         {
           "number": null,
@@ -11122,8 +11122,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": 51248,
-          "id_verification": "squad_missing_name_flagged"
+          "api_player_id": 35885,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11493,8 +11493,8 @@
           "position": "Goalkeeper",
           "club": "",
           "dob": "",
-          "api_player_id": -59,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 73507,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11529,8 +11529,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -58,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 73418,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11556,8 +11556,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": 532759,
-          "id_verification": "fully_verified"
+          "api_player_id": 53830,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11592,8 +11592,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -63,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 73514,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11601,8 +11601,8 @@
           "position": "Defender",
           "club": "",
           "dob": "",
-          "api_player_id": -65,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 73510,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11619,8 +11619,8 @@
           "position": "Midfielder",
           "club": "",
           "dob": "",
-          "api_player_id": -60,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 73520,
+          "id_verification": "lineup_resolved"
         },
         {
           "number": null,
@@ -11718,8 +11718,8 @@
           "position": "Attacker",
           "club": "",
           "dob": "",
-          "api_player_id": -62,
-          "id_verification": "placeholder_lineup_pending"
+          "api_player_id": 72127,
+          "id_verification": "lineup_resolved"
         }
       ]
     }

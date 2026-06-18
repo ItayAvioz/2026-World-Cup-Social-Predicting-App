@@ -26,6 +26,15 @@ Verified ALL active candidate ids vs real match data (`game_player_stats`, 42 te
 - **Zero scoring impact** — no *picked* player had a bad id (picks store own `top_scorer_api_id`, scored vs `game_player_stats`).
 - JSON regenerated (placeholders 60→48). Logged in docs/MANUAL_DATA_CORRECTIONS.md. Method = match by api_player_id first, then full-name accent-stripped; UNIQUE collision guard.
 
+## 🔧 Verification pass #2 (2026-06-18) — end of round 1, all 48 teams played; placeholders 48→33
+
+Re-audited all 1248 active ids vs `game_player_stats` ground truth. **SAME 1162 / COMPLETABLE 18 / MISMATCH 6 / UNCONFIRMABLE 62.** Applied **24 id changes** (incl. the 14 collisions DEFERRED in pass #1 — now resolved). **Key technique: park the colliding duplicate/holder on a fresh negative (−101..−118) — NEVER delete inactive rows (user rule).** 0 dup ids after; 0 pick cascades (no `top_scorer_pick` referenced any affected name → zero scoring impact, as always — picks store own `top_scorer_api_id`, scored vs game_player_stats).
+- **17 of 18 completable done** (2 free-id + 11 inactive-twin + 4 tangle incl. Iraq Hussein Ali 145465 / Mohanad Ali→154767, Brazil Danilo→618, Panama Jose Luis→2979, Spain Joan Garcia→182718). Tangle = real id belonged to a DIFFERENT teammate who wrongly held it; displaced twin parked active+pending.
+- **Group B applied**: Azizbek Ganiev −60→73520 (match name "Azizjon Ganiev" — treated as seed typo / same player per user OK).
+- **6 mismatches corrected**: Cristian Martínez 50911, Farrukh Sayfiev 53830, Alejandro Zendejas 35885 ("Alex Zendejas"), Danley Jean Jacques 338367, Zaid Ismail 626479, El Hadji Malick Diouf 409303.
+- **STILL PENDING (3, real id unknown — parked active −112/−113/−114)**: Brazil "Danilo Santos" (MF; 618 was the captain Danilo), Panama "Tomas Rodriguez" (2979 was José Luis), Spain "Eric Garcia" (182718 was GK Joan García). Their own id isn't in match data yet → resolve when they play / via club lookup.
+- JSON regenerated via `scripts/regen-squads-json.cjs` → 48 teams / 1248 / **33 placeholders**. Logged in docs/MANUAL_DATA_CORRECTIONS.md (pass #2). Pass #1 (2026-06-17) had deferred these 14 collisions; pass #2 cleared them.
+
 ## State (2026-06-02 post-M128) — superseded by the 2026-06-07 finalization above
 
 **JSON state** (`data/wc2026_squads.json`):

@@ -375,3 +375,51 @@ Display-only impact; prediction points were always correct (read from `games.sco
 > End-of-round-1 verification result (2026-06-18, all 25 finished group games): zero name
 > mismatches, zero missing stat blocks, zero negative-id scorers, 24/25 reconciled — this was the
 > single gap, now closed. Tournament total: 77 goals.
+
+---
+
+## 2026-06-18 — Player-id verification pass #2 (end of round 1, all 48 teams played)
+
+Re-ran the active-candidate `api_player_id` audit vs real match data (`game_player_stats`) now that
+all 48 teams have played. Denominator = 1248 active. Result: **SAME 1162 / COMPLETABLE 18 /
+MISMATCH 6 / UNCONFIRMABLE 62**. Every id below was confirmed against `game_player_stats` ground
+truth (api's own match name). Method = match by api_player_id, then accent-stripped full name;
+UNIQUE(api_player_id) collisions resolved by **parking the duplicate/holder on a fresh negative
+placeholder — never deleting inactive rows** (user rule).
+
+**Applied 24 id changes (23 squad rows resolved + cascades), 0 collisions, 0 pick cascades**
+(no `top_scorer_pick` referenced any affected name).
+
+**A) 18 COMPLETABLE → 17 completed (1 held):**
+- Free-id direct: Brandon Thomas-Asante (Ghana) → 82090; Abdullah Abdullaev (Uzbekistan) → 73418.
+- Inactive-twin (active row gets real id; the variant-spelling inactive dup parked on −101..−111):
+  Mario Pasalic (Croatia) 2763; Ahmed Fatouh (Egypt) 2649; Ehsan Hajsafi (Iran) 2685; Hossein
+  Kanaani (Iran) 2687; Abdallah Nasib (Jordan) 310835; Mohannad Abu Taha (Jordan) 310785;
+  Khulumani Ndamane (S.Africa) 474630; Abduvohid Nematov (Uzb) 73507; Oston Urunov (Uzb) 72127;
+  Sherzod Nasrullaev (Uzb) 73514; Umarbek Eshmuradov (Uzb) 73510.
+- Active tangle (id belonged to a DIFFERENT teammate → reassigned; displaced twin parked active+pending):
+  Brazil **Danilo** → 618 (618 was wrongly on "Danilo Santos" → now −112 pending);
+  Panama **Jose Luis Rodriguez** → 2979 (was on "Tomas Rodriguez" → −113 pending);
+  Spain **Joan Garcia** → 182718 (was on "Eric Garcia" → −114 pending);
+  Iraq **Hussein Ali** → 145465 + **Mohanad Ali** corrected 145465→154767 (both ids in match data).
+- **HELD: Azizbek Ganiev (Uzbekistan)** — match id 73520 = "Azizjon Ganiev" (given-name diff) →
+  later resolved in Group B below per user decision (treat as same player / seed typo).
+
+**B) Name-discrepancy resolved per user OK:** Azizbek Ganiev (Uzb) −60 → 73520 (inactive
+"A. Gʻaniyev" parked −118).
+
+**C) 6 MISMATCH (wrong stored id → verified real id):**
+- Safe (target free): Cristian Martínez (Panama) 554208→50911; Farrukh Sayfiev (Uzb) 532759→53830;
+  Alejandro Zendejas (USA) 51248→35885 (match name "Alex Zendejas" — same player).
+- Parked-dup: Danley Jean Jacques (Haiti) 237292→338367 (park "D. Jean-Jacques" −115);
+  Zaid Ismail (Iraq) 72131→626479 (park "Z. Ismaeel" −116);
+  El Hadji Malick Diouf (Senegal) 176541→409303 (park "E. Diouf" −117).
+
+**STILL PENDING (Group A — real id unknown, parked active):** Brazil "Danilo Santos" (−112),
+Panama "Tomas Rodriguez" (−113), Spain "Eric Garcia" (−114). Their stored id provably belonged to a
+teammate; their own id isn't in match data yet → resolve when they appear (or via club lookup).
+
+**Post-state:** active 1248, active placeholders 33 (was 48), all placeholders 62, no duplicate
+api_player_id. `data/wc2026_squads.json` regenerated (placeholders 48→33). **Zero scoring impact** —
+`top_scorer_pick` stores its own id and scores vs `game_player_stats`; no pick referenced any
+affected player.
