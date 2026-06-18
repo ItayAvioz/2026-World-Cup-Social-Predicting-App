@@ -35,6 +35,8 @@ Re-audited all 1248 active ids vs `game_player_stats` ground truth. **SAME 1162 
 - **STILL PENDING (3, real id unknown — parked active −112/−113/−114)**: Brazil "Danilo Santos" (MF; 618 was the captain Danilo), Panama "Tomas Rodriguez" (2979 was José Luis), Spain "Eric Garcia" (182718 was GK Joan García). Their own id isn't in match data yet → resolve when they play / via club lookup.
 - JSON regenerated via `scripts/regen-squads-json.cjs` → 48 teams / 1248 / **33 placeholders**. Logged in docs/MANUAL_DATA_CORRECTIONS.md (pass #2). Pass #1 (2026-06-17) had deferred these 14 collisions; pass #2 cleared them.
 
+**Pass #2b (2026-06-19) — 7 more resolved, placeholders 33→26.** A fuzzy (accent-strip + last-token) re-scan found 7 placeholders DID have their own id in match data under a variant spelling — incl. the 3 "pending tangle twins": Brazil **Danilo Santos**→275170 (≠ captain Danilo 618), Panama **Tomas Rodriguez**→57910 (≠ José Luis 2979), Spain **Eric Garcia**→619 (≠ GK Joan García 182718). Plus Qatar Hommam Al Amin→175439, Issa Lay→366516, Saudi Mohammed Abu Al Shamat→403087, **Salem Al Dawsari→44340** (⚠️ star FW, was on inactive "Abdullah Al Salem"). 4 parked an inactive dup (−119..−122). **Lesson: after a tangle reassign, RE-SCAN with last-token fuzzy match — the displaced twin's real id is usually already in match data under a variant spelling.** Remaining **26 placeholders = players never fielded yet** (no match-data id; auto-resolve when they play).
+
 ## State (2026-06-02 post-M128) — superseded by the 2026-06-07 finalization above
 
 **JSON state** (`data/wc2026_squads.json`):

@@ -423,3 +423,28 @@ teammate; their own id isn't in match data yet → resolve when they appear (or 
 api_player_id. `data/wc2026_squads.json` regenerated (placeholders 48→33). **Zero scoring impact** —
 `top_scorer_pick` stores its own id and scores vs `game_player_stats`; no pick referenced any
 affected player.
+
+---
+
+## 2026-06-19 — Player-id verification pass #2b: 7 more resolved (placeholders 33→26)
+
+Follow-up to pass #2: a deeper name-scan (accent-strip + last-token LIKE against `game_player_stats`)
+found that **7 active placeholders DID have their own id in match data**, under a spelling the
+exact-name match missed — including the 3 "pending tangle twins" wrongly thought unfindable. Each
+option id verified vs `game_player_stats` ground truth + UNIQUE-collision checked. 0 dup ids after,
+0 pick cascades.
+
+**7 resolved** (4 needed parking an inactive duplicate on −119..−122; never deleted):
+- Brazil **Danilo Santos** → 275170 (park inactive "Danilo" −119) — its own id, distinct from captain Danilo 618.
+- Panama **Tomas Rodriguez** → 57910 (free) — distinct from José Luis 2979.
+- Spain **Eric Garcia** → 619 (free) — distinct from GK Joan García 182718 (note 618 Danilo / 619 Eric adjacency).
+- Qatar **Hommam Al Amin** → 175439 ("Homam Al-Amin"; park inactive "Homam Ahmed" −120).
+- Qatar **Issa Lay** → 366516 ("Issa Laye"; free).
+- Saudi **Mohammed Abu Al Shamat** → 403087 ("Mohammed Abu Al-Shamat"; park inactive "Saleh Abu Al Shamat" −121).
+- Saudi **Salem Al Dawsari** → 44340 ⚠️ star forward / scoring-relevant ("Salem Al-Dawsari"; was wrongly on inactive "Abdullah Al Salem" −122).
+
+**Post-state:** active 1248, active placeholders 33→**26**, no dup ids. JSON regenerated (placeholders
+26). **26 remaining placeholders = Group 2** (players whose team played but they were never fielded —
+unused subs / not in matchday squad; no match-data id to verify). They auto-resolve when fielded;
+list in session notes. Lesson: after a tangle reassign, RE-SCAN with a fuzzy (last-token) name match —
+the displaced twin's real id is often already in match data under a variant spelling.
