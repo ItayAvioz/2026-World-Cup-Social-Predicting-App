@@ -319,3 +319,32 @@ the candidate-table cleanup doesn't change any score.
 active candidates 1:1) → 48 teams, 1,248 players, placeholders 60→**48**. Frontend Picks reads this
 JSON, so the corrected ids reach the UI on next deploy.
 
+---
+
+## 2026-06-18 — Czech Republic 1–1 South Africa: missing Czech stats (team-name mismatch)
+
+**Game:** `eb20c47e-f2c0-4834-b265-4ea07a32c998` · api_fixture_id `1539004`
+**Symptom:** Czech Republic's whole MATCH STATS column "—", and the Czech scorer (Sadílek) lost
+his flag/attribution on the Game page.
+
+**Root cause:** **Pattern B**, new variant. The api returned the team as **`Czechia`** for this
+fixture, but canonical = **`Czech Republic`**. 25 Czech player rows + 1 team-stat row + the
+Sadílek goal event all stored under `Czechia` → frontend can't match → blank column + flagless
+scorer. **api is INCONSISTENT:** the earlier South Korea v Czech Republic game stored
+`Czech Republic` correctly; this game used `Czechia`. Both spellings now coexist in the DB.
+
+**Goals were NOT mis-counted:** score 1–1, events = Sadílek (Normal 6') + Mokoena (Penalty 83'),
+player-stat goals sum = 2 ✓. The only "goal" problem was the Czech scorer's flag dropping (he's
+counted, just shown without his flag) — a display effect of the name mismatch.
+
+**Fix — two parts:**
+1. **EF v17:** added alias `"czechia":"czech republic"` to `TEAM_ALIASES` (only that line vs v16).
+   Smoke-tested. Covers future Czech games even when the api flips to "Czechia".
+2. **DB backfill (rename in place):** `game_player_stats` (25) + `game_team_stats` (1) +
+   `game_events` (1): `'Czechia' → 'Czech Republic'`. Confirmed 0 `Czechia` rows remain; 25 Czech
+   player rows now. Post-fix full mismatch scan across all finished games = **empty**.
+
+> Running `TEAM_ALIASES` stats-spelling aliases (PROD v17): cabo verde, cape verde islands,
+> congo dr, **czechia** (+ cote divoire / korea republic / ir iran / turkiye / usa).
+> Same EF-source caveat: applied to the live deployed prod source, not the repo WIP.
+
