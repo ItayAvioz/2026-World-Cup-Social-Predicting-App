@@ -512,3 +512,44 @@ next games (round-3 group + knockouts).** The only residual risk is the unguessa
 flip" — a team that has only sent its canonical spelling so far suddenly switching to a new variant
 in a later game; the per-game eyeball still catches that. Scan method: DEV EF `probe_stats` per
 `api_fixture_id`; normalize = lowercase + NFD strip + remove non-alnum + collapse + v18 aliases.
+
+---
+
+## 2026-06-23 — France 3–0 Iraq: missing team stats (passes + xG) — lightning-suspended game
+
+**Game:** `40a6c1c4-ebdd-48fe-9259-1bf1bdc5a9b4` · api_fixture_id `1539017`
+**Context:** match was **suspended by a lightning storm**, resumed, and finished FT 3-0. The
+original KO+120 sync cron had fired during the interruption → api status `INT` ("Interrupted") →
+EF logged `Terminal status INT` and **self-unscheduled** (refused to write a non-final score — correct
+v35 safety behavior). So the game sat unscored.
+
+**Initial pull (manual, after FT):** fired `mode=sync` directly via `net.http_post` (cron was gone) →
+EF returned `score 3-0, api_status FT`. Wrote score + 2 team rows + 52 player rows + 3 goal events;
+scoring trigger ran (all 53 predictions scored). **BUT** `passes_total`, `passes_accuracy`, `xg` came
+back NULL for both teams — dev `probe_stats` confirmed the api had **not yet published** passes/xG
+at that time (computed later than the score; common, and these compute even later for a
+suspended/resumed match).
+
+**Backfill (retry, api now had them):** dev EF `probe_stats` fixture 1539017 →
+France passes 603 / 90% / xG 2.67, Iraq passes 481 / 86% / xG 0.63.
+
+**Correction applied (PROD) — fill the 6 NULLs only:**
+```sql
+UPDATE game_team_stats SET passes_total=603, passes_accuracy=90, xg='2.67'
+ WHERE game_id='40a6c1c4-ebdd-48fe-9259-1bf1bdc5a9b4' AND team='France';
+UPDATE game_team_stats SET passes_total=481, passes_accuracy=86, xg='0.63'
+ WHERE game_id='40a6c1c4-ebdd-48fe-9259-1bf1bdc5a9b4' AND team='Iraq';
+```
+Final verify: **0 NULL columns** remain in either team row; full game complete (3-0, 2 team / 52
+player / 3 goal events / 1 odds / 53 predictions all scored). Goals Mbappé 2 + Dembélé 1; Iraq
+yellow (Amir Al Ammari) captured at team + player level (yellows are never `game_events` rows — by
+design that table holds goals + red cards only). Fixture id unchanged (1539017 = France v Iraq, FT).
+
+**Decision:** minimal manual UPDATE over re-sync (same rationale as Brazil–Morocco). Left the trivial
+possession drift (55/45 → api 56/44) untouched — populated, cosmetic, not "missing". UPDATE ran as
+service-role via MCP (M132 authenticated-write lock does not apply). Display-only fields; no scoring
+impact.
+
+**New wrinkle vs prior cases:** the suspended→resumed flow means (a) the sync cron self-unschedules
+on the `INT` status so the game needs a **manual re-pull after FT** (no auto-retry), and (b) passes/xG
+land **even later** than usual — took a couple of retries before the api published them.
