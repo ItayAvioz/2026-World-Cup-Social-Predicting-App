@@ -481,11 +481,11 @@ export default function Game() {
               </div>
             )}
 
-            {/* ET / penalties info */}
+            {/* ET / penalties info — E.T. shown cumulative (90-min + ET) */}
             {finished && (game.went_to_extra_time || game.went_to_penalties) && (
               <div className="gm-header-extra">
                 {game.went_to_extra_time && game.et_score_home !== null && (
-                  <span>E.T. {game.et_score_home}–{game.et_score_away}</span>
+                  <span>E.T. {game.score_home + game.et_score_home}–{game.score_away + game.et_score_away}</span>
                 )}
                 {game.went_to_penalties && game.penalty_score_home !== null && (
                   <span>Pens {game.penalty_score_home}–{game.penalty_score_away}</span>
@@ -493,27 +493,63 @@ export default function Game() {
               </div>
             )}
 
-            {/* Events timeline inside header */}
-            {finished && gameEvents.length > 0 && (
+            {/* Events timeline inside header — in-play goals + red cards only
+                (shootout kicks are rendered separately below). */}
+            {finished && gameEvents.some(ev => ev.event_type === 'goal' || ev.event_type === 'red_card' || ev.event_type === 'missed_penalty') && (
               <div className="gm-events gm-header-events">
-                {gameEvents.map((ev, i) => {
+                {gameEvents.filter(ev => ev.event_type === 'goal' || ev.event_type === 'red_card' || ev.event_type === 'missed_penalty').map((ev, i) => {
                   const isHome = ev.team === game.team_home
-                  const icon   = ev.event_type === 'goal' ? '⚽' : '🟥'
+                  const isMiss = ev.event_type === 'missed_penalty'
+                  const icon   = ev.event_type === 'goal' ? '⚽' : ev.event_type === 'red_card' ? '🟥' : '✗'
                   const min    = ev.minute_extra ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
-                  // Tag goal type from api detail: penalty (P) / own goal (OG).
-                  // Own goal is tagged by api to the beneficiary team, so it already
-                  // renders on the correct side — no remap needed.
-                  const tag    = ev.detail === 'Own Goal' ? ' (OG)' : ev.detail === 'Penalty' ? ' (P)' : ''
+                  // Tag goal type from api detail: penalty (P) / own goal (OG) /
+                  // in-play missed penalty (P, with red ✗ icon). Own goal is tagged by
+                  // api to the beneficiary team, so it already renders on the correct side.
+                  const tag    = ev.detail === 'Own Goal' ? ' (OG)' : (ev.detail === 'Penalty' || isMiss) ? ' (P)' : ''
                   return (
                     <div className="gm-event-row" key={i}>
                       <span className="gm-event-home">{isHome ? `${ev.player_name ?? '?'} ${min}${tag}` : ''}</span>
-                      <span className="gm-event-icon">{icon}</span>
+                      <span className={`gm-event-icon ${isMiss ? 'gm-pen-x' : ''}`}>{icon}</span>
                       <span className="gm-event-away">{!isHome ? `${min}${tag} ${ev.player_name ?? '?'}` : ''}</span>
                     </div>
                   )
                 })}
               </div>
             )}
+
+            {/* Penalty shootout — kicks in order, incl. misses. Ordered by
+                minute_extra (api's reliable kick sequence); numbered per team. */}
+            {finished && gameEvents.some(ev => ev.event_type === 'pen_shootout_scored' || ev.event_type === 'pen_shootout_missed') && (() => {
+              // Sort by api kick sequence, assign a per-team round number, then render
+              // in strict alternating order (first team of each round first). Shootouts
+              // always alternate A,B,A,B — robust to api ordering quirks in old fixtures.
+              const seq = gameEvents
+                .filter(ev => ev.event_type === 'pen_shootout_scored' || ev.event_type === 'pen_shootout_missed')
+                .sort((a, b) => (a.minute_extra ?? 0) - (b.minute_extra ?? 0))
+              const firstTeam = seq.length ? seq[0].team : game.team_home
+              const perTeam = {}
+              const kicks = seq.map(ev => {
+                const n = (perTeam[ev.team] = (perTeam[ev.team] ?? 0) + 1)
+                return { ev, n, first: ev.team === firstTeam }
+              }).sort((a, b) => (a.n - b.n) || ((a.first ? 0 : 1) - (b.first ? 0 : 1)))
+              return (
+                <div className="gm-events gm-header-events gm-shootout">
+                  <div className="gm-shootout-title">Penalty Shootout</div>
+                  {kicks.map(({ ev, n }, i) => {
+                    const isHome = ev.team === game.team_home
+                    const scored = ev.event_type === 'pen_shootout_scored'
+                    const label  = `P${n} ${ev.player_name ?? '?'}`
+                    return (
+                      <div className="gm-event-row" key={`so-${i}`}>
+                        <span className="gm-event-home">{isHome ? label : ''}</span>
+                        <span className={`gm-event-icon ${scored ? '' : 'gm-pen-x'}`}>{scored ? '⚽' : '✗'}</span>
+                        <span className="gm-event-away">{!isHome ? label : ''}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
 

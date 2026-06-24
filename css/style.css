@@ -907,6 +907,11 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .gm-event-icon { font-size:.8rem; text-align:center; flex-shrink:0; }
 .gm-event-away { text-align:left; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
+/* Penalty shootout block */
+.gm-shootout { margin-top:.3rem; border-top:1px solid rgba(255,255,255,.06); }
+.gm-shootout-title { text-align:center; font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); padding:.4rem 0 .25rem; }
+.gm-pen-x { color:#e74c3c; font-weight:700; }
+
 /* Meta row */
 .gm-meta { display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; justify-content:center; padding-top:.75rem; border-top:1px solid rgba(255,255,255,.06); }
 .gm-phase-tag { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; background:rgba(52,152,219,.1); border:1px solid rgba(52,152,219,.2); color:var(--blue); border-radius:20px; padding:.2rem .6rem; flex-shrink:0; }
