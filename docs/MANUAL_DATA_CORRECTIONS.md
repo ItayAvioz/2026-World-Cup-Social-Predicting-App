@@ -553,3 +553,26 @@ impact.
 **New wrinkle vs prior cases:** the suspended→resumed flow means (a) the sync cron self-unschedules
 on the `INT` status so the game needs a **manual re-pull after FT** (no auto-retry), and (b) passes/xG
 land **even later** than usual — took a couple of retries before the api published them.
+
+---
+
+## 2026-06-24 — England 0–0 Ghana: missing team stats (passes + xG)
+
+**Game:** `ec816c1d-451e-4551-b950-832a5838e1cb` · api_fixture_id `1489402`
+**Symptom:** Game-page Match Stats showed **Total Passes / % Accuracy Passes / xG = "—"** for both
+teams (all other fields populated). Routine passes/xG sync lag (same class as Brazil–Morocco, Iran–NZ,
+France–Iraq) — not a suspended game.
+
+**Verification (read-only, dev EF `probe_stats` fixture 1489402):** api now reports
+England 633 / 93% / xG 1.36, Ghana 172 / 74% / xG 0.17.
+
+**Correction applied (PROD) — fill the 6 NULLs only:**
+```sql
+UPDATE game_team_stats SET passes_total=633, passes_accuracy=93, xg='1.36'
+ WHERE game_id='ec816c1d-451e-4551-b950-832a5838e1cb' AND team='England';
+UPDATE game_team_stats SET passes_total=172, passes_accuracy=74, xg='0.17'
+ WHERE game_id='ec816c1d-451e-4551-b950-832a5838e1cb' AND team='Ghana';
+```
+Final verify: **0 NULL columns** left in either team row; full game complete (0-0, 2 team / 52 player
+rows / 0 goal events [correct for 0-0] / 53 predictions all scored). Display-only fields; no scoring
+impact. Service-role write via MCP (M132 lock doesn't apply).
