@@ -622,3 +622,34 @@ Turkey 435/77/3.21, United States 469/85/2.01.
 - **Lesson:** after backfilling passes/xG for a batch, ALWAYS run the goal-reconciliation scan
   (`score == Σ game_player_stats.goals + own-goal events`) on the same games — a missing-passes day
   often also has a missing-scorer game, and they're independent gaps.
+
+---
+
+## Case 11 — 2026-06-26, full-tournament re-verification (2 scorer-lag fixes)
+
+**Trigger:** "review all games verify no missing data, verify all goals." Two read-only audit agents
+swept all **60 finished PROD games**: (A) goal reconciliation + scorer-lag + empty-block + negative-id;
+(B) team_stats row count + passes/xG NULLs + team-name mismatch + unscored predictions.
+
+**Agent B (team-level): ALL CLEAN** — every finished game has exactly 2 `game_team_stats` rows, **zero**
+NULL passes/accuracy/xg, zero team-name variants in either stats table (EF v18 alias fix holding), and
+every prediction on a finished game is scored. Nothing to backfill on the display side.
+
+**Agent A (goals): 2 functional gaps**, both the player-stats goal-lag class (scorer present in
+`game_events`, `goals=0` in `game_player_stats` → missing from Top Scorers + reconciliation short by 1):
+
+- **Switzerland 4–1 Bosnia-Herzegovina** (`59640b6d…`, fixture **1539005**): **Granit Xhaka (api 1464)**,
+  penalty min 90, had `goals=0`. dev `probe_stats` 1539005 → goals:1 confirmed.
+  `UPDATE game_player_stats SET goals=1 WHERE game_id='59640b6d…' AND api_player_id=1464`. Reconciles 5=5.
+- **Panama 0–1 Croatia** (`b2ba3ec8…`, fixture **1489403**): **Ante Budimir (api 46746)**, normal goal
+  min 54 (Croatia's only goal), had `goals=0`. dev `probe_stats` 1489403 → goals:1 confirmed.
+  `UPDATE game_player_stats SET goals=1 WHERE game_id='b2ba3ec8…' AND api_player_id=46746`. Reconciles 1=1.
+
+**After fixes:** full-tournament reconciliation scan → **0 remaining gaps** across all 60 finished games.
+
+**Probe gotcha (logged so it isn't re-hit):** `app_edge_function_url` vault secret = base
+`…/functions/v1` (NO function name), and the dev gateway needs an **`apikey` header** in addition to
+`Authorization: Bearer`. Correct call:
+`net.http_post(url:='https://ftryuvfdihmhlzvbpfeu.supabase.co/functions/v1/football-api-sync',
+headers:=jsonb_build_object('Content-Type','application/json','apikey',<service_key>,'Authorization','Bearer '||<service_key>), body:=jsonb_build_object('mode','probe_stats','fixture_id',N))`.
+Without `/football-api-sync` → 404; without `apikey` → 401 "No API key found".
