@@ -610,3 +610,15 @@ Turkey 435/77/3.21, United States 469/85/2.01.
   matched correctly. Always key the manual UPDATE on the **DB/canonical** team name, not the api spelling.
 - Batch tip: fire all `probe_stats` calls at once (`net.http_post` per fixture in one query), then read
   `net._http_response` once — much faster than one-at-a-time.
+
+**⚠️ Plus a FUNCTIONAL gap the passes/xG check would have missed — caught by goal reconciliation:**
+- **Japan 1-1 Sweden** (`9a803937…`): both scorers **Daizen Maeda (api 33224)** and **Anthony Elanga
+  (api 153430)** had `game_player_stats.goals=0` (player-stats lag, same as Khoukhi/Diallo) → would be
+  **absent from Top Scorers**. api now reports goals=1 each. Fixed:
+  `UPDATE game_player_stats SET goals=1 WHERE game_id='9a803937…' AND api_player_id IN (33224,153430)`.
+  Reconciles 2=2.
+- **Tunisia 1-3 Netherlands** looked off (score 4 vs 3 normal-goal events) but is **correct**: minute-3
+  **own goal** (Skhiri, credited to Netherlands) → 3 player goals + 1 OG = 4. No fix needed.
+- **Lesson:** after backfilling passes/xG for a batch, ALWAYS run the goal-reconciliation scan
+  (`score == Σ game_player_stats.goals + own-goal events`) on the same games — a missing-passes day
+  often also has a missing-scorer game, and they're independent gaps.
