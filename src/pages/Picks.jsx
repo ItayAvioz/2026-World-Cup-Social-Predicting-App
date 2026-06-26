@@ -125,9 +125,17 @@ function RtfMatch({ g, codeOf }) {
       {teamRow(g.team_home)}
       {teamRow(g.team_away)}
       <div className="rtf-m-meta">
-        {finished
-          ? <>{g.score_home}–{g.score_away}{g.went_to_penalties ? ' P' : g.went_to_extra_time ? ' ET' : ''}</>
-          : fmtKickoff(g.kick_off_time)}
+        {finished ? (
+          <span className="rtf-score-line">
+            <span className="rtf-sc"><span className="rtf-sc-lbl">90'</span> {g.score_home}–{g.score_away}</span>
+            {g.went_to_extra_time && g.et_score_home != null && (
+              <span className="rtf-sc"><span className="rtf-sc-lbl">E.T.</span> {g.et_score_home}–{g.et_score_away}</span>
+            )}
+            {g.went_to_penalties && g.penalty_score_home != null && (
+              <span className="rtf-sc"><span className="rtf-sc-lbl">PENS</span> {g.penalty_score_home}–{g.penalty_score_away}</span>
+            )}
+          </span>
+        ) : fmtKickoff(g.kick_off_time)}
       </div>
     </div>
   )
