@@ -576,3 +576,37 @@ UPDATE game_team_stats SET passes_total=172, passes_accuracy=74, xg='0.17'
 Final verify: **0 NULL columns** left in either team row; full game complete (0-0, 2 team / 52 player
 rows / 0 goal events [correct for 0-0] / 53 predictions all scored). Display-only fields; no scoring
 impact. Service-role write via MCP (M132 lock doesn't apply).
+
+---
+
+## 2026-06-26 — Jun-25 match-day: passes + xG missing on ALL 6 games (batch backfill)
+
+**Symptom:** every game from the 2026-06-25 match-day showed Total Passes / % Accuracy / xG = "—"
+for both teams. Same routine passes/xG sync lag, all 6 at once (they all synced before the api
+published passing/xG).
+
+**Games (all `passes_total`/`passes_accuracy`/`xg` NULL ×2 teams):**
+| Game | fixture | game_id |
+|---|---|---|
+| Curaçao 0-2 Ivory Coast | 1489409 | `1346dae3-7a60-4898-8c75-95f0d9d68bb4` |
+| Ecuador 2-1 Germany | 1489410 | `980990f1-66ae-4763-91dd-840ce8ef1b68` |
+| Tunisia 1-3 Netherlands | 1489412 | `2e31a86a-d615-4458-ab26-cbbaacc780e6` |
+| Japan 1-1 Sweden | 1539011 | `9a803937-2e31-4f48-9d8a-d1b993faea0e` |
+| Paraguay 0-0 Australia | 1489411 | `ed232447-7531-4244-a2e5-f43edbea36e5` |
+| Turkey 3-2 United States | 1539012 | `f69a79f9-b7e9-4d6a-9a36-32d95000be19` |
+
+**Verification (read-only, DEV `probe_stats` per fixture):** values now published — Curaçao 355/83/0.50,
+Ivory Coast 624/89/1.31; Ecuador 378/83/1.27, Germany 592/87/0.65; Tunisia 258/77/0.62, Netherlands
+647/93/1.85; Japan 445/85/1.21, Sweden 395/79/0.64; Paraguay 427/77/0.25, Australia 536/82/0.57;
+Turkey 435/77/3.21, United States 469/85/2.01.
+
+**Correction applied (PROD):** 12 single-row `UPDATE game_team_stats SET passes_total/accuracy/xg`
+(one per team per game). Verified all 6 games → **0 NULL** passes/accuracy/xg. Display-only; no scoring impact.
+
+**Notes / wrinkles:**
+- Turkey–USA api `probe_stats` returned a **500 on first attempt** (transient); a single retry succeeded.
+- api spells that game's teams **`Türkiye` / `USA`**, but the canonical `game_team_stats` rows are
+  `Turkey` / `United States` (EF canon()-izes on write) — so the `UPDATE … WHERE team='Turkey'/'United States'`
+  matched correctly. Always key the manual UPDATE on the **DB/canonical** team name, not the api spelling.
+- Batch tip: fire all `probe_stats` calls at once (`net.http_post` per fixture in one query), then read
+  `net._http_response` once — much faster than one-at-a-time.
