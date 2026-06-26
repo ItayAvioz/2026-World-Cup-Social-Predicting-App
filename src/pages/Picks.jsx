@@ -85,6 +85,10 @@ const NODES_BY_PHASE = {
 //   L8: 1G vs 3rd(A/E/H/J)       R8: 1K vs 3rd(D/E/I/J/L)
 // Example: 1561329: 'L3',
 const R32_SLOTS = {
+  1561329: 'L3',  // South Africa (2A) v Canada (2B)
+  1562344: 'R1',  // Brazil (1C) v Japan (2F)
+  1562345: 'L4',  // Netherlands (1F) v Morocco (2C)
+  1562586: 'L7',  // United States (1D) v Bosnia-Herzegovina (3rd B)
 }
 
 const TEAM_SHORT = {
