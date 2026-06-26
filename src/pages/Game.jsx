@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
-import { TEAMS } from '../lib/teams.js'
+import { TEAMS, isGameFinished, isGameLive } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
 
@@ -305,7 +305,7 @@ export default function Game() {
 
   // ── Derived state ─────────────────────────────────────────────────
   const pastKO   = new Date() >= new Date(game.kick_off_time)
-  const finished = game.score_home !== null
+  const finished = isGameFinished(game)
   const isKO     = game.phase !== 'group'
   const resolvedGroupName = allGroups.find(gp => gp.id === resolvedGroupId)?.name
   const oddsData = game.game_odds?.[0] ?? null
@@ -343,7 +343,7 @@ export default function Game() {
                     <span className="gm-score-display">{game.score_home}–{game.score_away}</span>
                     <span className="gm-center-label">FT</span>
                   </>
-                ) : pastKO ? (
+                ) : isGameLive(game) ? (
                   <>
                     <span className="gm-center-live">LIVE</span>
                     <span className="gm-center-label">{fmtTime(game.kick_off_time)}</span>

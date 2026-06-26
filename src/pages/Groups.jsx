@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
-import { TEAMS } from '../lib/teams.js'
+import { TEAMS, isGameFinished } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
 import Modal from '../components/Modal.jsx'
@@ -762,7 +762,7 @@ export default function Groups() {
                                   <span className="grp-ng-name">{game.team_home}</span>
                                 </div>
                                 <div className="grp-ng-center">
-                                  {game.score_home !== null
+                                  {isGameFinished(game)
                                     ? <>
                                         <span className="grp-ng-score">{game.score_home}–{game.score_away}</span>
                                         {game.went_to_extra_time && (

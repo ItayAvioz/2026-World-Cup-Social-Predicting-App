@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
-import { TEAMS } from '../lib/teams.js'
+import { TEAMS, isGameFinished, isGameLive } from '../lib/teams.js'
 import Layout from '../components/Layout.jsx'
 import TrophyImg from '../assets/Trophy.webp'
 import { getVenue } from '../lib/venues.js'
@@ -443,10 +443,8 @@ export default function Dashboard() {
               <h2 className="dash-section-label">{fmtGameDate(nextDate)}</h2>
               <div className="today-games">
                 {nextGames.map(game => {
-                  const finished  = game.score_home !== null
-                  const now       = Date.now()
-                  const ko        = new Date(game.kick_off_time).getTime()
-                  const isLive    = !finished && now >= ko && now <= ko + 120 * 60 * 1000
+                  const finished  = isGameFinished(game)
+                  const isLive    = isGameLive(game)
                   const gamePreds = myPreds[game.id] ?? []
                   const homeCode  = TEAM_CODE[game.team_home]
                   const awayCode  = TEAM_CODE[game.team_away]
