@@ -89,6 +89,11 @@ const R32_SLOTS = {
   1562344: 'R1',  // Brazil (1C) v Japan (2F)
   1562345: 'L4',  // Netherlands (1F) v Morocco (2C)
   1562586: 'L7',  // United States (1D) v Bosnia-Herzegovina (3rd B)
+  1565176: 'L1',  // Germany (1E) v Paraguay (3rd D)
+  1565177: 'L2',  // France (1I) v Sweden (3rd F)
+  1564789: 'R2',  // Ivory Coast (2E) v Norway (2I)
+  1565179: 'R5',  // Argentina (1J) v Cape Verde (2H)
+  1565178: 'R6',  // Australia (2D) v Egypt (2G)
 }
 
 const TEAM_SHORT = {
