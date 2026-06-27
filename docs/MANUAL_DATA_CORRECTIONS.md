@@ -653,3 +653,59 @@ every prediction on a finished game is scored. Nothing to backfill on the displa
 `net.http_post(url:='https://ftryuvfdihmhlzvbpfeu.supabase.co/functions/v1/football-api-sync',
 headers:=jsonb_build_object('Content-Type','application/json','apikey',<service_key>,'Authorization','Bearer '||<service_key>), body:=jsonb_build_object('mode','probe_stats','fixture_id',N))`.
 Without `/football-api-sync` → 404; without `apikey` → 401 "No API key found".
+
+---
+
+## 2026-06-27 — Jun-26/27 match-day: 2 gaps (NZ–Belgium scorer-lag + Cape Verde whole-block 503)
+
+**Trigger:** user reported the EF failed to pull a game's data (screenshot). Full-tournament scan
+(team_stats rows/NULLs + goal reconciliation across every finished game) found exactly two gaps.
+
+### A) New Zealand 1–5 Belgium — scorer missing (Pattern A timing lag)
+**Game:** `5caade8c-f836-4517-8ff3-080f8a583d01` · api_fixture_id `1489415`
+**Symptom:** reconciliation short by 1 (score 6, Σ player goals 5). **Alexis Saelemaekers (api 1417)**,
+Belgium's 90' goal, had `game_player_stats.goals=0` → would be absent from Top Scorers. Same class as
+Khoukhi/Diallo/Xhaka.
+**Verify-first (DEV `probe_stats` 1489415):** api now reports Belgium scorers Trossard 2, De Bruyne 1,
+**Saelemaekers 1**, Lukaku 1; NZ Just 1 → confirmed `goals=1`.
+**Fix:** `UPDATE game_player_stats SET goals=1 WHERE game_id='5caade8c…' AND api_player_id=1417 AND goals=0`
+(1 row). Reconciles 6=6. Display-only; no scoring impact (predictions read `games.score_home/away`).
+
+### B) Cape Verde 0–0 Saudi Arabia — entire stats block missing (transient api 503)
+**Game:** `73192fb4-e54e-40d4-9f8b-be0c28b885a1` · api_fixture_id `1489413`
+**Symptom:** whole stats block absent — **0 `game_team_stats`, 0 `game_player_stats`, 0 events** (score
+0–0 was written).
+**Root cause:** the KO+120 sync (2026-06-27 02:00 UTC) hit a **transient api-football 503** during
+`stats_write` — `ef_errors`: *"API error 503: upstream connect error or disconnect/reset before headers.
+reset reason: connection termination"* (context `game_id 73192fb4…`). Stats fetch failed, the sync cron
+self-unscheduled → no auto-retry. This is a one-time outage, **not** a PROD-account data gap.
+**Verify-first (DEV `probe_stats` 1489413, read-only):** api has the full data — 50 players, 2 team rows,
+no red cards. ⚠️ api spells the team **`Cape Verde Islands`** (Pattern B) → canonicalized to **`Cape Verde`**.
+**Fix — manual INSERT from DEV probe (PROD EF has no `probe_stats` mode → "Unknown mode"; cannot self-heal):**
+- `game_team_stats` — 2 rows: Cape Verde (poss 51, shots 15/2, corners 4, fouls 10, YC 1, off 2, ins 9,
+  xG 1.46, passes 451/85%) · Saudi Arabia (poss 49, shots 7/3, corners 2, fouls 16, YC 3, off 0, ins 5,
+  xG 0.40, passes 442/81%).
+- `game_player_stats` — 50 rows from the DEV probe (`api_player_id`/`player_name`/canonical `team`/
+  `minutes_played`/`position`; `goals=0` for all — 0–0 game). Display cols not returned by the probe
+  (assists/cards/rating/gk) left NULL. `ON CONFLICT DO NOTHING` (no pre-existing rows).
+- `game_events` — none (0–0, no red cards).
+**Verify:** 2 team rows (Cape Verde, Saudi Arabia), 50 player rows (24 CV / 26 SA), Σ goals 0. Zero
+scoring impact (0–0). Why INSERT-from-DEV not a re-sync: respects the read-DEV / write-PROD-by-hand
+workflow, and the probe confirmed the data exists; PROD EF lacks the probe mode and the block was empty
+(no overwrite/dup risk).
+
+**Follow-up — display-field backfill (assists/cards/rating):** the original insert only had
+goals/minutes/position because `probe_stats` returned a thin shape. The team stats showed yellow cards
+(CV 1 / SA 3), so the per-player block had to carry them. **Extended the DEV `probe_stats` mode to
+return the full per-player fields** (assists, yellow_cards, red_cards, rating, gk_saves, gk_conceded) —
+**DEV football-api-sync v44**, an *additive read-only* change (reads api, returns JSON, writes nothing;
+all other behavior byte-identical to v43; existing thin-shape callers unaffected). Re-probed 1489413 on
+DEV, then `UPDATE game_player_stats … FROM (VALUES …)` keyed on `api_player_id` for the 50 PROD rows.
+**Verify:** 4 players with yellow cards summing to 4 = team-stat YC (CV 1 / SA 3); 31 players with
+ratings (rest = unused subs, api returns null — normal); **0 rows with an all-NULL display block**. Game
+now fully complete. (gk_saves/gk_conceded came back NULL from the api for this fixture — that's the
+source value, not a gap.)
+
+**Post-fix full re-scan (all finished games): 0 team_stats gaps, 0 goal-reconciliation gaps.**
+Two read-only audit agents (goals/player-completeness + team-stats/predictions/names/KO) swept all 66
+finished games → fully clean; the only display-incomplete game was this Cape Verde one, now resolved.
