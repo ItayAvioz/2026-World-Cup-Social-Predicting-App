@@ -709,3 +709,22 @@ source value, not a gap.)
 **Post-fix full re-scan (all finished games): 0 team_stats gaps, 0 goal-reconciliation gaps.**
 Two read-only audit agents (goals/player-completeness + team-stats/predictions/names/KO) swept all 66
 finished games → fully clean; the only display-incomplete game was this Cape Verde one, now resolved.
+
+---
+
+## 2026-06-28 — End-of-group-stage full audit: Algeria 3–3 Austria scorer-lag (Kalajdžić)
+
+**Trigger:** "review all game data… verify no missing, all group stage completed." Two read-only audit
+agents swept the whole tournament. **Group stage = 100% complete (72/72 finished + scored)**; 16 R32 rows
+staged & unplayed. Team-stats / player-completeness / names / predictions / odds / red-cards / events all
+CLEAN. Exactly ONE functional gap found.
+
+**Game:** `025fa947-9ff4-40dd-8e48-5428765f5cf7` · api_fixture_id `1489418` (group MD3 — note: 1489418 is a
+GROUP game, not R32, per the old 1489xxx id block).
+**Symptom:** Pattern A scorer-lag. Score 3–3, all 6 goals in `game_events` (Algeria: Belghali 45', Mahrez
+60'+90'; Austria: Arnautović 28', Sabitzer 55', **Kalajdžić 90'**), but Σ `game_player_stats.goals` = 5 →
+**Saša Kalajdžić (api 7722)** had `goals=0` (minutes 1, late sub) → his goal dropped from Top Scorers.
+**Verify-first (DEV `probe_stats` 1489418):** api now reports Austria Sabitzer 1, Arnautović 1, **Kalajdžić 1**
+(+ Algeria Mahrez 2, Belghali 1). Confirmed before touching PROD.
+**Fix:** `UPDATE game_player_stats SET goals=1 WHERE game_id='025fa947…' AND api_player_id=7722 AND goals=0`
+(1 row). Reconciles 6=6. Display-only impact (Top Scorers tally); prediction/score points were always correct.
