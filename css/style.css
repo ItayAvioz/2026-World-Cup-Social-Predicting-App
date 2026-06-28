@@ -1513,3 +1513,5 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .rtf-td-rank { color:var(--muted); }
 .rtf-tr-qualify .rtf-td-rank { color:var(--green); font-weight:700; }
 .rtf-tr-qualify .rtf-td-team span { font-weight:600; }
+.rtf-legend { font-size:.68rem; color:var(--muted); text-align:center; margin-top:.8rem; line-height:1.5; }
+.rtf-legend-q { color:var(--green); font-weight:600; }

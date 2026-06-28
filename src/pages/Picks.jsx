@@ -94,6 +94,13 @@ const R32_SLOTS = {
   1564789: 'R2',  // Ivory Coast (2E) v Norway (2I)
   1565179: 'R5',  // Argentina (1J) v Cape Verde (2H)
   1565178: 'R6',  // Australia (2D) v Egypt (2G)
+  1567306: 'R3',  // Mexico (1A) v Ecuador (3rd E)
+  1567307: 'R4',  // England (1L) v DR Congo (3rd K)
+  1567308: 'L8',  // Belgium (1G) v Senegal (3rd I)
+  1567311: 'L6',  // Spain (1H) v Austria (2J)
+  1567309: 'L5',  // Portugal (2K) v Croatia (2L)
+  1567312: 'R7',  // Switzerland (1B) v Algeria (3rd J)
+  1567310: 'R8',  // Colombia (1K) v Ghana (3rd L)
 }
 
 const TEAM_SHORT = {
@@ -696,6 +703,19 @@ export default function Picks() {
     }
     return out
   }, [dbTeams, games])
+
+  // Teams that reached the knockout stage (every team in any KO game) — used to
+  // mark the 8 best 3rd-place qualifiers (rank 3 that still advanced) in the
+  // group tables with a '*' + qualify highlight.
+  const knockoutTeams = useMemo(() => {
+    const s = new Set()
+    for (const g of games) {
+      if (g.phase === 'group') continue
+      if (g.team_home && g.team_home !== 'TBD') s.add(g.team_home)
+      if (g.team_away && g.team_away !== 'TBD') s.add(g.team_away)
+    }
+    return s
+  }, [games])
 
   function openRoadToFinal() {
     if (!gamesLoadedRef.current) loadGames()
@@ -1446,8 +1466,8 @@ export default function Picks() {
                     </thead>
                     <tbody>
                       {groupStandings[grp].map(r => (
-                        <tr key={r.team} className={r.rank <= 2 ? 'rtf-tr-qualify' : ''}>
-                          <td className="rtf-td-rank">{r.rank}</td>
+                        <tr key={r.team} className={(r.rank <= 2 || (r.rank === 3 && knockoutTeams.has(r.team))) ? 'rtf-tr-qualify' : ''}>
+                          <td className="rtf-td-rank">{r.rank}{r.rank === 3 && knockoutTeams.has(r.team) ? '*' : ''}</td>
                           <td className="rtf-td-team">
                             <FlagImg name={r.team} code={r.code} className="rtf-m-flag" />
                             <span>{TEAM_SHORT[r.team] ?? r.team}</span>
@@ -1465,6 +1485,7 @@ export default function Picks() {
                 <p className="rtf-empty">Group standings appear once games are played.</p>
               )}
             </div>
+            <p className="rtf-legend">Top 2 advance · <span className="rtf-legend-q">green</span> = into knockout · <strong>3*</strong> = best-3rd qualifier</p>
           </div>
         </Modal>
 
