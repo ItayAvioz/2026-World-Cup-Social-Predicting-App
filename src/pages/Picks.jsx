@@ -8,6 +8,11 @@ import Layout from '../components/Layout.jsx'
 import Modal from '../components/Modal.jsx'
 import TrophyImg from '../assets/Trophy.webp'
 import { supabase } from '../lib/supabase.js'
+import {
+  PHASE_LABEL, LEFT_COLS, RIGHT_COLS, BRACKET_CHILDREN, NODES_BY_PHASE,
+  R32_SLOTS, TEAM_SHORT,
+} from '../features/knockout-prediction/bracketTree.js'
+import KnockoutPredict from '../features/knockout-prediction/KnockoutPredict.jsx'
 import { TEAMS } from '../lib/teams.js'
 
 const PICKS_DEADLINE = '2026-06-11T19:00:00Z'
@@ -18,95 +23,16 @@ const PICKS_DEADLINE = '2026-06-11T19:00:00Z'
 // spelling (e.g. "Hyeon-gyu Oh" vs "Oh Hyeongyu"), which silently broke a name match.
 const TEAM_CODE = Object.fromEntries(TEAMS.filter(t => t.code).map(t => [t.name, t.code]))
 
-const PHASE_LABEL = {
-  group: 'Group Stage',
-  r32:   'Round of 32',
-  r16:   'Round of 16',
-  qf:    'Quarter-Finals',
-  sf:    'Semi-Finals',
-  third: '3rd Place',
-  final: 'Final',
-}
 const PHASE_ORDER = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final']
 
+// Knockout PREDICTION game — LIVE on prod (table + RPC + leaderboard term deployed
+// to the prod Supabase project 2026-06-28). Kept as a one-line kill-switch: set to
+// false to instantly hide the Predict toggle everywhere without a redeploy.
+const KO_PREDICT_DEV = true
+
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
-
-// ── Road-to-Final fixed bracket (official FIFA 2026 structure) ──────────────
-// Node ids: L1–L8 / R1–R8 = the 16 Round-of-32 slots (left / right halves,
-// top→bottom exactly as the official bracket). LA–LD/RA–RD = R16, LQ1/LQ2/
-// RQ1/RQ2 = QF, LS/RS = SF, F = Final, B = 3rd-place (bronze).
-//
-// Column layout for rendering — left flows inward, right is mirrored.
-const LEFT_COLS = [
-  { phase: 'r32', nodes: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8'] },
-  { phase: 'r16', nodes: ['LA', 'LB', 'LC', 'LD'] },
-  { phase: 'qf',  nodes: ['LQ1', 'LQ2'] },
-  { phase: 'sf',  nodes: ['LS'] },
-]
-const RIGHT_COLS = [
-  { phase: 'sf',  nodes: ['RS'] },
-  { phase: 'qf',  nodes: ['RQ1', 'RQ2'] },
-  { phase: 'r16', nodes: ['RA', 'RB', 'RC', 'RD'] },
-  { phase: 'r32', nodes: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8'] },
-]
-
-// Which child nodes feed each non-R32 node (winners advance; B = the two SF losers).
-const BRACKET_CHILDREN = {
-  LA: ['L1', 'L2'], LB: ['L3', 'L4'], LC: ['L5', 'L6'], LD: ['L7', 'L8'],
-  RA: ['R1', 'R2'], RB: ['R3', 'R4'], RC: ['R5', 'R6'], RD: ['R7', 'R8'],
-  LQ1: ['LA', 'LB'], LQ2: ['LC', 'LD'], RQ1: ['RA', 'RB'], RQ2: ['RC', 'RD'],
-  LS: ['LQ1', 'LQ2'], RS: ['RQ1', 'RQ2'],
-  F: ['LS', 'RS'], B: ['LS', 'RS'],
-}
-
-// Non-R32 nodes per phase, ordered so each round is placed after its children.
-const NODES_BY_PHASE = {
-  r16: ['LA', 'LB', 'LC', 'LD', 'RA', 'RB', 'RC', 'RD'],
-  qf:  ['LQ1', 'LQ2', 'RQ1', 'RQ2'],
-  sf:  ['LS', 'RS'],
-  final: ['F'],
-}
-
-// ⚠️ FILL ON LAUNCH DAY (28 Jun, once the R32 draw is final): map each of the
-// 16 Round-of-32 games' `api_fixture_id` to its bracket slot. Slot → official
-// matchup (left top→bottom, then right) from the FIFA 2026 bracket:
-//   L1: 1E vs 3rd(A/B/C/D/E/F)   R1: 1C vs 2F
-//   L2: 1I vs 3rd(C/D/F/G/H)     R2: 2E vs 2I
-//   L3: 2A vs 2B                 R3: 1A vs 3rd(C/E/F/H)
-//   L4: 1F vs 2C                 R4: 1L vs 3rd(E/H/J/K)
-//   L5: 2K vs 2L                 R5: 1J vs 2H
-//   L6: 1H vs 2J                 R6: 2D vs 2G
-//   L7: 1D vs 3rd(B/E/F/J)       R7: 1B vs 3rd(E/F/G/J)
-//   L8: 1G vs 3rd(A/E/H/J)       R8: 1K vs 3rd(D/E/I/J/L)
-// Example: 1561329: 'L3',
-const R32_SLOTS = {
-  1561329: 'L3',  // South Africa (2A) v Canada (2B)
-  1562344: 'R1',  // Brazil (1C) v Japan (2F)
-  1562345: 'L4',  // Netherlands (1F) v Morocco (2C)
-  1562586: 'L7',  // United States (1D) v Bosnia-Herzegovina (3rd B)
-  1565176: 'L1',  // Germany (1E) v Paraguay (3rd D)
-  1565177: 'L2',  // France (1I) v Sweden (3rd F)
-  1564789: 'R2',  // Ivory Coast (2E) v Norway (2I)
-  1565179: 'R5',  // Argentina (1J) v Cape Verde (2H)
-  1565178: 'R6',  // Australia (2D) v Egypt (2G)
-  1567306: 'R3',  // Mexico (1A) v Ecuador (3rd E)
-  1567307: 'R4',  // England (1L) v DR Congo (3rd K)
-  1567308: 'L8',  // Belgium (1G) v Senegal (3rd I)
-  1567311: 'L6',  // Spain (1H) v Austria (2J)
-  1567309: 'L5',  // Portugal (2K) v Croatia (2L)
-  1567312: 'R7',  // Switzerland (1B) v Algeria (3rd J)
-  1567310: 'R8',  // Colombia (1K) v Ghana (3rd L)
-}
-
-const TEAM_SHORT = {
-  'Bosnia-Herzegovina': 'Bosnia',
-  'Czech Republic':     'Czechia',
-  'United States':      'USA',
-  'Saudi Arabia':       'Saudi',
-  'South Africa':       'S. Africa',
-  'Ivory Coast':        'Ivory C.',
-  'New Zealand':        'N. Zealand',
-}
+// Bracket structure (PHASE_LABEL, LEFT_COLS, RIGHT_COLS, BRACKET_CHILDREN,
+// NODES_BY_PHASE, R32_SLOTS, TEAM_SHORT) imported from the shared module above.
 
 function FlagImg({ name, code, className }) {
   const [broken, setBroken] = useState(false)
@@ -242,6 +168,7 @@ export default function Picks() {
 
   // ── Road to Final (bracket + group standings) modal ────────────
   const [roadOpen, setRoadOpen] = useState(false)
+  const [rtfMode, setRtfMode]   = useState('results')  // 'results' | 'predict' (predict = DEV-only)
 
   // ── Tournament results state ───────────────────────────────────
   const [tournamentChampion, setTournamentChampion] = useState(undefined) // undefined=loading, null=not yet, string=winner
@@ -1414,6 +1341,23 @@ export default function Picks() {
               Road to Final
             </h2>
 
+            {KO_PREDICT_DEV && (
+              <div className="rtf-mode-sw" role="tablist" aria-label="Bracket mode">
+                <button role="tab" aria-selected={rtfMode === 'results'}
+                  className={`rtf-mode-btn${rtfMode === 'results' ? ' rtf-mode-btn--active' : ''}`}
+                  onClick={() => setRtfMode('results')}>Results</button>
+                <button role="tab" aria-selected={rtfMode === 'predict'}
+                  className={`rtf-mode-btn${rtfMode === 'predict' ? ' rtf-mode-btn--active' : ''}`}
+                  onClick={() => setRtfMode('predict')}>Predict</button>
+              </div>
+            )}
+
+            {KO_PREDICT_DEV && rtfMode === 'predict' ? (
+              gamesLoading
+                ? <p className="rtf-empty">Loading…</p>
+                : <KnockoutPredict games={games} userId={user?.id} teamCodeMap={teamCodeMap} showToast={showToast} />
+            ) : (
+            <>
             <div className="rtf-section-label">Knockout Bracket</div>
             {gamesLoading ? (
               <p className="rtf-empty">Loading…</p>
@@ -1478,6 +1422,8 @@ export default function Picks() {
               )}
             </div>
             <p className="rtf-legend">Top 2 advance · <span className="rtf-legend-q">green</span> = into knockout · <strong>3*</strong> = best-3rd qualifier</p>
+            </>
+            )}
           </div>
         </Modal>
 
