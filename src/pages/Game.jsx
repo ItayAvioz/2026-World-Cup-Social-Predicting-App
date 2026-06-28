@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
-import { TEAMS } from '../lib/teams.js'
+import { TEAMS, isGameFinished, isGameLive } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
 
@@ -43,6 +43,13 @@ function fmtTime(iso) {
 }
 
 
+// compact per-member outcome badge for finished games (admin group-predictions list)
+function memberBadge(pe) {
+  if (pe === 3) return { text: '⭐ Exact',   color: '#4ade80' }
+  if (pe === 1) return { text: '✓ Correct', color: '#fbbf24' }
+  return { text: '✗ Miss', color: 'var(--muted)' }
+}
+
 function pointsLabel(pred, game) {
   if (!pred || game.score_home === null) return null
   if (pred.points_earned === 3) return { text: '⭐ Exact score — 3 pts', cls: 'gm-my-result--exact' }
@@ -73,6 +80,9 @@ export default function Game() {
   const [allGroups,       setAllGroups]       = useState([])   // [{ id, name }]
   const [allGroupPreds,   setAllGroupPreds]   = useState([])   // [{ groupId, groupName, pred }]
   const [teamForm,        setTeamForm]        = useState({})   // { teamName: ['W','L','D',...] }
+  // [admin test] revealed predictions of all members in the active group (after KO). null=N/A
+  const [memberPreds,        setMemberPreds]        = useState(null)
+  const [memberPredsLoading, setMemberPredsLoading] = useState(false)
 
   // Resolve which group this prediction belongs to.
   // Priority: (1) ?group= URL param  (2) user's first joined group  (3) null = ungrouped.
@@ -168,6 +178,23 @@ export default function Game() {
         pred:      (allPreds ?? []).find(p => p.group_id === grp.id) ?? null,
       }))
       setAllGroupPreds(mapped)
+    }
+
+    // Group members' revealed predictions for the active group.
+    // RLS reveals other members' picks once kick_off_time <= now (incl. finished games).
+    // Per-game fetch only (≤ group size rows) — never hits the 1000-row PostgREST cap.
+    const isPastKO = new Date() >= new Date(g.kick_off_time)
+    if (isPastKO && resolvedGroupId) {
+      setMemberPredsLoading(true)
+      const { data: mPreds } = await supabase
+        .from('predictions')
+        .select('user_id, pred_home, pred_away, is_auto, points_earned, profiles(username)')
+        .eq('game_id', gameId)
+        .eq('group_id', resolvedGroupId)
+      setMemberPreds(mPreds ?? [])
+      setMemberPredsLoading(false)
+    } else {
+      setMemberPreds(null)
     }
 
     // Load team form (individual results in order)
@@ -278,8 +305,9 @@ export default function Game() {
 
   // ── Derived state ─────────────────────────────────────────────────
   const pastKO   = new Date() >= new Date(game.kick_off_time)
-  const finished = game.score_home !== null
+  const finished = isGameFinished(game)
   const isKO     = game.phase !== 'group'
+  const resolvedGroupName = allGroups.find(gp => gp.id === resolvedGroupId)?.name
   const oddsData = game.game_odds?.[0] ?? null
   const within3Days = (new Date(game.kick_off_time) - new Date()) <= 3 * 24 * 60 * 60 * 1000
   const odds = within3Days ? oddsData : null
@@ -315,7 +343,7 @@ export default function Game() {
                     <span className="gm-score-display">{game.score_home}–{game.score_away}</span>
                     <span className="gm-center-label">FT</span>
                   </>
-                ) : pastKO ? (
+                ) : isGameLive(game) ? (
                   <>
                     <span className="gm-center-live">LIVE</span>
                     <span className="gm-center-label">{fmtTime(game.kick_off_time)}</span>
@@ -453,11 +481,11 @@ export default function Game() {
               </div>
             )}
 
-            {/* ET / penalties info */}
+            {/* ET / penalties info — E.T. shown cumulative (90-min + ET) */}
             {finished && (game.went_to_extra_time || game.went_to_penalties) && (
               <div className="gm-header-extra">
                 {game.went_to_extra_time && game.et_score_home !== null && (
-                  <span>E.T. {game.et_score_home}–{game.et_score_away}</span>
+                  <span>E.T. {game.score_home + game.et_score_home}–{game.score_away + game.et_score_away}</span>
                 )}
                 {game.went_to_penalties && game.penalty_score_home !== null && (
                   <span>Pens {game.penalty_score_home}–{game.penalty_score_away}</span>
@@ -465,27 +493,63 @@ export default function Game() {
               </div>
             )}
 
-            {/* Events timeline inside header */}
-            {finished && gameEvents.length > 0 && (
+            {/* Events timeline inside header — in-play goals + red cards only
+                (shootout kicks are rendered separately below). */}
+            {finished && gameEvents.some(ev => ev.event_type === 'goal' || ev.event_type === 'red_card' || ev.event_type === 'missed_penalty') && (
               <div className="gm-events gm-header-events">
-                {gameEvents.map((ev, i) => {
+                {gameEvents.filter(ev => ev.event_type === 'goal' || ev.event_type === 'red_card' || ev.event_type === 'missed_penalty').map((ev, i) => {
                   const isHome = ev.team === game.team_home
-                  const icon   = ev.event_type === 'goal' ? '⚽' : '🟥'
+                  const isMiss = ev.event_type === 'missed_penalty'
+                  const icon   = ev.event_type === 'goal' ? '⚽' : ev.event_type === 'red_card' ? '🟥' : '✗'
                   const min    = ev.minute_extra ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
-                  // Tag goal type from api detail: penalty (P) / own goal (OG).
-                  // Own goal is tagged by api to the beneficiary team, so it already
-                  // renders on the correct side — no remap needed.
-                  const tag    = ev.detail === 'Own Goal' ? ' (OG)' : ev.detail === 'Penalty' ? ' (P)' : ''
+                  // Tag goal type from api detail: penalty (P) / own goal (OG) /
+                  // in-play missed penalty (P, with red ✗ icon). Own goal is tagged by
+                  // api to the beneficiary team, so it already renders on the correct side.
+                  const tag    = ev.detail === 'Own Goal' ? ' (OG)' : (ev.detail === 'Penalty' || isMiss) ? ' (P)' : ''
                   return (
                     <div className="gm-event-row" key={i}>
                       <span className="gm-event-home">{isHome ? `${ev.player_name ?? '?'} ${min}${tag}` : ''}</span>
-                      <span className="gm-event-icon">{icon}</span>
+                      <span className={`gm-event-icon ${isMiss ? 'gm-pen-x' : ''}`}>{icon}</span>
                       <span className="gm-event-away">{!isHome ? `${min}${tag} ${ev.player_name ?? '?'}` : ''}</span>
                     </div>
                   )
                 })}
               </div>
             )}
+
+            {/* Penalty shootout — kicks in order, incl. misses. Ordered by
+                minute_extra (api's reliable kick sequence); numbered per team. */}
+            {finished && gameEvents.some(ev => ev.event_type === 'pen_shootout_scored' || ev.event_type === 'pen_shootout_missed') && (() => {
+              // Sort by api kick sequence, assign a per-team round number, then render
+              // in strict alternating order (first team of each round first). Shootouts
+              // always alternate A,B,A,B — robust to api ordering quirks in old fixtures.
+              const seq = gameEvents
+                .filter(ev => ev.event_type === 'pen_shootout_scored' || ev.event_type === 'pen_shootout_missed')
+                .sort((a, b) => (a.minute_extra ?? 0) - (b.minute_extra ?? 0))
+              const firstTeam = seq.length ? seq[0].team : game.team_home
+              const perTeam = {}
+              const kicks = seq.map(ev => {
+                const n = (perTeam[ev.team] = (perTeam[ev.team] ?? 0) + 1)
+                return { ev, n, first: ev.team === firstTeam }
+              }).sort((a, b) => (a.n - b.n) || ((a.first ? 0 : 1) - (b.first ? 0 : 1)))
+              return (
+                <div className="gm-events gm-header-events gm-shootout">
+                  <div className="gm-shootout-title">Penalty Shootout</div>
+                  {kicks.map(({ ev, n }, i) => {
+                    const isHome = ev.team === game.team_home
+                    const scored = ev.event_type === 'pen_shootout_scored'
+                    const label  = `P${n} ${ev.player_name ?? '?'}`
+                    return (
+                      <div className="gm-event-row" key={`so-${i}`}>
+                        <span className="gm-event-home">{isHome ? label : ''}</span>
+                        <span className={`gm-event-icon ${scored ? '' : 'gm-pen-x'}`}>{scored ? '⚽' : '✗'}</span>
+                        <span className="gm-event-away">{!isHome ? label : ''}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
 
@@ -663,6 +727,9 @@ export default function Game() {
         <div className="gm-section">
           <div className="gm-section-head">
             <span className="gm-section-label">Group Predictions</span>
+            {pastKO && resolvedGroupId && resolvedGroupName && (
+              <span style={{ fontSize:'.75rem', color:'var(--muted)' }}>{resolvedGroupName}</span>
+            )}
           </div>
           <div className="gm-section-body">
             {!pastKO ? (
@@ -674,6 +741,37 @@ export default function Game() {
                   👥 View your group's picks in the <strong>Groups</strong> page
                 </p>
               </>
+            ) : resolvedGroupId ? (
+              memberPredsLoading ? (
+                <p className="gm-reveal-msg">Loading group predictions…</p>
+              ) : !memberPreds || memberPreds.length === 0 ? (
+                <p className="gm-reveal-msg">No group predictions for this game.</p>
+              ) : (
+                <ul style={{ listStyle:'none', margin:0, padding:0, display:'flex', flexDirection:'column', gap:'.45rem' }}>
+                  {[...memberPreds]
+                    .sort((a, b) => (b.points_earned ?? -1) - (a.points_earned ?? -1))
+                    .map(p => {
+                      const badge = finished ? memberBadge(p.points_earned) : null
+                      return (
+                        <li key={p.user_id} style={{ display:'flex', alignItems:'center', gap:'.5rem', fontSize:'.9rem' }}>
+                          <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {p.profiles?.username ?? '—'}
+                            {p.user_id === user.id && <span style={{ color:'var(--muted)' }}> (you)</span>}
+                          </span>
+                          <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600 }}>
+                            {p.pred_home}–{p.pred_away}
+                          </span>
+                          {p.is_auto && (
+                            <span style={{ fontSize:'.65rem', color:'var(--muted)', textTransform:'uppercase' }}>auto</span>
+                          )}
+                          {badge && (
+                            <span style={{ fontSize:'.7rem', fontWeight:600, color:badge.color }}>{badge.text}</span>
+                          )}
+                        </li>
+                      )
+                    })}
+                </ul>
+              )
             ) : (
               <p className="gm-reveal-msg">
                 👥 See your group's predictions in the <strong>Groups</strong> page

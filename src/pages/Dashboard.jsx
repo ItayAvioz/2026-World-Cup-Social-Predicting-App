@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
-import { TEAMS } from '../lib/teams.js'
+import { TEAMS, isGameFinished, isGameLive } from '../lib/teams.js'
 import Layout from '../components/Layout.jsx'
 import TrophyImg from '../assets/Trophy.webp'
 import { getVenue } from '../lib/venues.js'
@@ -407,12 +407,6 @@ export default function Dashboard() {
                 {(showAllLb ? lb : lb.slice(0, 5)).map(row => {
                   const isMe     = row.user_id === user?.id
                   const flagCode = row.champion_team ? TEAM_CODE[row.champion_team] : null
-                  const stats    = row.champion_team ? teamStats[row.champion_team] : null
-                  const streak   = row.champion_team ? (streaks[row.champion_team] ?? 0) : 0
-                  const gp       = Number(stats?.games_played ?? 0)
-                  const winPct   = gp > 0 ? Math.round((Number(stats.wins) / gp) * 100) : null
-                  const shotAcc  = Number(stats?.avg_shots_total) > 0
-                    ? Math.round((Number(stats.avg_shots_on_target) / Number(stats.avg_shots_total)) * 100) : null
                   return (
                     <div key={`${row.user_id}-${row.group_id ?? 'nogroup'}`} className={`lb-row${isMe ? ' lb-row--me' : ''}`}>
                       <div className="lb-row-top">
@@ -429,18 +423,6 @@ export default function Dashboard() {
                         </span>
                         <span className="lb-pts">{row.total_points ?? 0}<span className="lb-pts-label"> {(row.total_points ?? 0) === 1 ? 'pt' : 'pts'}</span></span>
                       </div>
-                      {row.champion_team && stats && (
-                        <div className="lb-team-row">
-                          <span className="lb-team-name">{row.champion_team}</span>
-                          <div className="lb-stats-pills">
-                            <span className="lb-stat-pill">{stats.wins}W {stats.draws}D {stats.losses}L</span>
-                            {stats.avg_goals_scored != null && <span className="lb-stat-pill">⚽ {stats.avg_goals_scored}/g</span>}
-                            {winPct != null && <span className={`lb-stat-pill${winPct >= 60 ? ' lb-stat-green' : ''}`}>Win {winPct}%</span>}
-                            {shotAcc != null && <span className="lb-stat-pill lb-stat-gold">🎯 {shotAcc}%</span>}
-                            {streak > 1 && <span className="lb-stat-pill lb-stat-fire">🔥 {streak} streak</span>}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )
                 })}
@@ -461,10 +443,8 @@ export default function Dashboard() {
               <h2 className="dash-section-label">{fmtGameDate(nextDate)}</h2>
               <div className="today-games">
                 {nextGames.map(game => {
-                  const finished  = game.score_home !== null
-                  const now       = Date.now()
-                  const ko        = new Date(game.kick_off_time).getTime()
-                  const isLive    = !finished && now >= ko && now <= ko + 120 * 60 * 1000
+                  const finished  = isGameFinished(game)
+                  const isLive    = isGameLive(game)
                   const gamePreds = myPreds[game.id] ?? []
                   const homeCode  = TEAM_CODE[game.team_home]
                   const awayCode  = TEAM_CODE[game.team_away]
@@ -513,20 +493,27 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      {/* Per-group prediction chips (solo user: single "Personal" chip → group_id=NULL) */}
-                      {!finished && (
+                      {/* Per-group prediction chips — ALL today-games incl. finished (filter stays + result marker). solo user: single "Personal" chip → group_id=NULL */}
+                      {(
                         <div className="tg-group-preds">
                           {(groups.length > 0 ? groups : [{ id: null, name: 'Personal' }]).map(grp => {
                             const gp = gamePreds.find(p => (p.groupId ?? null) === grp.id)
                             const groupParam = grp.id ? `?group=${grp.id}` : ''
+                            let marker = null
+                            if (finished && gp) {
+                              const exact = gp.pred_home === game.score_home && gp.pred_away === game.score_away
+                              const po = Math.sign(gp.pred_home - gp.pred_away)
+                              const so = Math.sign(game.score_home - game.score_away)
+                              marker = exact ? { t: '⭐', c: '#4ade80' } : (po === so ? { t: '✓', c: '#fbbf24' } : { t: '✗', c: 'var(--muted)' })
+                            }
                             return (
                               <button key={grp.id ?? 'solo'}
                                 className={`tg-group-chip${gp ? ' tg-group-chip--predicted' : ''}`}
                                 onClick={() => navigate(`/game/${game.id}${groupParam}`)}>
                                 <span className="tg-chip-group">{grp.name}</span>
                                 {gp
-                                  ? <span className="tg-chip-score">{gp.pred_home}–{gp.pred_away}</span>
-                                  : <span className="tg-chip-cta">→</span>
+                                  ? <span className="tg-chip-score">{gp.pred_home}–{gp.pred_away}{marker && <span style={{ marginLeft: 4, color: marker.c }}>{marker.t}</span>}</span>
+                                  : <span className="tg-chip-cta">{finished ? '–' : '→'}</span>
                                 }
                               </button>
                             )

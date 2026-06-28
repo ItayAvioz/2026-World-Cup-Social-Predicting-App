@@ -5,10 +5,18 @@ import { logEvent } from '../lib/analytics.ts'
 import { useToast } from '../context/ToastContext.jsx'
 import { useDataCache } from '../context/DataCacheContext.jsx'
 import Layout from '../components/Layout.jsx'
+import Modal from '../components/Modal.jsx'
+import TrophyImg from '../assets/Trophy.webp'
 import { supabase } from '../lib/supabase.js'
 import { TEAMS } from '../lib/teams.js'
 
 const PICKS_DEADLINE = '2026-06-11T19:00:00Z'
+
+// Team name → flag code (e.g. 'South Korea' → 'kr'). Same map Dashboard/Groups/Game use.
+// Scorer flags are keyed off the canonical team string (player_tournament_stats.team),
+// NOT the player's name — api-football's stats spelling drifts from the squad-seed
+// spelling (e.g. "Hyeon-gyu Oh" vs "Oh Hyeongyu"), which silently broke a name match.
+const TEAM_CODE = Object.fromEntries(TEAMS.filter(t => t.code).map(t => [t.name, t.code]))
 
 const PHASE_LABEL = {
   group: 'Group Stage',
@@ -20,6 +28,75 @@ const PHASE_LABEL = {
   final: 'Final',
 }
 const PHASE_ORDER = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final']
+
+const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+
+// ── Road-to-Final fixed bracket (official FIFA 2026 structure) ──────────────
+// Node ids: L1–L8 / R1–R8 = the 16 Round-of-32 slots (left / right halves,
+// top→bottom exactly as the official bracket). LA–LD/RA–RD = R16, LQ1/LQ2/
+// RQ1/RQ2 = QF, LS/RS = SF, F = Final, B = 3rd-place (bronze).
+//
+// Column layout for rendering — left flows inward, right is mirrored.
+const LEFT_COLS = [
+  { phase: 'r32', nodes: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8'] },
+  { phase: 'r16', nodes: ['LA', 'LB', 'LC', 'LD'] },
+  { phase: 'qf',  nodes: ['LQ1', 'LQ2'] },
+  { phase: 'sf',  nodes: ['LS'] },
+]
+const RIGHT_COLS = [
+  { phase: 'sf',  nodes: ['RS'] },
+  { phase: 'qf',  nodes: ['RQ1', 'RQ2'] },
+  { phase: 'r16', nodes: ['RA', 'RB', 'RC', 'RD'] },
+  { phase: 'r32', nodes: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8'] },
+]
+
+// Which child nodes feed each non-R32 node (winners advance; B = the two SF losers).
+const BRACKET_CHILDREN = {
+  LA: ['L1', 'L2'], LB: ['L3', 'L4'], LC: ['L5', 'L6'], LD: ['L7', 'L8'],
+  RA: ['R1', 'R2'], RB: ['R3', 'R4'], RC: ['R5', 'R6'], RD: ['R7', 'R8'],
+  LQ1: ['LA', 'LB'], LQ2: ['LC', 'LD'], RQ1: ['RA', 'RB'], RQ2: ['RC', 'RD'],
+  LS: ['LQ1', 'LQ2'], RS: ['RQ1', 'RQ2'],
+  F: ['LS', 'RS'], B: ['LS', 'RS'],
+}
+
+// Non-R32 nodes per phase, ordered so each round is placed after its children.
+const NODES_BY_PHASE = {
+  r16: ['LA', 'LB', 'LC', 'LD', 'RA', 'RB', 'RC', 'RD'],
+  qf:  ['LQ1', 'LQ2', 'RQ1', 'RQ2'],
+  sf:  ['LS', 'RS'],
+  final: ['F'],
+}
+
+// ⚠️ FILL ON LAUNCH DAY (28 Jun, once the R32 draw is final): map each of the
+// 16 Round-of-32 games' `api_fixture_id` to its bracket slot. Slot → official
+// matchup (left top→bottom, then right) from the FIFA 2026 bracket:
+//   L1: 1E vs 3rd(A/B/C/D/E/F)   R1: 1C vs 2F
+//   L2: 1I vs 3rd(C/D/F/G/H)     R2: 2E vs 2I
+//   L3: 2A vs 2B                 R3: 1A vs 3rd(C/E/F/H)
+//   L4: 1F vs 2C                 R4: 1L vs 3rd(E/H/J/K)
+//   L5: 2K vs 2L                 R5: 1J vs 2H
+//   L6: 1H vs 2J                 R6: 2D vs 2G
+//   L7: 1D vs 3rd(B/E/F/J)       R7: 1B vs 3rd(E/F/G/J)
+//   L8: 1G vs 3rd(A/E/H/J)       R8: 1K vs 3rd(D/E/I/J/L)
+// Example: 1561329: 'L3',
+const R32_SLOTS = {
+  1561329: 'L3',  // South Africa (2A) v Canada (2B)
+  1562344: 'R1',  // Brazil (1C) v Japan (2F)
+  1562345: 'L4',  // Netherlands (1F) v Morocco (2C)
+  1562586: 'L7',  // United States (1D) v Bosnia-Herzegovina (3rd B)
+  1565176: 'L1',  // Germany (1E) v Paraguay (3rd D)
+  1565177: 'L2',  // France (1I) v Sweden (3rd F)
+  1564789: 'R2',  // Ivory Coast (2E) v Norway (2I)
+  1565179: 'R5',  // Argentina (1J) v Cape Verde (2H)
+  1565178: 'R6',  // Australia (2D) v Egypt (2G)
+  1567306: 'R3',  // Mexico (1A) v Ecuador (3rd E)
+  1567307: 'R4',  // England (1L) v DR Congo (3rd K)
+  1567308: 'L8',  // Belgium (1G) v Senegal (3rd I)
+  1567311: 'L6',  // Spain (1H) v Austria (2J)
+  1567309: 'L5',  // Portugal (2K) v Croatia (2L)
+  1567312: 'R7',  // Switzerland (1B) v Algeria (3rd J)
+  1567310: 'R8',  // Colombia (1K) v Ghana (3rd L)
+}
 
 const TEAM_SHORT = {
   'Bosnia-Herzegovina': 'Bosnia',
@@ -36,6 +113,67 @@ function FlagImg({ name, code, className }) {
   if (!code || broken) return <div className={`${className}-ph`} />
   const src = `https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/${code}.svg`
   return <img src={src} alt={`${name} flag`} className={className} onError={() => setBroken(true)} />
+}
+
+// One knockout matchup card in the Road-to-Final bracket.
+// Winner highlighted via knockout_winner (set after ET/pens) — never the
+// 90-min score, which can differ on knockout games (CLAUDE.md schema note).
+function RtfMatch({ g, codeOf }) {
+  const finished = g.score_home !== null
+  const win = g.knockout_winner
+  const teamRow = team => (
+    <div className={`rtf-m-row${win && win === team ? ' rtf-m-row--win' : ''}`}>
+      <FlagImg name={team} code={codeOf(team)} className="rtf-m-flag" />
+      <span className="rtf-m-name">{team === 'TBD' ? '—' : (TEAM_SHORT[team] ?? team)}</span>
+    </div>
+  )
+  return (
+    <div className="rtf-match">
+      {teamRow(g.team_home)}
+      {teamRow(g.team_away)}
+      <div className="rtf-m-meta">
+        {finished ? (
+          <span className="rtf-score-line">
+            <span className="rtf-sc"><span className="rtf-sc-lbl">90'</span> {g.score_home}–{g.score_away}</span>
+            {g.went_to_extra_time && g.et_score_home != null && (
+              <span className="rtf-sc"><span className="rtf-sc-lbl">E.T.</span> {g.et_score_home}–{g.et_score_away}</span>
+            )}
+            {g.went_to_penalties && g.penalty_score_home != null && (
+              <span className="rtf-sc"><span className="rtf-sc-lbl">PENS</span> {g.penalty_score_home}–{g.penalty_score_away}</span>
+            )}
+          </span>
+        ) : fmtKickoff(g.kick_off_time)}
+      </div>
+    </div>
+  )
+}
+
+// Auto-promoted matchup: teams advanced from finished feeder games, but the
+// next-round fixture hasn't been pulled yet (no score/date). Unknown side = TBD.
+function RtfDerived({ home, away, codeOf }) {
+  const row = team => (
+    <div className="rtf-m-row rtf-m-row--pending">
+      {team ? <FlagImg name={team} code={codeOf(team)} className="rtf-m-flag" /> : <div className="rtf-m-flag-ph" />}
+      <span className="rtf-m-name">{team ? (TEAM_SHORT[team] ?? team) : 'TBD'}</span>
+    </div>
+  )
+  return (
+    <div className="rtf-match rtf-match--pending">
+      {row(home)}
+      {row(away)}
+      <div className="rtf-m-meta">Awaiting fixture</div>
+    </div>
+  )
+}
+
+// Empty bracket slot — keeps the structure visible before a round is drawn.
+function RtfEmpty() {
+  return (
+    <div className="rtf-match rtf-match--empty">
+      <div className="rtf-m-row"><div className="rtf-m-flag-ph" /><span className="rtf-m-name">—</span></div>
+      <div className="rtf-m-row"><div className="rtf-m-flag-ph" /><span className="rtf-m-name">—</span></div>
+    </div>
+  )
 }
 
 function fmtKickoff(dt) {
@@ -102,6 +240,9 @@ export default function Picks() {
   })
   const switchPredSubTab = tab => { sessionStorage.setItem('picks_predsubtab', tab); setPredSubTab(tab) }
 
+  // ── Road to Final (bracket + group standings) modal ────────────
+  const [roadOpen, setRoadOpen] = useState(false)
+
   // ── Tournament results state ───────────────────────────────────
   const [tournamentChampion, setTournamentChampion] = useState(undefined) // undefined=loading, null=not yet, string=winner
   const [topScorers, setTopScorers]                 = useState(undefined) // undefined=loading, []=not yet, [{player_name,total_goals}]
@@ -115,10 +256,33 @@ export default function Picks() {
     loadCandidates()
   }, [user])
 
+  // top_scorer_candidates is 1248 active rows (26 × 48 teams). PROD enforces a HARD
+  // PostgREST max-rows=1000 cap that .range() does NOT override (Range:0-99999 still
+  // returns only 1000), so an unbounded fetch silently drops the alphabetically-last
+  // ~248 players (e.g. Brazil lost Raphinha/Rayan/Vinicius/Wesley/Weverton). Must
+  // paginate in 1000-row pages and concatenate to get every candidate.
+  async function fetchAllCandidates() {
+    const PAGE = 1000
+    let from = 0, all = []
+    for (;;) {
+      const { data, error } = await supabase
+        .from('top_scorer_candidates')
+        .select('name, team_name, flag_code, api_player_id, position')
+        .eq('is_active', true)
+        .order('name')
+        .range(from, from + PAGE - 1)
+      if (error || !data) break
+      all = all.concat(data)
+      if (data.length < PAGE) break
+      from += PAGE
+    }
+    return all
+  }
+
   async function loadCandidates() {
-    const [{ data: t }, { data: p }, { data: o }] = await Promise.all([
+    const [{ data: t }, p, { data: o }] = await Promise.all([
       supabase.from('teams').select('name, flag_code, group_name, is_tbd').order('group_name').order('is_tbd'),
-      supabase.from('top_scorer_candidates').select('name, team_name, flag_code, api_player_id, position').eq('is_active', true).order('name'),
+      fetchAllCandidates(),
       supabase.from('champion_odds').select('team_name, odds'),
     ])
     if (t) setDbTeams(t)
@@ -165,8 +329,12 @@ export default function Picks() {
       const gs = (data ?? []).map(r => r.groups).filter(Boolean)
       setGroups(gs)
       if (gs.length > 0) {
-        activeGroupRef.current = gs[0].id
-        setSelectedGroupId(gs[0].id)
+        // restore last-chosen group so History→game→back returns to it (not first group)
+        let restore = gs[0].id
+        const saved = sessionStorage.getItem('picks_group')
+        if (saved && gs.some(g => g.id === saved)) restore = saved
+        activeGroupRef.current = restore
+        setSelectedGroupId(restore)
       }
     } catch {
       setGroupsError(true)
@@ -227,6 +395,7 @@ export default function Picks() {
     if (id === selectedGroupId) return
     activeGroupRef.current = id
     setSelectedGroupId(id)
+    sessionStorage.setItem('picks_group', id)  // persist chosen group across History→game→back
     setChampSearch('')
     setSearch('')
     setPlayerTeamFilter('')
@@ -284,7 +453,7 @@ export default function Picks() {
     try {
       const { data, error } = await supabase
         .from('games')
-        .select('id, team_home, team_away, kick_off_time, score_home, score_away, phase, et_score_home, et_score_away, penalty_score_home, penalty_score_away, went_to_extra_time, went_to_penalties')
+        .select('id, api_fixture_id, team_home, team_away, kick_off_time, score_home, score_away, phase, group_name, knockout_winner, et_score_home, et_score_away, penalty_score_home, penalty_score_away, went_to_extra_time, went_to_penalties')
         .order('kick_off_time')
       if (error) throw error
       setGames(data ?? [])
@@ -425,6 +594,127 @@ export default function Picks() {
     })
     return map
   }, [games])
+
+  // ── Road to Final: place each knockout game onto its fixed bracket node ──
+  // R32 → by the hardcoded R32_SLOTS map (api_fixture_id → node), set at the
+  // draw. R16/QF/SF/Final → derived automatically by winner-chaining: a game
+  // sits at the node whose feeder children's winners are its two teams. No
+  // per-round data; placement recomputes as games are pulled/finished.
+  const bracketNodes = useMemo(() => {
+    const byNode = {}
+
+    // R32: explicit slot map
+    for (const g of games) {
+      if (g.phase !== 'r32') continue
+      const node = R32_SLOTS[g.api_fixture_id]
+      if (node) byNode[node] = g
+      else if (import.meta.env.DEV) console.warn(`[bracket] R32 fixture ${g.api_fixture_id} (${g.team_home} v ${g.team_away}) not in R32_SLOTS`)
+    }
+
+    const winnerOf = node => byNode[node]?.knockout_winner ?? null
+
+    // R16 → QF → SF → Final: match each game to the node whose child winners it contains
+    for (const phase of ['r16', 'qf', 'sf', 'final']) {
+      const gs = games.filter(g => g.phase === phase)
+      for (const node of NODES_BY_PHASE[phase]) {
+        const winners = BRACKET_CHILDREN[node].map(winnerOf)
+        const g = gs.find(x => winners.includes(x.team_home) || winners.includes(x.team_away))
+        if (g) byNode[node] = g
+      }
+    }
+    // 3rd-place (bronze): single 'third' game, centre (ignore TBD placeholders
+    // so auto-promotion of the two SF losers still shows before it's pulled)
+    const bronze = games.find(g => g.phase === 'third' && g.team_home !== 'TBD' && g.team_away !== 'TBD')
+    if (bronze) byNode.B = bronze
+
+    return byNode
+  }, [games])
+
+  // Teams to auto-promote into a not-yet-pulled node from its finished children.
+  function derivedTeams(node) {
+    const kids = BRACKET_CHILDREN[node]
+    if (!kids) return null
+    const winnerOf = n => bracketNodes[n]?.knockout_winner ?? null
+    if (node === 'B') {  // bronze = the two SF losers
+      const loserOf = n => {
+        const g = bracketNodes[n]
+        if (!g?.knockout_winner) return null
+        return g.knockout_winner === g.team_home ? g.team_away : g.team_home
+      }
+      return { home: loserOf('LS'), away: loserOf('RS') }
+    }
+    return { home: winnerOf(kids[0]), away: winnerOf(kids[1]) }
+  }
+
+  function renderNode(node) {
+    const g = bracketNodes[node]
+    if (g) return <RtfMatch key={node} g={g} codeOf={t => teamCodeMap[t]} />
+    const d = derivedTeams(node)
+    if (d && (d.home || d.away)) return <RtfDerived key={node} home={d.home} away={d.away} codeOf={t => teamCodeMap[t]} />
+    return <RtfEmpty key={node} />
+  }
+
+  function renderColumn(col, side) {
+    return (
+      <div key={`${col.phase}-${side}`} className="rtf-col">
+        <div className="rtf-round-title">{PHASE_LABEL[col.phase]}</div>
+        <div className="rtf-col-slots">
+          {col.nodes.map(node => renderNode(node))}
+        </div>
+      </div>
+    )
+  }
+
+  // Group standings computed from finished group games (group stage never
+  // goes to ET, so score_home/away is the full result). Rank: pts → GD → GF.
+  // Unofficial — FIFA head-to-head tiebreakers are NOT applied.
+  const groupStandings = useMemo(() => {
+    const tbl = {} // group -> { team -> stats }
+    for (const t of dbTeams) {
+      if (!t.group_name || t.is_tbd) continue
+      ;(tbl[t.group_name] ??= {})[t.name] =
+        { team: t.name, code: t.flag_code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }
+    }
+    for (const g of games) {
+      if (g.phase !== 'group' || g.score_home === null || g.score_away === null) continue
+      const grp = tbl[g.group_name]
+      const h = grp?.[g.team_home], a = grp?.[g.team_away]
+      if (!h || !a) continue
+      h.p++; a.p++
+      h.gf += g.score_home; h.ga += g.score_away
+      a.gf += g.score_away; a.ga += g.score_home
+      if (g.score_home > g.score_away) { h.w++; a.l++; h.pts += 3 }
+      else if (g.score_home < g.score_away) { a.w++; h.l++; a.pts += 3 }
+      else { h.d++; a.d++; h.pts++; a.pts++ }
+    }
+    const out = {}
+    for (const grp of WC_GROUPS) {
+      if (!tbl[grp]) continue
+      const rows = Object.values(tbl[grp]).sort((x, y) =>
+        y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf || x.team.localeCompare(y.team))
+      rows.forEach((r, i) => { r.rank = i + 1; r.gd = r.gf - r.ga })
+      out[grp] = rows
+    }
+    return out
+  }, [dbTeams, games])
+
+  // Teams that reached the knockout stage (every team in any KO game) — used to
+  // mark the 8 best 3rd-place qualifiers (rank 3 that still advanced) in the
+  // group tables with a '*' + qualify highlight.
+  const knockoutTeams = useMemo(() => {
+    const s = new Set()
+    for (const g of games) {
+      if (g.phase === 'group') continue
+      if (g.team_home && g.team_home !== 'TBD') s.add(g.team_home)
+      if (g.team_away && g.team_away !== 'TBD') s.add(g.team_away)
+    }
+    return s
+  }, [games])
+
+  function openRoadToFinal() {
+    if (!gamesLoadedRef.current) loadGames()
+    setRoadOpen(true)
+  }
 
   const upcomingGames = useMemo(() =>
     games.filter(g => g.score_home === null).sort((a, b) => new Date(a.kick_off_time) - new Date(b.kick_off_time))
@@ -603,7 +893,7 @@ export default function Picks() {
                     ) : topScorers.length > 0 ? (
                       <div className="pk-result-card-scorers">
                         {topScorers.map(p => {
-                          const code = dbPlayers.find(s => s.name === p.player_name)?.code ?? null
+                          const code = TEAM_CODE[p.team] ?? null
                           // Standard competition rank: players level on goals share a rank
                           const rank = topScorers.findIndex(r => r.total_goals === p.total_goals) + 1
                           return (
@@ -834,6 +1124,16 @@ export default function Picks() {
                     </div>
                   </>
                 )}
+
+                {/* ── Road to Final CTA ── */}
+                <button className="rtf-cta" onClick={openRoadToFinal}>
+                  <img src={TrophyImg} className="rtf-cta-trophy" alt="" aria-hidden="true" />
+                  <span className="rtf-cta-body">
+                    <span className="rtf-cta-title">Road to Final</span>
+                    <span className="rtf-cta-sub">Knockout bracket &amp; group standings</span>
+                  </span>
+                  <span className="rtf-cta-chev" aria-hidden="true">›</span>
+                </button>
             </>
           </>
 
@@ -1105,6 +1405,81 @@ export default function Picks() {
             )}
           </>
         )}
+
+        {/* ── Road to Final modal ── */}
+        <Modal isOpen={roadOpen} onClose={() => setRoadOpen(false)}>
+          <div className="rtf-modal">
+            <h2 className="rtf-title">
+              <img src={TrophyImg} className="rtf-title-trophy" alt="" aria-hidden="true" />
+              Road to Final
+            </h2>
+
+            <div className="rtf-section-label">Knockout Bracket</div>
+            {gamesLoading ? (
+              <p className="rtf-empty">Loading…</p>
+            ) : (
+              <div className="rtf-bracket-scroll">
+                <div className="rtf-bracket">
+                  {/* left half: R32 → SF, flowing inward */}
+                  <div className="rtf-side">
+                    {LEFT_COLS.map(col => renderColumn(col, 'left'))}
+                  </div>
+
+                  {/* centre: Final + 3rd place */}
+                  <div className="rtf-center">
+                    <img src={TrophyImg} className="rtf-center-trophy" alt="" aria-hidden="true" />
+                    <div className="rtf-round-title">{PHASE_LABEL.final}</div>
+                    {renderNode('F')}
+                    <div className="rtf-round-title rtf-third-title">{PHASE_LABEL.third}</div>
+                    {renderNode('B')}
+                  </div>
+
+                  {/* right half: SF → R32, mirrored */}
+                  <div className="rtf-side">
+                    {RIGHT_COLS.map(col => renderColumn(col, 'right'))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="rtf-section-label">Group Standings</div>
+            <div className="rtf-groups">
+              {WC_GROUPS.filter(grp => groupStandings[grp]).map(grp => (
+                <div key={grp} className="rtf-group">
+                  <div className="rtf-group-title">Group {grp}</div>
+                  <table className="rtf-table">
+                    <thead>
+                      <tr>
+                        <th className="rtf-th-rank">#</th>
+                        <th className="rtf-th-team">Team</th>
+                        <th>P</th><th>W</th><th>D</th><th>L</th>
+                        <th>GD</th><th className="rtf-th-pts">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupStandings[grp].map(r => (
+                        <tr key={r.team} className={(r.rank <= 2 || (r.rank === 3 && knockoutTeams.has(r.team))) ? 'rtf-tr-qualify' : ''}>
+                          <td className="rtf-td-rank">{r.rank}{r.rank === 3 && knockoutTeams.has(r.team) ? '*' : ''}</td>
+                          <td className="rtf-td-team">
+                            <FlagImg name={r.team} code={r.code} className="rtf-m-flag" />
+                            <span>{TEAM_SHORT[r.team] ?? r.team}</span>
+                          </td>
+                          <td>{r.p}</td><td>{r.w}</td><td>{r.d}</td><td>{r.l}</td>
+                          <td>{r.gd > 0 ? `+${r.gd}` : r.gd}</td>
+                          <td className="rtf-td-pts">{r.pts}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+              {WC_GROUPS.every(grp => !groupStandings[grp]) && (
+                <p className="rtf-empty">Group standings appear once games are played.</p>
+              )}
+            </div>
+            <p className="rtf-legend">Top 2 advance · <span className="rtf-legend-q">green</span> = into knockout · <strong>3*</strong> = best-3rd qualifier</p>
+          </div>
+        </Modal>
 
       </div>
     </Layout>

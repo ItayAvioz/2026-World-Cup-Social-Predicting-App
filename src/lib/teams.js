@@ -320,3 +320,26 @@ export const HOST_SCHEDULES = {
     ]
   }
 }
+
+// ── Game live / finished state (phase-aware) ───────────────────────────────
+// A knockout game's `score_home` holds ONLY the 90' score and is written the
+// moment extra time begins — so for knockout we must NOT treat it as finished
+// until the ET / penalty result is also present. Group games are unchanged.
+export function isGameFinished(g) {
+  if (!g || g.score_home === null || g.score_home === undefined) return false
+  if (g.phase === 'group') return true
+  if (g.went_to_penalties && (g.penalty_score_home === null || g.penalty_score_home === undefined)) return false // shootout in progress
+  if (g.went_to_extra_time && (g.et_score_home === null || g.et_score_home === undefined)) return false           // extra time in progress
+  return true
+}
+
+// LIVE = past kickoff, not yet finished, within a safety time cap.
+// Group games end by ~KO+105; knockout can run to ET+penalties (~KO+165), so the
+// cap is wider for knockout. The cap only stops a never-synced game showing LIVE
+// forever — the real "ended" signal is isGameFinished().
+export function isGameLive(g, nowMs = Date.now()) {
+  if (!g || isGameFinished(g)) return false
+  const ko = new Date(g.kick_off_time).getTime()
+  const capMin = g.phase === 'group' ? 120 : 210
+  return nowMs >= ko && nowMs <= ko + capMin * 60 * 1000
+}

@@ -5,6 +5,28 @@
 
 ---
 
+## ⚠️ MANDATORY: normalize `position` to full names on every write
+
+`top_scorer_candidates.position` MUST store api-football **full names** — `Attacker | Midfielder | Defender | Goalkeeper` — because the frontend Picks position filter (`Picks.jsx`) does an exact string compare. The source `data/wc2026_squads.json` stores FIFA **short codes** (`GK | DF | MF | FW`); these are NOT directly insertable.
+
+M128 (2026-06-02) synced the JSON without normalizing → DB column went mixed (~1278 rows in short codes) → the position filter silently matched nothing for synced players. Fixed in PROD 2026-06-07 by a normalize UPDATE.
+
+**Every sync/insert/resolve that touches `position` must map at the boundary:**
+
+```sql
+-- run as the final step of any JSON re-sync, or bake into the staging INSERT
+UPDATE top_scorer_candidates SET position='Goalkeeper' WHERE position='GK';
+UPDATE top_scorer_candidates SET position='Defender'   WHERE position='DF';
+UPDATE top_scorer_candidates SET position='Midfielder' WHERE position='MF';
+UPDATE top_scorer_candidates SET position='Attacker'   WHERE position IN ('FW','F','Forward');
+-- verify: zero short codes remain
+SELECT position, count(*) FROM top_scorer_candidates GROUP BY position ORDER BY 2 DESC;
+```
+
+Do NOT change the frontend filter to accept short codes — full names are the contract.
+
+---
+
 ## Why placeholders
 
 `top_scorer_candidates.api_player_id` is `NOT NULL + UNIQUE`. We can't insert null. But 47 WC2026 squad players (mostly low-coverage leagues + provisional-team backups) aren't reachable through:

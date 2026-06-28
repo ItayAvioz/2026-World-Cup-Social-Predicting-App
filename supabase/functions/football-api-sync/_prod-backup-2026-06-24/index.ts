@@ -1,11 +1,5 @@
 /**
- * football-api-sync v19 — penalty shootout + in-play missed-penalty event capture.
- *   writeStats events: shootout (comments==='Penalty Shootout') -> pen_shootout_scored / pen_shootout_missed;
- *   in-play missed penalty (type Goal, detail 'Missed Penalty', no shootout) -> missed_penalty.
- *   Stores comments + sort_order; onConflict adds minute_extra; events-upsert error now surfaced.
- *   ONLY the writeStats events loop changed — everything else byte-identical to v18.
- * ---
- * v18 — fixes RECURRING Bosnia name mismatch (Pattern B) at the ROOT.
+ * football-api-sync v18 — fixes RECURRING Bosnia name mismatch (Pattern B) at the ROOT.
  * normalizeTeam strips punctuation to EMPTY, so DB "Bosnia-Herzegovina" -> "bosniaherzegovina"
  * (hyphen deleted, words fused) while api "Bosnia & Herzegovina" -> "bosnia herzegovina"
  * (ampersand had spaces). They never matched, so canon() fell through to the raw api name and
@@ -303,19 +297,8 @@ async function writeStats(supabase: ReturnType<typeof createClient>, game_id: st
     if (rows.length>0) await supabase.from('game_player_stats').upsert(rows,{onConflict:'game_id,api_player_id'})
     const evRaw = await footballApiGet(`/fixtures/events?fixture=${api_fixture_id}`)
     const evRows:any[] = []
-    let evIdx = 0
-    for (const ev of evRaw) {
-      const t=ev.type as string; const d=ev.detail as string; const comments=(ev.comments??null) as string|null
-      const isShootout = comments==='Penalty Shootout'
-      let et:string|null=null
-      if (isShootout) { if (d==='Missed Penalty') et='pen_shootout_missed'; else if (d==='Penalty') et='pen_shootout_scored' }
-      else if (t==='Goal'&&['Normal Goal','Own Goal','Penalty'].includes(d)) et='goal'
-      else if (t==='Goal'&&d==='Missed Penalty') et='missed_penalty'
-      else if (t==='Card'&&['Red Card','Second Yellow card'].includes(d)) et='red_card'
-      if (!et) continue
-      evRows.push({game_id,team:canon(ev.team?.name??''),player_name:ev.player?.name??null,event_type:et,minute:ev.time?.elapsed??0,minute_extra:ev.time?.extra??null,detail:d,comments,sort_order:evIdx++})
-    }
-    if (evRows.length>0) { const { error: evErr } = await supabase.from('game_events').upsert(evRows,{onConflict:'game_id,team,player_name,event_type,minute,minute_extra'}); if (evErr) throw new Error('events upsert: '+evErr.message) }
+    for (const ev of evRaw) { const t=ev.type as string; const d=ev.detail as string; let et:string|null=null; if(t==='Goal'&&['Normal Goal','Own Goal','Penalty'].includes(d)) et='goal'; else if(t==='Card'&&['Red Card','Second Yellow card'].includes(d)) et='red_card'; if (!et) continue; evRows.push({game_id,team:canon(ev.team?.name??''),player_name:ev.player?.name??null,event_type:et,minute:ev.time?.elapsed??0,minute_extra:ev.time?.extra??null,detail:d}) }
+    if (evRows.length>0) await supabase.from('game_events').upsert(evRows,{onConflict:'game_id,team,player_name,event_type,minute'})
   } catch (e) { const msg=e instanceof Error?e.message:String(e); console.error(`stats failed:`,msg); const _sb=createClient(SUPABASE_URL,SERVICE_ROLE_KEY); await reportEfError(_sb,'stats_write',msg,{game_id}) }
 }
 Deno.serve(async (req) => {

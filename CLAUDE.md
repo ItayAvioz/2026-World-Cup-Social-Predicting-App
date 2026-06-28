@@ -214,7 +214,7 @@ const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 - Next to the inactive flag button: *"Mark as inactive if this member has stopped playing. They'll still earn points but will be dimmed on the leaderboard."*
 - At the bottom of the members list: *"Members are permanent. To remove a member or delete the group, contact the admin."*
 
-**Limits:** Max 3 groups total per user (created + joined combined). Max 10 members per group (including captain).
+**Limits:** Max 3 groups total per user (created + joined combined). Max 12 members per group (including captain). _(Cap enforced server-side in `join_group` RPC — M129, 2026-06-11. Frontend `/10` labels still display 10; cosmetic, pending.)_
 
 **Invite flow:**
 1. Captain creates group → gets a unique shareable WhatsApp link
