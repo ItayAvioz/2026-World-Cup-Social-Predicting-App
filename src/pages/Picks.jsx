@@ -31,11 +31,6 @@ const PHASE_ORDER = ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final']
 
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
 
-// ⚠️ TEMP test gate — Road to Final is visible only to these user ids while the
-// R32 slots are unfilled (pre-28 Jun). Remove this gate on launch day to show
-// the bracket to everyone. (prod Itay_Avioz)
-const ROAD_TO_FINAL_USERS = ['a540ab08-7b2a-4d38-8bfc-e0d59ce14f1b']
-
 // ── Road-to-Final fixed bracket (official FIFA 2026 structure) ──────────────
 // Node ids: L1–L8 / R1–R8 = the 16 Round-of-32 slots (left / right halves,
 // top→bottom exactly as the official bracket). LA–LD/RA–RD = R16, LQ1/LQ2/
@@ -197,7 +192,6 @@ export default function Picks() {
   useEffect(() => { if (user?.id) logEvent(supabase, user.id, 'page_view', 'picks') }, [user?.id])
 
   const isLocked = new Date() >= new Date(PICKS_DEADLINE)
-  const canSeeRoadToFinal = !!user && ROAD_TO_FINAL_USERS.includes(user.id)
   const activeGroupRef = useRef(null)
   const gamesLoadedRef = useRef(false)
   const predCtxRef = useRef(undefined)  // undefined = not yet set
@@ -1131,8 +1125,7 @@ export default function Picks() {
                   </>
                 )}
 
-                {/* ── Road to Final CTA (temp gated to test users) ── */}
-                {canSeeRoadToFinal && (
+                {/* ── Road to Final CTA ── */}
                 <button className="rtf-cta" onClick={openRoadToFinal}>
                   <img src={TrophyImg} className="rtf-cta-trophy" alt="" aria-hidden="true" />
                   <span className="rtf-cta-body">
@@ -1141,7 +1134,6 @@ export default function Picks() {
                   </span>
                   <span className="rtf-cta-chev" aria-hidden="true">›</span>
                 </button>
-                )}
             </>
           </>
 
@@ -1415,7 +1407,7 @@ export default function Picks() {
         )}
 
         {/* ── Road to Final modal ── */}
-        <Modal isOpen={roadOpen && canSeeRoadToFinal} onClose={() => setRoadOpen(false)}>
+        <Modal isOpen={roadOpen} onClose={() => setRoadOpen(false)}>
           <div className="rtf-modal">
             <h2 className="rtf-title">
               <img src={TrophyImg} className="rtf-title-trophy" alt="" aria-hidden="true" />
