@@ -1567,3 +1567,14 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .rtf-h-gold { color:var(--accent); }
 .rtf-clock--final .rtf-clock-val { color:var(--accent); }
 .rtf-pred-save { margin-left:.6rem; }
+
+/* Mobile: stats + Save on row 1, countdown clock drops to its own full-width row */
+@media (max-width: 560px) {
+  .rtf-pred-head { flex-wrap:wrap; gap:.5rem .9rem; }
+  .rtf-pred-stat-num { font-size:1.2rem; }
+  .rtf-pred-save { margin-left:auto; min-height:36px; padding:.35rem 1rem; }
+  .rtf-clock { order:5; flex-basis:100%; width:100%; margin-left:0;
+    flex-direction:row; flex-wrap:wrap; align-items:baseline; justify-content:flex-start; gap:.1rem .45rem; }
+  .rtf-clock-val { font-size:1rem; }
+  .rtf-clock-sub { flex-basis:100%; width:100%; }
+}
