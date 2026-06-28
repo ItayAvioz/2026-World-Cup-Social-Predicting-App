@@ -101,6 +101,7 @@ Live ERD is maintained in `.claude/skills/db-feature/SKILL.md`. Key points:
 - `champion_pick` — **per-group**: `UNIQUE(user_id, group_id)`. Each user has one champion pick per group. `group_id uuid NOT NULL FK → groups(id)`.
 - `top_scorer_pick` — **per-group**: same schema pattern as champion_pick. `UNIQUE(user_id, group_id)`.
 - `ai_summaries` — includes `input_json` (LLM payload snapshot) and `display_data` (UI-only, never sent to LLM — stores `global_ranks: { username: rank }` per group member).
+- `knockout_pick` — **global** (no group_id): predict which teams REACH each knockout round. `(user_id, round in qf/sf/final/third, team, UNIQUE(user_id,round,team))`. **No points column** — score computed on read by `fn_knockout_points`. Trivia-model security: SELECT-own RLS only, all writes via `save_knockout_picks` SECURITY DEFINER RPC. Points fold into both leaderboard RPCs only from `2026-07-20T07:00:00Z`. See `memory/knockout-prediction-game.md`.
 - Points: exact score = **3pt**, correct outcome = **1pt** (not additive)
 
 ## Scoring Rules
@@ -111,6 +112,10 @@ Live ERD is maintained in `.claude/skills/db-feature/SKILL.md`. Key points:
 | Exact scoreline | 3 |
 | Correct champion | 10 |
 | Correct top scorer | 10 |
+| Knockout bracket — team reaches a round | 2 each |
+| Knockout bracket — whole round correct (bonus) | QF +12 · SF +10 · Final +8 · 3rd/4th +6 |
+
+Knockout bracket prediction (global, teams-only — predict who reaches QF/SF/Final/3rd-4th): **max 68**. Entries lock `2026-07-04T15:00:00Z`; points count toward the leaderboard from `2026-07-20T07:00:00Z`. See `memory/knockout-prediction-game.md`.
 
 ## Prediction Deadlines & Availability
 
