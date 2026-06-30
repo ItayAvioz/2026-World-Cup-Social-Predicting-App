@@ -767,7 +767,7 @@ export default function Groups() {
                                         <span className="grp-ng-score">{game.score_home}–{game.score_away}</span>
                                         {game.went_to_extra_time && (
                                           <span className="grp-ng-extra">
-                                            {game.et_score_home !== null && `E.T. ${game.et_score_home}–${game.et_score_away}`}
+                                            {game.et_score_home !== null && `E.T. ${game.score_home + game.et_score_home}–${game.score_away + game.et_score_away}`}
                                             {game.went_to_penalties && game.penalty_score_home !== null && `  Pens ${game.penalty_score_home}–${game.penalty_score_away}`}
                                           </span>
                                         )}

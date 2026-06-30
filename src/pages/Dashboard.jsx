@@ -471,7 +471,7 @@ export default function Dashboard() {
                               <div className="tg-score">{game.score_home}–{game.score_away}</div>
                               {game.went_to_extra_time && (
                                 <div className="tg-score-extra">
-                                  {game.et_score_home !== null && `E.T. ${game.et_score_home}–${game.et_score_away}`}
+                                  {game.et_score_home !== null && `E.T. ${game.score_home + game.et_score_home}–${game.score_away + game.et_score_away}`}
                                   {game.went_to_penalties && game.penalty_score_home !== null && `  Pens ${game.penalty_score_home}–${game.penalty_score_away}`}
                                 </div>
                               )}

@@ -62,7 +62,7 @@ function RtfMatch({ g, codeOf }) {
           <span className="rtf-score-line">
             <span className="rtf-sc"><span className="rtf-sc-lbl">90'</span> {g.score_home}–{g.score_away}</span>
             {g.went_to_extra_time && g.et_score_home != null && (
-              <span className="rtf-sc"><span className="rtf-sc-lbl">E.T.</span> {g.et_score_home}–{g.et_score_away}</span>
+              <span className="rtf-sc"><span className="rtf-sc-lbl">E.T.</span> {g.score_home + g.et_score_home}–{g.score_away + g.et_score_away}</span>
             )}
             {g.went_to_penalties && g.penalty_score_home != null && (
               <span className="rtf-sc"><span className="rtf-sc-lbl">PENS</span> {g.penalty_score_home}–{g.penalty_score_away}</span>
@@ -1194,7 +1194,7 @@ export default function Picks() {
                                   <div className="pd-res-item">
                                     <span className="pd-res-label">E.T.</span>
                                     <span className="pd-res-val">
-                                      {game.went_to_extra_time && game.et_score_home !== null ? `${game.et_score_home}–${game.et_score_away}` : '–'}
+                                      {game.went_to_extra_time && game.et_score_home !== null ? `${game.score_home + game.et_score_home}–${game.score_away + game.et_score_away}` : '–'}
                                     </span>
                                   </div>
                                 )}
@@ -1307,7 +1307,7 @@ export default function Picks() {
                               <div className="pd-res-item">
                                 <span className="pd-res-label">E.T.</span>
                                 <span className="pd-res-val">
-                                  {game.went_to_extra_time && game.et_score_home !== null ? `${game.et_score_home}–${game.et_score_away}` : '–'}
+                                  {game.went_to_extra_time && game.et_score_home !== null ? `${game.score_home + game.et_score_home}–${game.score_away + game.et_score_away}` : '–'}
                                 </span>
                               </div>
                             )}
