@@ -1,36 +1,50 @@
-// Client-side mirror of SQL fn_knockout_points — for the live "your score" line.
+// Client-side mirror of SQL fn_knockout_points — for the live "your score" line + coloring.
 // Display only; the leaderboard uses the server function.
 import { ROUND_BONUS, ROUND_SIZE, PER_TEAM, CHAMPION_POINTS, THIRD_WINNER_POINTS } from './constants.js'
 
 const KO_PHASES = ['qf', 'sf', 'final', 'third']
 
-// Actual teams that reached each round, from the games list (exclude TBD).
-export function actualRoundTeams(games) {
-  const out = { qf: new Set(), sf: new Set(), final: new Set(), third: new Set() }
-  for (const g of games) {
-    if (!KO_PHASES.includes(g.phase)) continue
-    if (g.team_home && g.team_home !== 'TBD') out[g.phase].add(g.team_home)
-    if (g.team_away && g.team_away !== 'TBD') out[g.phase].add(g.team_away)
+const finishedGames = (games, phase) => (games || []).filter(g => g.phase === phase && g.knockout_winner)
+const loserOf = g => (g.team_home === g.knockout_winner ? g.team_away : g.team_home)
+
+// Teams that have REACHED each round = the WINNERS of the prior round's finished games
+// (a team advances the moment it wins, so points/colors update per game — no need to wait
+// for the next round's fixtures to be inserted). 'third' (3rd-place game) reachers = SF losers.
+export function knockoutReached(games) {
+  return {
+    qf:    new Set(finishedGames(games, 'r16').map(g => g.knockout_winner)),
+    sf:    new Set(finishedGames(games, 'qf').map(g => g.knockout_winner)),
+    final: new Set(finishedGames(games, 'sf').map(g => g.knockout_winner)),
+    third: new Set(finishedGames(games, 'sf').map(loserOf)),
   }
-  return out
 }
 
-// Actual winner of a phase's game (the Final = champion, the 3rd-place play-off = bronze).
-// Must match the DECIDED game: there can be >1 row for a phase (e.g. a TBD placeholder
-// final alongside the real one), so filter to the game whose knockout_winner is set —
-// else array order could return the placeholder's null and mis-score the winner pick.
+// Teams eliminated = lost any finished knockout game. Used only for coloring: a pick is
+// RED once its team is out, but stays UNCOLORED while the team is still alive (its game
+// not yet played) — prevents premature red before a matchup is decided.
+export function knockoutEliminated(games) {
+  const s = new Set()
+  for (const g of (games || [])) {
+    if (g.knockout_winner && ['r32', 'r16', 'qf', 'sf'].includes(g.phase)) s.add(loserOf(g))
+  }
+  return s
+}
+
+// Actual winner of a phase's game (Final = champion, 3rd-place play-off = bronze winner).
+// Filter to the DECIDED game (knockout_winner set) — a phase can have >1 row (e.g. a TBD
+// placeholder final) and array order could otherwise return a null.
 export function actualWinner(games, phase) {
   return (games || []).find(g => g.phase === phase && g.knockout_winner)?.knockout_winner ?? null
 }
 
 // picksByRound: { qf:[], sf:[], final:[], third:[], champion:[], thirdWinner:[] }
 export function computeKnockoutScore(picksByRound, games) {
-  const actual = actualRoundTeams(games)
+  const reached = knockoutReached(games)
   let total = 0
   const breakdown = {}
   for (const round of KO_PHASES) {
     const picks = picksByRound[round] ?? []
-    const act = actual[round]
+    const act = reached[round]
     const hits = picks.filter(t => act.has(t)).length
     const bonus = hits === ROUND_SIZE[round] ? ROUND_BONUS[round] : 0
     const pts = PER_TEAM * hits + bonus

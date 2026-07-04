@@ -3,7 +3,7 @@ import {
   LEFT_COLS, RIGHT_COLS, PHASE_LABEL, TEAM_SHORT, NODES_BY_PHASE,
   nodeCandidates, bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE, placeGamesOnNodes,
 } from './bracketTree.js'
-import { actualRoundTeams, actualWinner, computeKnockoutScore } from './scoring.js'
+import { knockoutReached, knockoutEliminated, actualWinner, computeKnockoutScore } from './scoring.js'
 import { picksToRounds } from './reconstruct.js'
 import { MAX_POINTS } from './constants.js'
 
@@ -27,7 +27,8 @@ const roundOfNode = n =>
 export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   const codeOf = t => teamCodeMap[t]
   const byNode = useMemo(() => placeGamesOnNodes(games || []), [games])
-  const actual = useMemo(() => actualRoundTeams(games || []), [games])
+  const reached = useMemo(() => knockoutReached(games || []), [games])
+  const eliminated = useMemo(() => knockoutEliminated(games || []), [games])
   const score = useMemo(
     () => computeKnockoutScore(picksToRounds(picks), games || []),
     [picks, games]
@@ -35,13 +36,12 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   const actualChampion  = useMemo(() => actualWinner(games || [], 'final'), [games])
   const actualBronzeWin = useMemo(() => actualWinner(games || [], 'third'), [games])
 
-  // Result colour for a bracket pick once its round has actual teams.
+  // Per-game result colour: reached → gold(bonus)/green · eliminated → red · else uncolored.
   const teamResultClass = (team, round) => {
     if (!team) return ''
-    const act = actual[round]
-    if (!act || act.size === 0) return ''
-    if (!act.has(team)) return ' rtf-pred-row--wrong'
-    return score.breakdown[round]?.bonus > 0 ? ' rtf-pred-row--gold' : ' rtf-pred-row--correct'
+    if (reached[round]?.has(team)) return score.breakdown[round]?.bonus > 0 ? ' rtf-pred-row--gold' : ' rtf-pred-row--correct'
+    if (eliminated.has(team)) return ' rtf-pred-row--wrong'
+    return ''
   }
   const winnerResultClass = (team, actualTeam) => {
     if (!team || !actualTeam) return ''

@@ -4,7 +4,7 @@ import {
   NODES_BY_PHASE, nodeCandidates, bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE,
 } from './bracketTree.js'
 import { useKnockoutPrediction } from './useKnockoutPrediction.js'
-import { actualRoundTeams, actualWinner } from './scoring.js'
+import { knockoutReached, knockoutEliminated, actualWinner } from './scoring.js'
 import {
   MAX_POINTS, KO_PREDICT_LOCK, KO_FINAL_KICKOFF, ROUND_BONUS, PER_TEAM,
   CHAMPION_POINTS, THIRD_WINNER_POINTS,
@@ -64,22 +64,24 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
   const { picks, byNode, setPick, save, saving, dirty, locked, score, filled } =
     useKnockoutPrediction(userId, games)
   const codeOf = t => teamCodeMap[t]
-  const actual = useMemo(() => actualRoundTeams(games || []), [games])
+  const reached = useMemo(() => knockoutReached(games || []), [games])
+  const eliminated = useMemo(() => knockoutEliminated(games || []), [games])
   const finalTs = useMemo(
     () => (games || []).find(g => g.phase === 'final' && g.kick_off_time)?.kick_off_time,
     [games]
   )
 
-  // Result colour for a picked team once its round has actual teams:
-  // gold = the whole round was all-correct (bonus), else green correct / red wrong.
+  // Per-game result colour for a picked team:
+  //   reached its round  → gold (whole round all-correct = bonus) else green
+  //   eliminated (lost)  → red
+  //   still alive / game not played yet → uncolored (no premature red)
   const teamResultClass = (team, round) => {
     if (!team) return ''
-    const act = actual[round]
-    if (!act || act.size === 0) return ''           // round not resolved yet
-    if (!act.has(team)) return ' rtf-pred-row--wrong'
-    return score.breakdown[round]?.bonus > 0
+    if (reached[round]?.has(team)) return score.breakdown[round]?.bonus > 0
       ? ' rtf-pred-row--gold'
       : ' rtf-pred-row--correct'
+    if (eliminated.has(team)) return ' rtf-pred-row--wrong'
+    return ''
   }
 
   // Read-only actual R32 card (establishes the R16 matchups)
