@@ -1546,6 +1546,22 @@ nav { position:fixed; top:0; left:0; right:0; z-index:200; display:flex; align-i
 .rtf-pred-row--gold .rtf-m-name { color:var(--accent); font-weight:700; }
 .rtf-pred-row--gold .rtf-pred-tick { color:var(--accent); }
 
+/* Group brackets viewer (read-only) */
+.rtf-pred-row--ro { cursor:default; }
+.rtf-pred-row--ro:hover { border-color:var(--border); }
+.rtf-pred-row--ro.rtf-pred-row--sel:hover { border-color:var(--accent); }
+.rtf-gb-members { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.8rem; }
+.rtf-gb-chip { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .6rem; background:var(--bg3); border:1px solid var(--border); border-radius:999px; color:var(--text); cursor:pointer; font-size:.82rem; transition:border-color .12s, background .12s; }
+.rtf-gb-chip:hover { border-color:rgba(245,197,24,.5); }
+.rtf-gb-chip--active { background:rgba(245,197,24,.16); border-color:var(--accent); }
+.rtf-gb-chip--active .rtf-gb-chip-name { color:var(--accent); font-weight:700; }
+.rtf-gb-chip--me { font-style:italic; }
+.rtf-gb-chip-pts { font-family:'Oswald',sans-serif; font-weight:700; font-variant-numeric:tabular-nums; background:var(--bg2); border-radius:999px; padding:0 .45rem; min-width:1.4rem; text-align:center; }
+.rtf-gb-locked { text-align:center; padding:2rem 1rem; color:var(--muted); }
+.rtf-gb-locked-icon { font-size:2rem; margin-bottom:.5rem; }
+.rtf-gb-locked-title { font-weight:700; color:var(--text); margin:0 0 .3rem; }
+.rtf-gb-locked-sub { font-size:.85rem; margin:0; max-width:22rem; margin-inline:auto; }
+
 /* Submission / time-to-final countdown */
 .rtf-clock { display:flex; flex-direction:column; line-height:1.1; margin-left:auto; align-items:flex-end; }
 .rtf-clock-lbl { font-size:.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }

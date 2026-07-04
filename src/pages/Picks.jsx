@@ -13,6 +13,7 @@ import {
   R32_SLOTS, TEAM_SHORT,
 } from '../features/knockout-prediction/bracketTree.js'
 import KnockoutPredict from '../features/knockout-prediction/KnockoutPredict.jsx'
+import GroupBrackets from '../features/knockout-prediction/GroupBrackets.jsx'
 import { TEAMS } from '../lib/teams.js'
 
 const PICKS_DEADLINE = '2026-06-11T19:00:00Z'
@@ -168,7 +169,7 @@ export default function Picks() {
 
   // ── Road to Final (bracket + group standings) modal ────────────
   const [roadOpen, setRoadOpen] = useState(false)
-  const [rtfMode, setRtfMode]   = useState('results')  // 'results' | 'predict' (predict = DEV-only)
+  const [rtfMode, setRtfMode]   = useState('results')  // 'results' | 'predict' | 'group' (predict/group = DEV-only)
 
   // ── Tournament results state ───────────────────────────────────
   const [tournamentChampion, setTournamentChampion] = useState(undefined) // undefined=loading, null=not yet, string=winner
@@ -1349,6 +1350,11 @@ export default function Picks() {
                 <button role="tab" aria-selected={rtfMode === 'predict'}
                   className={`rtf-mode-btn${rtfMode === 'predict' ? ' rtf-mode-btn--active' : ''}`}
                   onClick={() => setRtfMode('predict')}>Predict</button>
+                {groups.length > 0 && (
+                  <button role="tab" aria-selected={rtfMode === 'group'}
+                    className={`rtf-mode-btn${rtfMode === 'group' ? ' rtf-mode-btn--active' : ''}`}
+                    onClick={() => setRtfMode('group')}>Group</button>
+                )}
               </div>
             )}
 
@@ -1356,6 +1362,10 @@ export default function Picks() {
               gamesLoading
                 ? <p className="rtf-empty">Loading…</p>
                 : <KnockoutPredict games={games} userId={user?.id} teamCodeMap={teamCodeMap} showToast={showToast} />
+            ) : KO_PREDICT_DEV && rtfMode === 'group' ? (
+              gamesLoading
+                ? <p className="rtf-empty">Loading…</p>
+                : <GroupBrackets groupId={selectedGroupId} games={games} userId={user?.id} teamCodeMap={teamCodeMap} />
             ) : (
             <>
             <div className="rtf-section-label">Knockout Bracket</div>
