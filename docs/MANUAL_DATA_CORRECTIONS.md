@@ -11,6 +11,65 @@ why, and why a manual UPDATE was chosen over a full re-sync.
 
 ---
 
+## 2026-07-04 — Australia 1–1 Egypt (R32, Pens 2–4): missing shootout events
+
+**Game:** `d2e84abb-940b-466e-858a-0cb3ee0bb4ab` · api_fixture_id `1565178`
+**Symptom:** card showed final "Pens 2–4" (from `games.penalty_score_*`) but listed
+no penalty takers — `game_events` held only the 2 regulation goals (Ashour 13',
+Hany OG 55'); all 8 shootout entries were absent.
+
+**Root cause — api timing lag at sync, not a code bug.** `writeStats` handles
+shootouts correctly (`comments==='Penalty Shootout'` → `pen_shootout_scored` /
+`pen_shootout_missed`) but captures `game_events` once, on the final `PEN`-status
+sync pass. At that moment api-football's *fixtures/events* feed still had only the 2
+regulation goals; the 8 shootout entries were published later. KO games sync once
+and unschedule their crons, so the later revision was never pulled. This is the
+mirror of the known "api prunes shootout over time" risk — here they appeared *late*
+rather than being pruned. Display-only, zero scoring impact.
+
+**Verification (read-only, via dev EF `probe_events`, no DB writes):**
+Live api now returns 8 shootout events — Egypt scored 4 (Saber, Rabia, Salah,
+Abdelmaguid); Australia scored 2 (Irvine, Mabil), missed 2 (Souttar, Herrington) → 2–4.
+
+**Correction applied (PROD):** inserted the 8 shootout rows into `game_events`
+(event_type `pen_shootout_scored`/`pen_shootout_missed`, minute 120, minute_extra =
+kick round 1–4, comments `Penalty Shootout`, sort_order 2–9 in strict A/B/A/B kick
+order), `ON CONFLICT DO NOTHING`. Chose a targeted INSERT of only the missing
+shootout rows over a full re-pull to avoid rewriting cosmetic fields and the
+`game_events` duplication risk on a KO game.
+
+---
+
+## 2026-07-04 — Switzerland 2–0 Algeria (R32): missing passes + xG stats
+
+**Game:** `e80030c5-d326-498d-a1db-49b9c374fa8a` · api_fixture_id `1567312`
+**Symptom:** Match Stats block showed `—` for **Total Passes**, **% Accuracy Passes**,
+and **xG** for both teams (all other rows — possession, shots, corners, fouls, cards,
+offsides — were present).
+
+**Root cause:** at sync time api-football's *fixtures/statistics* block had not yet
+computed `Total passes` / `Passes %` / `expected_goals` (these are derived later than
+the score and basic counts, same lag pattern as prior cases). `writeStats` wrote NULL
+for those three fields; the game was never re-pulled, so the later api revision was
+never picked up. Display-only stats, zero scoring impact.
+
+**Verification (read-only, via dev EF `probe_stats`, no DB writes):**
+Live api now reports — Switzerland: Total passes 436, Passes % 81, xG 2.56 ·
+Algeria: Total passes 561, Passes % 85, xG 0.73.
+
+**Correction applied (PROD):**
+```sql
+UPDATE game_team_stats SET passes_total=436, passes_accuracy=81, xg=2.56
+WHERE game_id='e80030c5-d326-498d-a1db-49b9c374fa8a' AND team='Switzerland';
+UPDATE game_team_stats SET passes_total=561, passes_accuracy=85, xg=0.73
+WHERE game_id='e80030c5-d326-498d-a1db-49b9c374fa8a' AND team='Algeria';
+```
+Confirmed both rows now populated. Only the three lagging fields were touched
+(manual UPDATE over re-sync — display-only, avoids rewriting ~40 cosmetic fields +
+game_events dup risk on a KO game).
+
+---
+
 ## 2026-06-14 — Qatar 1–1 Switzerland: missing goal (Boualem Khoukhi)
 
 **Game:** `aba02fa5-5a9b-46aa-811f-7b3b7ab2dcee` · api_fixture_id `1489373`
