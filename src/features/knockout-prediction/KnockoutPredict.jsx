@@ -114,7 +114,7 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
             >
               <Flag name={team} code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">✓</span>}
+              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </button>
           )
         })}
@@ -168,7 +168,7 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
             >
               <Flag name={team} code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">✓</span>}
+              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </button>
           )
         })}

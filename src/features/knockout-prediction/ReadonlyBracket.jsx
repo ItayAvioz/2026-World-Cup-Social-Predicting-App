@@ -79,7 +79,7 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
             <div key={i} className={`rtf-pred-row rtf-pred-row--ro${isSel ? ' rtf-pred-row--sel' : ''}${result}`}>
               <Flag code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">✓</span>}
+              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </div>
           )
         })}
@@ -100,7 +100,7 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
             <div key={i} className={`rtf-pred-row rtf-pred-row--ro${isSel ? ' rtf-pred-row--sel' : ''}${result}`}>
               <Flag code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">✓</span>}
+              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </div>
           )
         })}
