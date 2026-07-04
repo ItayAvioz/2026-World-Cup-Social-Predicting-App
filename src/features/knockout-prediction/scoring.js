@@ -16,8 +16,11 @@ export function actualRoundTeams(games) {
 }
 
 // Actual winner of a phase's game (the Final = champion, the 3rd-place play-off = bronze).
+// Must match the DECIDED game: there can be >1 row for a phase (e.g. a TBD placeholder
+// final alongside the real one), so filter to the game whose knockout_winner is set —
+// else array order could return the placeholder's null and mis-score the winner pick.
 export function actualWinner(games, phase) {
-  return (games || []).find(g => g.phase === phase)?.knockout_winner ?? null
+  return (games || []).find(g => g.phase === phase && g.knockout_winner)?.knockout_winner ?? null
 }
 
 // picksByRound: { qf:[], sf:[], final:[], third:[], champion:[], thirdWinner:[] }
