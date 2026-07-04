@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  LEFT_COLS, RIGHT_COLS, PHASE_LABEL, TEAM_SHORT, BRACKET_CHILDREN,
-  NODES_BY_PHASE, nodeCandidates,
+  LEFT_COLS, RIGHT_COLS, PHASE_LABEL, TEAM_SHORT,
+  NODES_BY_PHASE, nodeCandidates, bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE,
 } from './bracketTree.js'
 import { useKnockoutPrediction } from './useKnockoutPrediction.js'
-import { actualRoundTeams } from './scoring.js'
-import { MAX_POINTS, KO_PREDICT_LOCK, KO_FINAL_KICKOFF, ROUND_BONUS, PER_TEAM } from './constants.js'
+import { actualRoundTeams, actualWinner } from './scoring.js'
+import {
+  MAX_POINTS, KO_PREDICT_LOCK, KO_FINAL_KICKOFF, ROUND_BONUS, PER_TEAM,
+  CHAMPION_POINTS, THIRD_WINNER_POINTS,
+} from './constants.js'
 
 function Flag({ name, code }) {
   const [broken, setBroken] = useState(false)
@@ -134,27 +137,44 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
     )
   }
 
-  // Centre: finalists (SF picks) + 3rd/4th (SF losers), read-only derived
+  // Centre: finalists (SF picks) → tap the champion; 3rd/4th (SF losers) → tap the winner.
   const finalists = [picks.LS, picks.RS]
-  const bronze = []
-  for (const sfNode of ['LS', 'RS']) {
-    const w = picks[sfNode]
-    if (!w) continue
-    for (const qfNode of BRACKET_CHILDREN[sfNode]) {
-      const c = picks[qfNode]
-      if (c && c !== w) bronze.push(c)
-    }
+  const bronze = bronzeTeams(picks)
+  const actualChampion = useMemo(() => actualWinner(games || [], 'final'), [games])
+  const actualBronzeWin = useMemo(() => actualWinner(games || [], 'third'), [games])
+
+  // Colour the SELECTED winner row once the game is decided: gold if right, red if wrong.
+  const winnerResultClass = (team, isSel, actual) => {
+    if (!team || !isSel || !actual) return ''
+    return team === actual ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
   }
-  const derivedCard = (teams, round) => (
-    <div className="rtf-match rtf-match--pending">
-      {[0, 1].map(i => (
-        <div key={i} className={`rtf-m-row rtf-m-row--pending${teamResultClass(teams[i], round)}`}>
-          <Flag name={teams[i]} code={codeOf(teams[i])} />
-          <span className="rtf-m-name">{short(teams[i])}</span>
-        </div>
-      ))}
-    </div>
-  )
+
+  // Tap one of two teams to crown the winner of a single match (champion / 3rd-place).
+  function WinnerPickCard({ node, teams, actual }) {
+    const sel = picks[node]
+    return (
+      <div className="rtf-match rtf-pred">
+        {[0, 1].map(i => {
+          const team = teams[i]
+          const isSel = team && sel === team
+          const result = isSel ? winnerResultClass(team, isSel, actual) : ''
+          return (
+            <button
+              key={i}
+              type="button"
+              className={`rtf-pred-row${isSel ? ' rtf-pred-row--sel' : ''}${result}`}
+              disabled={!team || locked}
+              onClick={() => team && setPick(node, team)}
+            >
+              <Flag name={team} code={codeOf(team)} />
+              <span className="rtf-m-name">{short(team)}</span>
+              {isSel && <span className="rtf-pred-tick" aria-hidden="true">✓</span>}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
 
   async function onSave() {
     const { error } = await save()
@@ -170,7 +190,7 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
           <span className="rtf-pred-stat-lbl">your pts (of {MAX_POINTS})</span>
         </div>
         <div className="rtf-pred-stat">
-          <span className="rtf-pred-stat-num">{filled}/14</span>
+          <span className="rtf-pred-stat-num">{filled}/16</span>
           <span className="rtf-pred-stat-lbl">picks made</span>
         </div>
         <Countdown finalTs={finalTs} />
@@ -192,6 +212,8 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
           <p><b>+{PER_TEAM} pts</b> for every team you correctly send into a round (QF, SF, Final, 3rd/4th).</p>
           <p><b>All-correct bonus</b> when every team in a round is right:
             QF +{ROUND_BONUS.qf} · SF +{ROUND_BONUS.sf} · Final +{ROUND_BONUS.final} · 3rd/4th +{ROUND_BONUS.third}.</p>
+          <p><b>Champion +{CHAMPION_POINTS}</b> for the correct Final winner ·
+            <b> 3rd-place winner +{THIRD_WINNER_POINTS}</b> for the correct 3rd/4th winner.</p>
           <p>Once a round is played, your pick turns <span className="rtf-h rtf-h-green">green</span> if right,
             <span className="rtf-h rtf-h-red">red</span> if wrong, and <span className="rtf-h rtf-h-gold">gold</span> when you nail the whole round.</p>
           <p>It's one bracket per player. Points fold into the leaderboard on <b>Jul 20</b>.</p>
@@ -202,10 +224,10 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
         <div className="rtf-bracket">
           <div className="rtf-side">{LEFT_COLS.map(c => renderCol(c, 'left'))}</div>
           <div className="rtf-center">
-            <div className="rtf-round-title">{PHASE_LABEL.final}</div>
-            {derivedCard(finalists, 'final')}
-            <div className="rtf-round-title rtf-third-title">{PHASE_LABEL.third}</div>
-            {derivedCard(bronze, 'third')}
+            <div className="rtf-round-title">Champion</div>
+            <WinnerPickCard node={CHAMPION_NODE} teams={finalists} actual={actualChampion} />
+            <div className="rtf-round-title rtf-third-title">3rd Place Winner</div>
+            <WinnerPickCard node={THIRD_WINNER_NODE} teams={bronze} actual={actualBronzeWin} />
           </div>
           <div className="rtf-side">{RIGHT_COLS.map(c => renderCol(c, 'right'))}</div>
         </div>

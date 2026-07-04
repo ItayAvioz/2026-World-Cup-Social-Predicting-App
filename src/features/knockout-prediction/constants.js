@@ -1,8 +1,8 @@
 // Knockout team-prediction feature constants.
 
-// Entries close: Jul 4 18:00 Israel (IDT, UTC+3) = 15:00 UTC. Last R32 is the
+// Entries close: Jul 4 20:00 Israel (IDT, UTC+3) = 17:00 UTC. Last R32 is the
 // night of Jul 3-4; this closes the evening after it. Matches the RPC.
-export const KO_PREDICT_LOCK = '2026-07-04T15:00:00Z'
+export const KO_PREDICT_LOCK = '2026-07-04T17:00:00Z'
 
 // Points fold into the leaderboard from this moment (10:00 IDT). Display-only
 // here; the authoritative gate lives in the leaderboard RPCs.
@@ -17,8 +17,14 @@ export const ROUND_BONUS = { qf: 12, sf: 10, final: 8, third: 6 }
 export const ROUND_SIZE  = { qf: 8,  sf: 4,  final: 2, third: 2 }
 export const PER_TEAM    = 2
 
-// True all-correct max: qf 8*2+12=28, sf 4*2+10=18, final 2*2+8=12, third 2*2+6=10 = 68.
-export const MAX_POINTS = 68
+// Single-team winner picks (judged on games.knockout_winner, not "reached round").
+export const CHAMPION_POINTS     = 10  // correct winner of the Final
+export const THIRD_WINNER_POINTS = 5   // correct winner of the 3rd-place play-off
+
+// True all-correct max:
+//   reach: qf 8*2+12=28, sf 4*2+10=18, final 2*2+8=12, third 2*2+6=10 = 68
+//   winners: champion 10 + 3rd-place winner 5 = 15  →  grand total 83.
+export const MAX_POINTS = 83
 
 export function isPredictLocked(now = new Date()) {
   return now >= new Date(KO_PREDICT_LOCK)

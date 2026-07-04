@@ -31,12 +31,31 @@ export const RIGHT_COLS = [
 ]
 
 // Which child nodes feed each non-R32 node (winners advance; B = the two SF losers).
+// CH (champion) = winner picked between the two finalists (the SF winner picks).
 export const BRACKET_CHILDREN = {
   LA: ['L1', 'L2'], LB: ['L3', 'L4'], LC: ['L5', 'L6'], LD: ['L7', 'L8'],
   RA: ['R1', 'R2'], RB: ['R3', 'R4'], RC: ['R5', 'R6'], RD: ['R7', 'R8'],
   LQ1: ['LA', 'LB'], LQ2: ['LC', 'LD'], RQ1: ['RA', 'RB'], RQ2: ['RC', 'RD'],
   LS: ['LQ1', 'LQ2'], RS: ['RQ1', 'RQ2'],
-  F: ['LS', 'RS'], B: ['LS', 'RS'],
+  F: ['LS', 'RS'], B: ['LS', 'RS'], CH: ['LS', 'RS'],
+}
+
+// Winner-pick nodes (single team each): champion + 3rd-place winner.
+export const CHAMPION_NODE = 'CH'
+export const THIRD_WINNER_NODE = 'TW'
+
+// The two 3rd/4th-place teams from the current SF picks (each SF's losing finalist).
+export function bronzeTeams(picks) {
+  const out = []
+  for (const sfNode of NODES_BY_PHASE.sf) {
+    const winner = picks[sfNode]
+    if (!winner) continue
+    for (const qfNode of BRACKET_CHILDREN[sfNode]) {
+      const cand = picks[qfNode]
+      if (cand && cand !== winner) out.push(cand)
+    }
+  }
+  return out
 }
 
 // Non-R32 nodes per phase, ordered so each round is placed after its children.
@@ -116,10 +135,14 @@ export function placeGamesOnNodes(games) {
 //  - R16 node  → the two ACTUAL R32 winners feeding it (need R32 decided)
 //  - QF/SF node → the user's picks at its two child nodes
 export function nodeCandidates(node, byNode, picks) {
+  if (node === THIRD_WINNER_NODE) {           // 3rd-place winner ← the two bronze teams
+    const b = bronzeTeams(picks)
+    return [b[0] ?? null, b[1] ?? null]
+  }
   const kids = BRACKET_CHILDREN[node]
   if (!kids) return [null, null]
   if (NODES_BY_PHASE.r16.includes(node)) {
     return kids.map(k => byNode[k]?.knockout_winner ?? null)  // actual R32 winners
   }
-  return kids.map(k => picks[k] ?? null)  // user's upstream picks
+  return kids.map(k => picks[k] ?? null)  // user's upstream picks (incl. CH ← finalists)
 }

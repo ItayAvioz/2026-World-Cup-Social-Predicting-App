@@ -1,6 +1,6 @@
 // Client-side mirror of SQL fn_knockout_points — for the live "your score" line.
 // Display only; the leaderboard uses the server function.
-import { ROUND_BONUS, ROUND_SIZE, PER_TEAM } from './constants.js'
+import { ROUND_BONUS, ROUND_SIZE, PER_TEAM, CHAMPION_POINTS, THIRD_WINNER_POINTS } from './constants.js'
 
 const KO_PHASES = ['qf', 'sf', 'final', 'third']
 
@@ -15,7 +15,12 @@ export function actualRoundTeams(games) {
   return out
 }
 
-// picksByRound: { qf:[], sf:[], final:[], third:[] }
+// Actual winner of a phase's game (the Final = champion, the 3rd-place play-off = bronze).
+export function actualWinner(games, phase) {
+  return (games || []).find(g => g.phase === phase)?.knockout_winner ?? null
+}
+
+// picksByRound: { qf:[], sf:[], final:[], third:[], champion:[], thirdWinner:[] }
 export function computeKnockoutScore(picksByRound, games) {
   const actual = actualRoundTeams(games)
   let total = 0
@@ -29,5 +34,19 @@ export function computeKnockoutScore(picksByRound, games) {
     breakdown[round] = { hits, bonus, pts }
     total += pts
   }
+
+  // Single-team winner picks — judged against the actual game winner.
+  const champTeam  = (picksByRound.champion ?? [])[0] ?? null
+  const actualChamp = actualWinner(games, 'final')
+  const champHit = !!champTeam && champTeam === actualChamp
+  breakdown.champion = { hit: champHit, pts: champHit ? CHAMPION_POINTS : 0 }
+  total += breakdown.champion.pts
+
+  const twTeam  = (picksByRound.thirdWinner ?? [])[0] ?? null
+  const actualTw = actualWinner(games, 'third')
+  const twHit = !!twTeam && twTeam === actualTw
+  breakdown.thirdWinner = { hit: twHit, pts: twHit ? THIRD_WINNER_POINTS : 0 }
+  total += breakdown.thirdWinner.pts
+
   return { total, breakdown }
 }

@@ -26,7 +26,7 @@ export function useKnockoutPrediction(userId, games) {
         .select('round, team')
         .eq('user_id', userId)
       if (cancelled) return
-      const rounds = { qf: [], sf: [], final: [], third: [] }
+      const rounds = { qf: [], sf: [], final: [], third: [], champion: [], third_winner: [] }
       ;(data ?? []).forEach(r => { if (rounds[r.round]) rounds[r.round].push(r.team) })
       setPicks(roundsToPicks(rounds, byNode))
       setLoaded(true)
@@ -48,6 +48,7 @@ export function useKnockoutPrediction(userId, games) {
     const r = picksToRounds(picks)
     const { error } = await supabase.rpc('save_knockout_picks', {
       p_qf: r.qf, p_sf: r.sf, p_final: r.final, p_third: r.third,
+      p_champion: r.champion, p_third_winner: r.thirdWinner,
     })
     setSaving(false)
     if (!error) setDirty(false)
@@ -60,9 +61,9 @@ export function useKnockoutPrediction(userId, games) {
     [picks, games]
   )
 
-  // Progress: how many of the 14 pick-nodes are filled
+  // Progress: how many of the 16 pick-nodes are filled (14 bracket taps + champion + 3rd-winner)
   const filled = useMemo(
-    () => ['LA','LB','LC','LD','RA','RB','RC','RD','LQ1','LQ2','RQ1','RQ2','LS','RS']
+    () => ['LA','LB','LC','LD','RA','RB','RC','RD','LQ1','LQ2','RQ1','RQ2','LS','RS','CH','TW']
       .filter(n => picks[n]).length,
     [picks]
   )

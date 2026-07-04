@@ -1,5 +1,8 @@
 // Convert between the per-node tap state and the per-round arrays stored in the DB.
-import { PICK_NODES, NODE_PICK_ROUND, BRACKET_CHILDREN, nodeCandidates } from './bracketTree.js'
+import {
+  PICK_NODES, NODE_PICK_ROUND, BRACKET_CHILDREN, nodeCandidates,
+  bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE,
+} from './bracketTree.js'
 
 // child node id → its parent node id (toward the final). For cascade-clear.
 export const PARENT_OF = (() => {
@@ -11,7 +14,7 @@ export const PARENT_OF = (() => {
   return m
 })()
 
-// picks (node→team) → { qf:[], sf:[], final:[], third:[] }
+// picks (node→team) → { qf:[], sf:[], final:[], third:[], champion:[], thirdWinner:[] }
 export function picksToRounds(picks) {
   const qf    = PICK_NODES.r16.map(n => picks[n]).filter(Boolean)
   const sf    = PICK_NODES.qf.map(n => picks[n]).filter(Boolean)
@@ -26,7 +29,14 @@ export function picksToRounds(picks) {
       if (cand && cand !== winner) third.push(cand)
     }
   }
-  return { qf, sf, final, third }
+  // Winner picks — kept only while still valid (one of the current finalists / bronze teams),
+  // so a stale champion/3rd-winner auto-drops when its candidates change.
+  const champion    = (picks[CHAMPION_NODE] && final.includes(picks[CHAMPION_NODE]))
+    ? [picks[CHAMPION_NODE]] : []
+  const bronze      = bronzeTeams(picks)
+  const thirdWinner = (picks[THIRD_WINNER_NODE] && bronze.includes(picks[THIRD_WINNER_NODE]))
+    ? [picks[THIRD_WINNER_NODE]] : []
+  return { qf, sf, final, third, champion, thirdWinner }
 }
 
 // Saved round arrays + actual results (byNode) → per-node tap state.
@@ -50,6 +60,13 @@ export function roundsToPicks(rounds, byNode) {
     const [c1, c2] = nodeCandidates(node, byNode, picks)
     picks[node] = (c1 && finalSet.has(c1)) ? c1 : (c2 && finalSet.has(c2)) ? c2 : null
   }
+  // Winner picks — restore only if the saved team is still a valid candidate.
+  const finalists = PICK_NODES.sf.map(n => picks[n]).filter(Boolean)
+  const savedChamp = (rounds.champion ?? [])[0] ?? null
+  picks[CHAMPION_NODE] = (savedChamp && finalists.includes(savedChamp)) ? savedChamp : null
+  const bronze = bronzeTeams(picks)
+  const savedTw = (rounds.third_winner ?? [])[0] ?? null
+  picks[THIRD_WINNER_NODE] = (savedTw && bronze.includes(savedTw)) ? savedTw : null
   return picks
 }
 
