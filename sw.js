@@ -1,4 +1,4 @@
-const SW_VERSION = '59'
+const SW_VERSION = '60'
 const ICON = '/icon-notif.png'
 
 self.addEventListener('install', (event) => {
@@ -9,7 +9,10 @@ self.addEventListener('activate', (event) => { event.waitUntil(self.clients.clai
 
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/app.html')) {
-    event.respondWith(fetch(event.request, { cache: 'no-store' }))
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .catch(() => fetch(event.request, { cache: 'force-cache' }))
+    )
   }
 })
 
