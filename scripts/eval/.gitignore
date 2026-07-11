@@ -1,0 +1,9 @@
+# PROD-pulled snapshots, payloads, prompts, reports — contain user data, never commit
+data/
+# local secrets
+.env
+# transient files created + deleted by runners
+_factgate_run*.cjs
+_fg_check.cjs
+_p.cjs
+_v39fg.cjs
