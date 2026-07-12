@@ -18,13 +18,18 @@ Deploy via **Supabase CLI from the local file** (the MCP inline-deploy path chok
 # from repo root
 npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
 ```
-> Current: DEV runs **v18** and the local file **matches it byte-for-byte** (67,038 bytes, verified
-> 2026-07-12 via `get_edge_function` diff). v15 `gameStats`; v16 global board one-row-per-(player×group);
+> Current: DEV runs **v19** and the local file **matches it byte-for-byte** (verified 2026-07-12 via
+> `get_edge_function` diff). v15 `gameStats`; v16 global board one-row-per-(player×group);
 > v17 routing fixes (private intents before public overrides; rulesFAQ short-circuit; op/dim gaps) — needed
 > a reindex; v18 cleaned up v17's regressions (broad global-leaderboard detector, box-score first-person
-> guard removed, rulesFAQ collision fixes, scoped `fixtures? for`) — code-only, NO reindex. Re-embed
-> after changing `INTENT_EXAMPLES` / `DIM_EXAMPLES` / stat-card text (see below); code-only changes
-> like v15 need no reindex.
+> guard removed, rulesFAQ collision fixes, scoped `fixtures? for`) — code-only, NO reindex.
+> **v19 (spec-driven private tools + compound questions, code-only, NO reindex):** routing extracted
+> into `routeQuestion()`; `splitCompound` answers BOTH clauses of "…and when is the final?";
+> `my_data` routes on keywords to focused sub-tools — `myExact` (count **and which games**),
+> `myFocus` (rank / points / picks), `myContext` fallback — and every private tool honors a group
+> the caller names ("in Alpha Wolves") via `resolveGroupName` over the caller's OWN groups only;
+> `groupStandings` likewise group-scopable. Re-embed after changing `INTENT_EXAMPLES` /
+> `DIM_EXAMPLES` / stat-card text (see below); code-only changes like v15/v18/v19 need no reindex.
 >
 > Deploy path that actually works here: the **Supabase MCP `deploy_edge_function`** tool (its own
 > auth — no CLI login/token needed), pinned to `project_id: ftryuvfdihmhlzvbpfeu`. The CLI path
@@ -59,13 +64,25 @@ deterministic SQL tool (schedule / scorers / game-detail / game-stats / leaderbo
 compare / bracket / global / my-data) OR fuzzy RAG+crew [L] → template → log + rules-only cache`.
 LLM only for fuzzy "describe" stats, the rules-FAQ fallback, and off-topic steer-back.
 
-## Local test harness
+## Local test harnesses
 `scripts/ask/bot_test.mjs` POSTs a 200-question set (by topic × complexity) and grades ROUTING
 (private intents are anon-gated, so answer-correctness isn't graded there). Run after any change:
 ```bash
 node scripts/ask/bot_test.mjs scripts/ask/bot_results.json   # writes results + prints a summary
 ```
 Note it grades routing only, not answer correctness — spot-check answers against the DB by hand.
+
+**`scripts/ask/wide_test.mjs` — answer-graded, incl. the PRIVATE path.** Signs in as the seeded
+e2e user `bot_e2e_test` (bot.e2e.test.wc2026@gmail.com — groups **Alpha Wolves** 2 exact / 4 preds,
+**Beta Sharks** 1 exact / 2 preds, known picks) and asserts expected substrings in the ANSWER,
+including negative `!substring` scoping checks (e.g. Beta's games must NOT leak into an
+Alpha-scoped answer). 29 questions across areas × complexity. v19 = 29/29.
+```bash
+node scripts/ask/wide_test.mjs scripts/ask/wide_results.json
+```
+⚠️ Dev data gotcha: the national-team KO rows (Brazil/England finals etc.) are SYNTHETIC test
+games — no/inconsistent `game_team_stats` and no `team_tournament_stats` rows. Stats/box
+questions in tests must use teams from REAL synced games (club test data, Argentina, Austria…).
 
 ## Secrets (EF env, already set on DEV)
 `AI_Summary_GPT_Key` (OpenAI), `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.

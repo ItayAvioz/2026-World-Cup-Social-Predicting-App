@@ -1,9 +1,14 @@
-// ask — in-app AI bot (DEV ONLY) — v12 spec-driven refactor
+// ask — in-app AI bot (DEV ONLY) — v19 spec-driven private tools + compound questions
 // ----------------------------------------------------------------------------
-// Flow: preGuard+rateLimit [D] -> embed once [E] -> QuerySpec {intent[E], op[D],
-//   dim[D], entities[D], confidence/margin} -> confidence band (route|clarify|abstain)
-//   -> tool REGISTRY dispatch [D] -> structured SQL [D] OR entity/dim-filtered RAG [E]
+// Flow: preGuard+rateLimit [D] -> splitCompound (max 2 clauses) [D] -> per clause:
+//   embed once [E] -> QuerySpec {intent[E], op[D], dim[D], entities[D], conf/margin}
+//   -> confidence band (route|clarify|abstain) -> tool REGISTRY dispatch [D]
+//   -> structured SQL [D] OR entity/dim-filtered RAG [E]
 //   -> template [D] OR Facts->Writer/Judge crew [L] -> log + safe-cache [D].
+// v19: routing lives in routeQuestion() so compound questions ("...and when is the
+//   final?") answer BOTH clauses; my_data routes on op/keywords to focused sub-tools
+//   (exact incl. WHICH games / rank / picks / points), each scopable to a group the
+//   caller names ("in Alpha Wolves") via resolveGroupName over the user's OWN groups.
 // Deterministic-first: LLM only for fuzzy "describe" stats, rules-FAQ fallback, off-topic.
 // RAG NEVER answers MAX/COUNT/rank/compare — those are SQL. Cache = rules only.
 // Modes: reindex_intents, reindex_kb (paginated). Deploy target: DEV (ftryuvfdihmhlzvbpfeu) ONLY.
@@ -138,6 +143,17 @@ function preGuard(q: string): { ok: boolean; msg?: string } {
   if (/ignore (all )?(previous|prior) instructions|disregard (the )?(system|rules|instructions)|reveal (the )?(system prompt|instructions)|dump (all|everyone|every)|show (me )?(all|everyone).{0,20}(prediction|pick)/i.test(q))
     return { ok: false, msg: "I can't help with that — but ask me anything about the tournament, the app, or your groups!" }
   return { ok: true }
+}
+// v19: compound questions — split into at most 2 self-contained clauses. A pure
+// drill-down tail ("...? and in which games?") is NOT split: the main tool answers
+// it inline (myExact always lists the games). Clause 2 borrows entities from
+// clause 1 via the existing follow-up history mechanism.
+function splitCompound(q: string): string[] {
+  const m = q.match(/^(.*?\?)\s*(?:and|&)\s+(.{4,})$/i) || q.match(/^(.{10,}?)\s+and\s+((?:when|where|who|what|how many|how much)\b.{4,})$/i)
+  if (!m) return [q]
+  const tail = m[2].trim()
+  if (/^(in\s+)?which (games?|matches|ones)\b/i.test(tail)) return [q]
+  return [m[1].trim(), tail]
 }
 const RL = new Map<string, number[]>()
 function rateOk(key: string): boolean {
@@ -416,20 +432,68 @@ async function gameStats(sb: Sb, a: string, b: string): Promise<string> {
 }
 
 // private (RLS via user JWT)
+type Grp = { id: string; name: string }
 async function myGroups(sbUser: Sb, me: string) {
   const gm = (await sbUser.from('group_members').select('group_id').eq('user_id', me)).data ?? []
-  const ids = gm.map((r) => r.group_id as string); if (!ids.length) return [] as { id: string; name: string }[]
+  const ids = gm.map((r) => r.group_id as string); if (!ids.length) return [] as Grp[]
   const gr = (await sbUser.from('groups').select('id, name').in('id', ids)).data ?? []; return gr.map((g) => ({ id: g.id as string, name: g.name as string }))
 }
-async function myContext(sbUser: Sb, me: string): Promise<string> {
-  const groups = await myGroups(sbUser, me); if (!groups.length) return `You're not in any group yet.`
+// v19: resolve a group NAME the caller mentions against their OWN groups only
+// (full-name match first, then name tokens). Never sees other users' groups.
+function resolveGroupName(q: string, groups: Grp[]): Grp | null {
+  const norm = (s: string) => ' ' + s.toLowerCase().replace(/[^a-z0-9֐-׿ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' '
+  const ql = norm(q)
+  let best: { g: Grp; score: number } | null = null
+  for (const g of groups) {
+    const nl = norm(g.name).trim(); if (!nl) continue
+    let score = 0
+    if (ql.includes(' ' + nl + ' ')) score = 100 + nl.length
+    else { const toks = nl.split(' ').filter((w) => w.length >= 3 && !['the', 'group', 'team'].includes(w)); score = toks.filter((w) => ql.includes(' ' + w + ' ')).length }
+    if (score && (!best || score > best.score)) best = { g, score }
+  }
+  return best?.g ?? null
+}
+async function myContext(sbUser: Sb, me: string, all: Grp[], target: Grp | null = null): Promise<string> {
+  if (!all.length) return `You're not in any group yet.`
+  const groups = target ? [target] : all
   const lines: string[] = []
   for (const g of groups) { const { data: rows } = await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id }); const mine = (rows ?? []).find((r: any) => r.user_id === me)
     lines.push(mine ? `${g.name}: #${mine.group_rank} (global #${mine.global_rank}), ${mine.total_points} pts, ${mine.exact_scores} exact — champion ${mine.champion_team ?? '—'}, top scorer ${mine.top_scorer_player ?? '—'}` : `${g.name}: no ranking yet.`) }
-  return `You're in ${groups.length} group${groups.length === 1 ? '' : 's'}:\n` + lines.join('\n')
+  return (target ? '' : `You're in ${groups.length} group${groups.length === 1 ? '' : 's'}:\n`) + lines.join('\n')
 }
-async function groupStandings(sbUser: Sb, me: string, mostExact: boolean): Promise<string> {
-  const groups = await myGroups(sbUser, me); if (!groups.length) return `You're not in any group yet — ask me "who's winning overall" for the global leaderboard.`
+// v19: focused my_data sub-answers (rank / points / picks), optionally group-scoped.
+async function myFocus(sbUser: Sb, me: string, all: Grp[], target: Grp | null, kind: 'rank' | 'points' | 'picks'): Promise<string> {
+  if (!all.length) return `You're not in any group yet.`
+  const lines: string[] = []
+  for (const g of target ? [target] : all) {
+    const rows = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]
+    const mine = rows.find((r) => r.user_id === me)
+    if (!mine) { lines.push(`${g.name}: no ranking yet.`); continue }
+    if (kind === 'rank') lines.push(`${g.name}: you're #${mine.group_rank} of ${rows.length} (global #${mine.global_rank}).`)
+    else if (kind === 'points') lines.push(`${g.name}: ${mine.total_points} pts (${mine.exact_scores} exact score${mine.exact_scores === 1 ? '' : 's'}).`)
+    else lines.push(`${g.name}: champion ${mine.champion_team ?? '—'}, top scorer ${mine.top_scorer_player ?? '—'}.`)
+  }
+  return lines.join('\n')
+}
+// v19: exact-score drill-down — the count AND which games, optionally group-scoped.
+async function myExact(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null): Promise<string> {
+  let q = sbUser.from('predictions').select('game_id, group_id').eq('user_id', me).eq('points_earned', 3)
+  if (target) q = q.eq('group_id', target.id)
+  const rows = (await q).data ?? []
+  if (!rows.length) return target ? `No exact scores in ${target.name} yet — keep predicting!` : `You have no exact scores yet — keep predicting!`
+  const ids = [...new Set(rows.map((r) => r.game_id as string))]
+  const games = ((await sbPublic.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const gmap = new Map(games.map((g) => [g.id, g]))
+  const line = (r: any) => { const g = gmap.get(r.game_id); return g ? `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})` : null }
+  if (target) return `You have ${rows.length} exact score${rows.length === 1 ? '' : 's'} in ${target.name}:\n` + rows.map(line).filter(Boolean).map((s) => '• ' + s).join('\n')
+  const gname = new Map(all.map((g) => [g.id, g.name]))
+  const byG = new Map<string, any[]>()
+  for (const r of rows) { const k = (r.group_id as string) ?? 'solo'; if (!byG.has(k)) byG.set(k, []); byG.get(k)!.push(r) }
+  return 'Your exact scores:\n' + [...byG.entries()].map(([gid, rs]) => `${gname.get(gid) ?? 'Personal'}: ${rs.length} — ` + rs.map(line).filter(Boolean).join(', ')).join('\n')
+}
+async function groupStandings(sbUser: Sb, me: string, mostExact: boolean, all: Grp[], target: Grp | null = null): Promise<string> {
+  if (!all.length) return `You're not in any group yet — ask me "who's winning overall" for the global leaderboard.`
+  const groups = target ? [target] : all
   const blocks: string[] = []
   for (const g of groups) { const rows = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]; if (!rows.length) { blocks.push(`${g.name}: (no members)`); continue }
     if (mostExact) { const t = [...rows].sort((a, b) => b.exact_scores - a.exact_scores)[0]; blocks.push(`${g.name}: most exact — ${t.username} (${t.exact_scores} exact, ${t.total_points} pts).`) }
@@ -559,62 +623,56 @@ const REGISTRY: Tool[] = [
       if (c.spec.op === 'list' || c.spec.date) return { answer: await scheduleList(c.sbPublic, c.spec.date, c.spec.phase) }
       return { answer: await lookupGame(c.sbPublic, c.spec.teams[0] ?? null, detectPhase(c.question)) } } },
   { id: 'who_scored', match: (s) => s.intent === 'who_scored', run: async (c) => ({ answer: c.spec.teams.length >= 2 ? await whoScored(c.sbPublic, c.spec.teams[0], c.spec.teams[1]) : 'Which game? Name both teams, e.g. "who scored in Everton vs Manchester City?"' }) },
-  { id: 'my_data', match: (s) => s.intent === 'my_data', run: async (c) => { const me = await c.me(); return me ? { answer: await myContext(c.sbUser, me) } : { answer: NEED_LOGIN } } },
-  { id: 'group_standings', match: (s) => s.intent === 'group_standings', run: async (c) => { const me = await c.me(); return me ? { answer: await groupStandings(c.sbUser, me, c.spec.op === 'rank' && /exact/i.test(c.question)) } : { answer: NEED_LOGIN } } },
+  // v19: my_data routes on keywords to focused sub-tools; every sub-tool honors a
+  // group the caller names ("...in Alpha Wolves") via resolveGroupName (own groups only).
+  { id: 'my_data', match: (s) => s.intent === 'my_data', run: async (c) => {
+      const me = await c.me(); if (!me) return { answer: NEED_LOGIN }
+      const groups = await myGroups(c.sbUser, me)
+      const target = resolveGroupName(c.question, groups)
+      const ql = c.question.toLowerCase()
+      if (/exact|spot.?on|nail|precise|on the (nose|dot)/.test(ql) && !/percent|%/.test(ql)) return { answer: await myExact(c.sbPublic, c.sbUser, me, groups, target) }
+      if (/rank|place|position|standing|where am i/.test(ql)) return { answer: await myFocus(c.sbUser, me, groups, target, 'rank') }
+      if (/pick|champion|top scorer|bet on/.test(ql)) return { answer: await myFocus(c.sbUser, me, groups, target, 'picks') }
+      if (/\bpoints?\b|\bpts\b/.test(ql)) return { answer: await myFocus(c.sbUser, me, groups, target, 'points') }
+      return { answer: await myContext(c.sbUser, me, groups, target) } } },
+  { id: 'group_standings', match: (s) => s.intent === 'group_standings', run: async (c) => {
+      const me = await c.me(); if (!me) return { answer: NEED_LOGIN }
+      const groups = await myGroups(c.sbUser, me)
+      const target = resolveGroupName(c.question, groups)
+      return { answer: await groupStandings(c.sbUser, me, c.spec.op === 'rank' && /exact/i.test(c.question), groups, target) } } },
   { id: 'group_history', match: (s) => s.intent === 'group_history', run: async (c) => { const me = await c.me(); if (!me) return { answer: NEED_LOGIN }; return c.spec.teams.length >= 2 ? { answer: await groupHistory(c.sbPublic, c.sbUser, me, c.spec.teams[0], c.spec.teams[1]) } : { answer: 'Which game? Name both teams, e.g. "what did we predict for Everton vs Manchester City?"' } } },
 ]
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-  try {
-    const url = Deno.env.get('SUPABASE_URL')!, anon = Deno.env.get('SUPABASE_ANON_KEY')!
-    const openaiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('AI_Summary_GPT_Key') || ''
-    if (!openaiKey) return json({ ok: false, error: 'OpenAI key not configured.' }, 500)
-    const openai = new OpenAI({ apiKey: openaiKey })
-    const body = await req.json().catch(() => ({}))
-    if (body?.mode === 'reindex_intents') return await reindexIntents(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
-    if (body?.mode === 'reindex_dims') return await reindexDims(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
-    if (body?.mode === 'reindex_kb') return await reindexKb(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
+// v19: the whole per-question routing pipeline, callable once per clause so compound
+// questions answer BOTH parts. Returns {answer, pub(lic spec), extra} instead of a Response.
+type RouteDeps = { openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[] }
+type RouteOut = { answer: string; pub: Record<string, unknown>; extra: Record<string, unknown> }
+async function routeQuestion(question: string, history: string[], d: RouteDeps): Promise<RouteOut> {
+  const { openai, sbPublic, sbUser, sbService, me, names } = d
+  // P1: a definitive rules FACT wins before the embedding classifier can misroute it to a data
+  // intent (e.g. "how many points is the top scorer worth"). The exact-score FAQ regex is scoped
+  // to require "points", so first-person personal counts ("how many exact scores do I have") fall
+  // through to normal routing rather than being answered as a rule.
+  { const faqEarly = rulesFAQ(question); if (faqEarly) return { answer: faqEarly, pub: { intent: 'rules' }, extra: { llm_used: false } } }
 
-    const question = body?.question
-    if (!question || typeof question !== 'string') return json({ ok: false, error: 'Missing question.' }, 400)
-    const pg = preGuard(question)
-    if (!pg.ok) return json({ step: 'final', ok: true, spec: { intent: 'blocked' }, llm_used: false, answer: pg.msg })
-
-    // P1: a definitive rules FACT wins before the embedding classifier can misroute it to a data
-    // intent (e.g. "how many points is the top scorer worth"). The exact-score FAQ regex is scoped
-    // to require "points", so first-person personal counts ("how many exact scores do I have") fall
-    // through to normal routing rather than being answered as a rule.
-    { const faqEarly = rulesFAQ(question); if (faqEarly) return json({ step: 'final', ok: true, spec: { intent: 'rules' }, llm_used: false, answer: faqEarly }) }
-
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const sbPublic = createClient(url, anon)
-    const sbUser = createClient(url, anon, { global: { headers: { Authorization: authHeader } } })
-    const sbService = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    let _me: string | null | undefined
-    const me = async () => { if (_me === undefined) _me = (await sbUser.auth.getUser()).data?.user?.id ?? null; return _me }
-    if (!rateOk(authHeader.slice(-24) || 'anon')) return json({ step: 'final', ok: true, spec: { intent: 'rate_limited' }, llm_used: false, answer: 'You are asking a lot very fast — give me a few seconds and try again.' })
-
-    const names = await fetchTeamNames(sbPublic)
-    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string').slice(-2) : []
-    const [qvec] = await embed(openai, question)
-    const cls = await classify(sbPublic, qvec)
-    let teams = resolveTeams(question, names)
-    let dim = await classifyDim(sbPublic, question, qvec)
-    let agg = detectAgg(question)
-    let op = detectOp(question)
-    // P3: under-specified follow-up -> borrow entities/dim/op from the previous turn
-    if (history.length && teams.length === 0 && !dim && op === 'lookup') {
-      const ctx = history.join(' ') + ' ' + question
-      teams = resolveTeams(ctx, names); dim = detectDim(ctx); if (agg === 'none') agg = detectAgg(ctx); op = detectOp(ctx)
-    }
-    let intent = cls.intent
-    if (intent === 'who_scored' && detectPredicate(question)) intent = 'group_history'  // "who PREDICTED..." vs "who SCORED..."
-    const spec: Spec = { intent, confidence: Number(cls.confidence.toFixed(3)), margin: Number(cls.margin.toFixed(3)), second: cls.second, op, dim, teams, date: resolveDate(question), phase: detectPhase(question), predicate: detectPredicate(question) }
-    const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim }
-    const done = (answer: string, extra: Record<string, unknown> = {}) => json({ step: 'final', ok: true, spec: pubSpec, ...extra, answer: answer || "Sorry, I couldn't find an answer." })
-    console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length }))
-    const qlow = question.toLowerCase()
+  const [qvec] = await embed(openai, question)
+  const cls = await classify(sbPublic, qvec)
+  let teams = resolveTeams(question, names)
+  let dim = await classifyDim(sbPublic, question, qvec)
+  let agg = detectAgg(question)
+  let op = detectOp(question)
+  // P3: under-specified follow-up -> borrow entities/dim/op from the previous turn
+  if (history.length && teams.length === 0 && !dim && op === 'lookup') {
+    const ctx = history.join(' ') + ' ' + question
+    teams = resolveTeams(ctx, names); dim = detectDim(ctx); if (agg === 'none') agg = detectAgg(ctx); op = detectOp(ctx)
+  }
+  let intent = cls.intent
+  if (intent === 'who_scored' && detectPredicate(question)) intent = 'group_history'  // "who PREDICTED..." vs "who SCORED..."
+  const spec: Spec = { intent, confidence: Number(cls.confidence.toFixed(3)), margin: Number(cls.margin.toFixed(3)), second: cls.second, op, dim, teams, date: resolveDate(question), phase: detectPhase(question), predicate: detectPredicate(question) }
+  const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim }
+  const done = (answer: string, extra: Record<string, unknown> = {}): RouteOut => ({ answer: answer || "Sorry, I couldn't find an answer.", pub: pubSpec, extra })
+  console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length }))
+  const qlow = question.toLowerCase()
     const firstPerson = /\b(i|i'm|im|my|mine|me|myself)\b/i.test(qlow)
 
     // P1: honor PRIVATE intents (personal / group) BEFORE the public overrides can hijack them.
@@ -693,6 +751,44 @@ serve(async (req) => {
     // off_topic -> short LLM steer-back
     const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: 'You are the WorldCup 2026 app assistant. The user asked something off-topic. Briefly and warmly say you focus on the app/tournament, then invite an on-topic question. 1-2 sentences.' }, { role: 'user', content: question }] })
     return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true })
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  try {
+    const url = Deno.env.get('SUPABASE_URL')!, anon = Deno.env.get('SUPABASE_ANON_KEY')!
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('AI_Summary_GPT_Key') || ''
+    if (!openaiKey) return json({ ok: false, error: 'OpenAI key not configured.' }, 500)
+    const openai = new OpenAI({ apiKey: openaiKey })
+    const body = await req.json().catch(() => ({}))
+    if (body?.mode === 'reindex_intents') return await reindexIntents(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
+    if (body?.mode === 'reindex_dims') return await reindexDims(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
+    if (body?.mode === 'reindex_kb') return await reindexKb(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
+
+    const question = body?.question
+    if (!question || typeof question !== 'string') return json({ ok: false, error: 'Missing question.' }, 400)
+    const pg = preGuard(question)
+    if (!pg.ok) return json({ step: 'final', ok: true, spec: { intent: 'blocked' }, llm_used: false, answer: pg.msg })
+
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const sbPublic = createClient(url, anon)
+    const sbUser = createClient(url, anon, { global: { headers: { Authorization: authHeader } } })
+    const sbService = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    let _me: string | null | undefined
+    const me = async () => { if (_me === undefined) _me = (await sbUser.auth.getUser()).data?.user?.id ?? null; return _me }
+    if (!rateOk(authHeader.slice(-24) || 'anon')) return json({ step: 'final', ok: true, spec: { intent: 'rate_limited' }, llm_used: false, answer: 'You are asking a lot very fast — give me a few seconds and try again.' })
+
+    const names = await fetchTeamNames(sbPublic)
+    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string').slice(-2) : []
+    const deps: RouteDeps = { openai, sbPublic, sbUser, sbService, me, names }
+
+    // v19: compound questions — route each clause (clause 2 sees clause 1 as history
+    // so it can borrow entities), then join the two answers.
+    const parts = splitCompound(question)
+    const r1 = await routeQuestion(parts[0], history, deps)
+    if (parts.length === 1) return json({ step: 'final', ok: true, spec: r1.pub, ...r1.extra, answer: r1.answer })
+    const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps)
+    return json({ step: 'final', ok: true, spec: r1.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used), answer: `${r1.answer}\n\n${r2.answer}` })
   } catch (err) {
     return json({ step: 'final', ok: false, error: String(err) }, 500)
   }

@@ -27,7 +27,7 @@
   <rect x="40" y="178" width="620" height="52" rx="8" fill="#0f1c33" stroke="#2d6cdf"/>
   <circle cx="66" cy="204" r="14" fill="#2d6cdf"/><text x="66" y="209" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">2</text>
   <text x="92" y="199" fill="#fff" font-size="14.5" font-weight="600">Pre-guard  [D]</text>
-  <text x="92" y="219" fill="#9fb6e0" font-size="12.5">rejects over-long text, prompt-injection and abuse before any work</text>
+  <text x="92" y="219" fill="#9fb6e0" font-size="12.5">blocks injection/abuse · splits compound Qs ("…and when is the final?") into 2 clauses</text>
 
   <!-- 3 -->
   <rect x="40" y="236" width="620" height="52" rx="8" fill="#0f1c33" stroke="#2d6cdf"/>
@@ -57,7 +57,7 @@
   <rect x="40" y="468" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="494" r="14" fill="#2d6cdf"/><text x="66" y="499" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">7</text>
   <text x="92" y="489" fill="#fff" font-size="14.5" font-weight="600">Extract entities  [D]</text>
-  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">matches teams (aliases + typo-tolerant), dates and round/phase from text</text>
+  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">matches teams (aliases + typos), dates, round/phase — and your OWN group's name</text>
 
   <!-- 8 -->
   <rect x="40" y="526" width="620" height="52" rx="8" fill="#1c1330" stroke="#8a5cd8"/>
@@ -82,8 +82,8 @@
   <rect x="40" y="706" width="620" height="58" rx="8" fill="#141414" stroke="#333"/>
   <circle cx="66" cy="735" r="14" fill="#2d6cdf"/><text x="66" y="740" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">11</text>
   <text x="92" y="728" fill="#fff" font-size="14.5" font-weight="600">Registry + rules  [D / L]</text>
-  <text x="92" y="748" fill="#bdbdbd" font-size="12.5">intent tools (schedule/scorers/my-data/group); rules → cache → FAQ → LLM</text>
-  <text x="92" y="763" fill="#8fbf8f" font-size="11.5">private data answered here by template — never sent to an LLM</text>
+  <text x="92" y="748" fill="#bdbdbd" font-size="12.5">intent tools; my-data → exact(+games) / rank / picks / points; rules → cache → FAQ → LLM</text>
+  <text x="92" y="763" fill="#8fbf8f" font-size="11.5">private, group-scopable ("in Alpha Wolves"), template only — never sent to an LLM</text>
 
   <!-- 12 -->
   <rect x="40" y="770" width="620" height="60" rx="8" fill="#2a1a0e" stroke="#d8823c"/>
@@ -130,8 +130,8 @@
   <g font-size="12.5">
     <text x="716" y="474" fill="#eaeaea" font-weight="600">lookupGame / scheduleList</text><text x="940" y="474" fill="#9a9a9a">next game, fixtures, a round</text>
     <text x="716" y="498" fill="#eaeaea" font-weight="600">whoScored</text><text x="940" y="498" fill="#9a9a9a">goalscorers in a match (+ET/pens)</text>
-    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myContext</text><text x="940" y="522" fill="#9a9a9a">your rank, picks, streak — RLS via JWT</text>
-    <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / groupHistory</text><text x="940" y="546" fill="#9a9a9a">your group table / who predicted what</text>
+    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myContext</text><text x="940" y="522" fill="#9a9a9a">exact scores (+which games) · rank · picks · pts</text>
+    <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / groupHistory</text><text x="940" y="546" fill="#9a9a9a">group table / who predicted — scopable</text>
     <text x="716" y="570" fill="#eaeaea" font-weight="600">rulesFAQ</text><text x="940" y="570" fill="#9a9a9a">scoring / locks / limits — canned [D]</text>
     <text x="716" y="594" fill="#e0b48a" font-weight="600">rules LLM (cached)</text><text x="940" y="594" fill="#9a9a9a">other "how does the app work" [L]</text>
     <text x="716" y="612" fill="#7fbf7f" font-size="11.5">green = private, JWT→RLS, template only — never to an LLM</text>
@@ -186,15 +186,15 @@
   <rect x="822" y="956" width="378" height="150" rx="9" fill="#0c1a12" stroke="#2f6a44"/>
   <text x="840" y="980" fill="#7fe6a0" font-size="13.5" font-weight="700">C · Your &amp; your groups' data  [private]</text>
   <g font-size="12.5" fill="#bfe6cc">
-    <text x="840" y="1004">your rank, picks, streak; your groups'</text>
-    <text x="840" y="1022">standings; who in your group predicted</text>
-    <text x="840" y="1040">what (only after kickoff).</text>
+    <text x="840" y="1004">your rank, picks, points, exact scores (+which</text>
+    <text x="840" y="1022">games); group standings — all scopable to a</text>
+    <text x="840" y="1040">group you name; members' picks after kickoff.</text>
   </g>
   <text x="840" y="1066" fill="#79b892" font-size="11.5">source: sbUser — your JWT → RLS</text>
   <text x="840" y="1088" fill="#f0b0b0" font-size="11.5">visibility: ONLY YOU / your groups — never other users or groups</text>
 
   <!-- footer -->
-  <text x="620" y="1140" fill="#8a8a8a" font-size="13" text-anchor="middle">Stages 1–9 always run (cheap regex + 1 embed). Stages 10 / 11 / 12 are exit points — first match wins.</text>
+  <text x="620" y="1140" fill="#8a8a8a" font-size="13" text-anchor="middle">Stages 1–9 always run per clause (a compound question runs the pipeline twice). 10 / 11 / 12 are exit points — first match wins.</text>
   <text x="620" y="1162" fill="#8a8a8a" font-size="13" text-anchor="middle">Routing uses intent × op × dim × entities, so a mis-labelled intent still lands on the right tool at stage 10.</text>
   <text x="620" y="1184" fill="#6f8f6f" font-size="12.5" text-anchor="middle">DEV project ftryuvfdihmhlzvbpfeu only · never PROD.</text>
 </svg>
