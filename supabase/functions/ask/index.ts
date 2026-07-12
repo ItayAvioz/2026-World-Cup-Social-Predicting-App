@@ -1,16 +1,23 @@
-// ask — in-app AI bot (DEV ONLY) — v19 spec-driven private tools + compound questions
+// ask — in-app AI bot (DEV ONLY) — v20 privacy clarity + LLM understanding fallback
 // ----------------------------------------------------------------------------
 // Flow: preGuard+rateLimit [D] -> splitCompound (max 2 clauses) [D] -> per clause:
 //   embed once [E] -> QuerySpec {intent[E], op[D], dim[D], entities[D], conf/margin}
-//   -> confidence band (route|clarify|abstain) -> tool REGISTRY dispatch [D]
+//   -> confidence band (route|clarify|LLM-understand fallback) -> tool REGISTRY [D]
 //   -> structured SQL [D] OR entity/dim-filtered RAG [E]
 //   -> template [D] OR Facts->Writer/Judge crew [L] -> log + safe-cache [D].
-// v19: routing lives in routeQuestion() so compound questions ("...and when is the
-//   final?") answer BOTH clauses; my_data routes on op/keywords to focused sub-tools
-//   (exact incl. WHICH games / rank / picks / points), each scopable to a group the
-//   caller names ("in Alpha Wolves") via resolveGroupName over the user's OWN groups.
-// Deterministic-first: LLM only for fuzzy "describe" stats, rules-FAQ fallback, off-topic.
-// RAG NEVER answers MAX/COUNT/rank/compare — those are SQL. Cache = rules only.
+// v19: routeQuestion() per clause (compound Qs answer BOTH parts); my_data sub-tools
+//   (exact incl. WHICH games / rank / picks / points), group-scopable via resolveGroupName.
+// v20: (a) PRIVACY CLARITY — every locked door says WHY: pre-kickoff predictions ->
+//   "hidden until kickoff"; groups you're not in -> "private to their members" (foreign
+//   group names detected deterministically incl. typos); (b) NEW entities: group-MATE
+//   usernames + relative game refs ("the last game", "the final"); memberPrediction and
+//   groupMeta (members/captain/count — real data, not the rules FAQ) tools; (c) LLM
+//   UNDERSTANDING FALLBACK [L] — when the deterministic parse is ambiguous, ONE
+//   gpt-4o-mini call parses the QUESTION TEXT ONLY into {asks, group, member, teams,
+//   game_ref, stat}; execution stays 100% deterministic SQL+templates. No DB data is
+//   ever sent to the LLM by this fallback.
+// Deterministic-first: LLM only for fuzzy "describe" stats, rules-FAQ fallback, off-topic,
+//   and the v20 understanding fallback (parse-only). RAG NEVER answers MAX/COUNT/rank.
 // Modes: reindex_intents, reindex_kb (paginated). Deploy target: DEV (ftryuvfdihmhlzvbpfeu) ONLY.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
@@ -439,19 +446,136 @@ async function myGroups(sbUser: Sb, me: string) {
   const gr = (await sbUser.from('groups').select('id, name').in('id', ids)).data ?? []; return gr.map((g) => ({ id: g.id as string, name: g.name as string }))
 }
 // v19: resolve a group NAME the caller mentions against their OWN groups only
-// (full-name match first, then name tokens). Never sees other users' groups.
+// (full-name match first, then name tokens; v20 adds typo tolerance). Never sees other users' groups.
 function resolveGroupName(q: string, groups: Grp[]): Grp | null {
-  const norm = (s: string) => ' ' + s.toLowerCase().replace(/[^a-z0-9֐-׿ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' '
+  const norm = (s: string) => ' ' + s.toLowerCase().replace(/[^a-z0-9א-׿֐-׏ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' '
   const ql = norm(q)
+  const qtok = ql.trim().split(' ').filter((w) => w.length >= 4)
   let best: { g: Grp; score: number } | null = null
   for (const g of groups) {
     const nl = norm(g.name).trim(); if (!nl) continue
     let score = 0
     if (ql.includes(' ' + nl + ' ')) score = 100 + nl.length
-    else { const toks = nl.split(' ').filter((w) => w.length >= 3 && !['the', 'group', 'team'].includes(w)); score = toks.filter((w) => ql.includes(' ' + w + ' ')).length }
+    else {
+      const toks = nl.split(' ').filter((w) => w.length >= 3 && !['the', 'group', 'team'].includes(w))
+      score = toks.filter((w) => ql.includes(' ' + w + ' ')).length
+      if (!score) for (const t of toks) for (const qw of qtok) { const L = lev(t, qw); if ((t.length >= 4 && L === 1) || (t.length >= 6 && L === 2)) { score = 1; break } }  // typo tolerance
+    }
     if (score && (!best || score > best.score)) best = { g, score }
   }
   return best?.g ?? null
+}
+// v20: detect a group NAME the caller referenced that is NOT one of their groups —
+// so the bot refuses honestly instead of silently answering about all their groups.
+// (accepts common typos of the word "group" itself)
+function groupRefCandidate(q: string): string | null {
+  const s = ' ' + q.toLowerCase().replace(/[^a-z0-9א-׿֐-׏ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' '
+  const m = s.match(/(?:in|of|for|from|leads?|wins?|winning|about) (?:the )?([a-z0-9א-׿]+(?: [a-z0-9א-׿]+)?) (?:group|droup|gorup|grup|goup)\b/)
+    || s.match(/\b(?:group|droup|gorup|grup|goup) (?:called |named )?([a-z0-9א-׿]+)/)
+  if (!m) return null
+  const cand = m[1].trim()
+  if (/^(my|our|the|a|an|this|that|his|her|their|its|first|second|third|other|another|new|old|whole|every|each|any|some|one|stage|same|which|what|winning|leading)$/.test(cand)) return null
+  if (/\b(stage|stages)\b/.test(cand)) return null  // "group stage" is a tournament phase, not a group name
+  return cand
+}
+function unknownGroupAnswer(name: string, groups: Grp[]): string {
+  return `I can only show data for groups you're a member of${groups.length ? ` — yours are ${groups.map((g) => g.name).join(', ')}` : ''}. "${name}" isn't one of them, and other groups' boards, members and predictions are private to their members.`
+}
+// v20: group-mates roster (usernames) across the caller's groups — RLS-scoped.
+async function myGroupMembers(sbUser: Sb, gids: string[]): Promise<{ id: string; username: string }[]> {
+  if (!gids.length) return []
+  const gm = (await sbUser.from('group_members').select('user_id').in('group_id', gids)).data ?? []
+  const ids = [...new Set(gm.map((r) => r.user_id as string))]; if (!ids.length) return []
+  const pr = (await sbUser.from('profiles').select('id, username').in('id', ids)).data ?? []
+  return pr.map((p) => ({ id: p.id as string, username: p.username as string }))
+}
+// v20: resolve a group-MATE's username mentioned in the question (typo-tolerant).
+function resolveMemberName(q: string, members: { id: string; username: string }[]): { id: string; username: string } | null {
+  const ql = ' ' + q.toLowerCase().replace(/[^a-z0-9_א-׿ ]/g, ' ').replace(/\s+/g, ' ').trim() + ' '
+  const qtok = ql.trim().split(' ').filter((w) => w.length >= 3)
+  let best: { m: { id: string; username: string }; score: number } | null = null
+  for (const m of members) {
+    const un = m.username.toLowerCase()
+    let score = 0
+    if (ql.includes(' ' + un + ' ')) score = 100
+    else {
+      const toks = [un, ...un.split(/[_\d]+/).filter((w) => w.length >= 4)]
+      for (const t of toks) for (const qw of qtok) { const L = lev(t, qw); if ((t.length >= 4 && L <= 1) || (t.length >= 7 && L <= 2)) score = Math.max(score, 10 - L) }
+    }
+    if (score && (!best || score > best.score)) best = { m, score }
+  }
+  return best?.m ?? null
+}
+// v20: resolve a game from teams / a phase word / "the last game" (relative ref).
+async function resolveGameRef(sb: Sb, q: string, teams: string[], phase: string | null): Promise<any | null> {
+  const COLS = 'id, team_home, team_away, score_home, score_away, phase, kick_off_time'
+  if (teams.length >= 2) return await findGame(sb, teams[0], teams[1])
+  if (phase) return (await sb.from('games').select(COLS).eq('phase', phase).neq('team_home', 'TBD').order('kick_off_time', { ascending: false }).limit(1)).data?.[0] ?? null
+  if (/last (game|match)|latest (game|match)|most recent (game|match)|yesterday'?s? (game|match)/i.test(q))
+    return (await sb.from('games').select(COLS).not('score_home', 'is', null).neq('phase', 'friendly').neq('team_home', 'TBD').lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: false }).limit(1)).data?.[0] ?? null
+  if (teams.length === 1) return (await sb.from('games').select(COLS).or(`team_home.eq.${teams[0]},team_away.eq.${teams[0]}`).not('score_home', 'is', null).neq('phase', 'friendly').order('kick_off_time', { ascending: false }).limit(1)).data?.[0] ?? null
+  return null
+}
+// v20: one group-mate's prediction for one game — RLS decides visibility, the
+// MESSAGE explains it (pre-kickoff = hidden for everyone; otherwise group-mates only).
+async function memberPrediction(sbUser: Sb, meId: string, member: { id: string; username: string }, game: any): Promise<string> {
+  if (!game) return `I couldn't work out which game you mean — name the two teams, e.g. "what did ${member.username} predict for Portugal vs United States?"`
+  const started = new Date(game.kick_off_time as string) <= new Date()
+  if (!started) return `${game.team_home} vs ${game.team_away} hasn't kicked off yet — ALL predictions stay hidden until kickoff (including ${member.username}'s). Ask me again after the whistle!`
+  const { data: preds } = await sbUser.from('predictions').select('pred_home, pred_away, points_earned, is_auto').eq('game_id', game.id).eq('user_id', member.id)
+  if (!preds || !preds.length) return `I can't show ${member.username}'s prediction for ${game.team_home} vs ${game.team_away} — you can only see predictions of people who share a group with you, and only after kickoff.`
+  const fin = game.score_home !== null
+  return `${game.team_home} ${fin ? `${game.score_home}-${game.score_away}` : 'vs'} ${game.team_away} — ${member.username} predicted ` +
+    preds.map((p) => `${p.pred_home}-${p.pred_away}${p.is_auto ? ' (auto)' : ''}${fin ? ` [${p.points_earned}pt]` : ''}`).join(', ') + '.'
+}
+// v20: group META — real data (member count / list / captain) for the caller's groups.
+async function groupMeta(sbUser: Sb, meId: string, scope: Grp[], q: string): Promise<string> {
+  if (!scope.length) return `You're not in any group yet.`
+  const blocks: string[] = []
+  for (const g of scope) {
+    const gm = (await sbUser.from('group_members').select('user_id').eq('group_id', g.id)).data ?? []
+    const ids = gm.map((r) => r.user_id as string)
+    const prs = ids.length ? (((await sbUser.from('profiles').select('id, username').in('id', ids)).data) ?? []) : []
+    const cap = (await sbUser.from('groups').select('created_by').eq('id', g.id).limit(1)).data?.[0]?.created_by
+    if (/captain|admin|owner|creator/.test(q)) { const c = prs.find((p: any) => p.id === cap); blocks.push(`${g.name}: the captain is ${c ? (c as any).username : 'unknown'}.`); continue }
+    const names = prs.map((p: any) => p.username + (p.id === cap ? ' (captain)' : '') + (p.id === meId ? ' (you)' : ''))
+    blocks.push(`${g.name}: ${ids.length} member${ids.length === 1 ? '' : 's'} — ${names.join(', ')}.`)
+  }
+  return blocks.join('\n')
+}
+// v20: LLM UNDERSTANDING FALLBACK [L] — parses the QUESTION TEXT ONLY (never any DB
+// data) into a structured spec when the deterministic parse is ambiguous. Execution
+// of the parsed spec stays 100% deterministic (execUnderstood -> SQL + templates).
+async function llmUnderstand(openai: OpenAI, question: string, groupNames: string[], memberNames: string[]): Promise<any | null> {
+  try {
+    const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0, seed: 7, max_tokens: 160, response_format: { type: 'json_object' }, messages: [
+      { role: 'system', content: `Parse a WorldCup-predictions-app question into JSON with fields: asks (one of: member_prediction, group_board, group_meta, my_stats, other), group (a group name mentioned, else null), member (a person/username mentioned, else null), teams (array of football team names mentioned, else []), game_ref ("last"|"final"|null), stat ("exact"|"rank"|"points"|"picks"|null). The asker's groups: ${groupNames.join(', ') || '(none)'}. Their group-mates' usernames: ${memberNames.join(', ') || '(none)'}. Map typos/nicknames to those known names when clearly intended; if a mentioned group is NOT in the list, still return it verbatim. Output ONLY the JSON object.` },
+      { role: 'user', content: question },
+    ] })
+    return JSON.parse(res.choices[0]?.message?.content ?? 'null')
+  } catch { return null }
+}
+// v20: deterministic executor for the understood spec — reuses the same private tools.
+async function execUnderstood(u: any, d: { question: string; sbPublic: Sb; sbUser: Sb; names: string[] }, meId: string, groups: Grp[], members: { id: string; username: string }[]): Promise<string | null> {
+  if (!u || typeof u !== 'object') return null
+  const target = u.group ? resolveGroupName(' ' + String(u.group) + ' ', groups) : null
+  if (u.group && !target) return unknownGroupAnswer(String(u.group), groups)
+  const member = u.member ? (resolveMemberName(' ' + String(u.member) + ' ', members) ?? resolveMemberName(d.question, members)) : null
+  const teams = Array.isArray(u.teams) && u.teams.length ? resolveTeams(u.teams.join(' vs '), d.names) : []
+  if (u.asks === 'member_prediction' || (member && member.id !== meId)) {
+    const game = await resolveGameRef(d.sbPublic, `${u.game_ref === 'last' ? 'last game' : ''} ${d.question}`, teams, u.game_ref === 'final' ? 'final' : detectPhase(d.question))
+    if (member && member.id !== meId) return await memberPrediction(d.sbUser, meId, member, game)
+    if (game) return await groupHistory(d.sbPublic, d.sbUser, meId, game.team_home as string, game.team_away as string)
+    return null
+  }
+  if (u.asks === 'group_meta') return await groupMeta(d.sbUser, meId, target ? [target] : groups, d.question.toLowerCase())
+  if (u.asks === 'group_board') return await groupStandings(d.sbUser, meId, /exact/i.test(d.question), groups, target)
+  if (u.asks === 'my_stats') {
+    if (u.stat === 'exact') return await myExact(d.sbPublic, d.sbUser, meId, groups, target)
+    if (u.stat === 'rank' || u.stat === 'points' || u.stat === 'picks') return await myFocus(d.sbUser, meId, groups, target, u.stat)
+    return await myContext(d.sbUser, meId, groups, target)
+  }
+  return null
 }
 async function myContext(sbUser: Sb, me: string, all: Grp[], target: Grp | null = null): Promise<string> {
   if (!all.length) return `You're not in any group yet.`
@@ -511,7 +635,11 @@ async function globalStandings(sb: Sb, limit = 5): Promise<string> {
 async function groupHistory(sbPublic: Sb, sbUser: Sb, me: string, a: string, b: string): Promise<string> {
   const game = await findGame(sbPublic, a, b); if (!game) return `I couldn't find a game between ${a} and ${b}.`
   const { data: preds } = await sbUser.from('predictions').select('user_id, group_id, pred_home, pred_away, points_earned, is_auto').eq('game_id', game.id)
-  if (!preds || preds.length === 0) return `${game.team_home} vs ${game.team_away}: no predictions are visible to you (hidden until kickoff, or no shared group).`
+  // v20: say exactly WHY nothing is visible — pre-kickoff privacy vs no shared group.
+  if (!preds || preds.length === 0) {
+    if (new Date(game.kick_off_time as string) > new Date()) return `${game.team_home} vs ${game.team_away} hasn't kicked off yet — everyone's predictions stay hidden until kickoff. Ask me again after the whistle!`
+    return `${game.team_home} vs ${game.team_away}: no predictions are visible to you — you can only see predictions from members of YOUR groups (and your own).`
+  }
   const uids = [...new Set(preds.map((p) => p.user_id as string))], gids = [...new Set(preds.map((p) => p.group_id as string).filter(Boolean))]
   const names = new Map<string, string>((((await sbUser.from('profiles').select('id, username').in('id', uids)).data) ?? []).map((r: any) => [r.id, r.username]))
   const gnames = new Map<string, string>((((await sbUser.from('groups').select('id, name').in('id', gids)).data) ?? []).map((r: any) => [r.id, r.name]))
@@ -530,8 +658,9 @@ function rulesFAQ(q: string): string | null {
   if (/trivia.*(point|worth|how many)|how many.*trivia/.test(s)) return 'Each daily trivia question is worth 1 point. Trivia points stay hidden and all land after the last question (~July 21).'
   if (/(pick|champion|top scorer).*(lock|deadline|close)|when.*(pick|champion).*lock/.test(s)) return 'Champion and Top Scorer picks lock on June 11, 22:00 Israel time — permanently.'
   if (/bracket.*(lock|deadline|close)|when.*bracket.*lock/.test(s)) return 'The knockout bracket locks on July 4, 20:00 Israel time.'
-  if (/how many (members|people|players).*group|max.*(member|player).*group|group.*(hold|have|allow).*(member|player|people)|(members|players|people) (allowed|per|in)[\s\S]{0,20}group/.test(s)) return 'A group can have up to 12 members (including the captain).'
-  if (/how many groups can|groups can i (be|join)|max(imum)?( number of)? groups|how many groups\b/.test(s)) return 'You can be in up to 3 groups (created + joined combined).'
+  // v20: cap questions ONLY ("can/allowed/max") — "how many members in Demo" is DATA -> groupMeta
+  if (/how many (members|people|players) can|max.*(member|player).*group|group.*(hold|allow)s?.*(member|player|people)|(members|players|people) (allowed|per)[\s\S]{0,20}group|(member|group size) (limit|cap)/.test(s)) return 'A group can have up to 12 members (including the captain).'
+  if (/how many groups can|groups can i (be|join)|max(imum)?( number of)? groups|group (limit|cap)\b/.test(s)) return 'You can be in up to 3 groups (created + joined combined).'
   if (/leave.*group|delete.*group|remove.*(member|myself)/.test(s)) return "You can't leave or delete a group, and members are permanent — contact the admin if something needs changing."
   if (/auto.?predict|forget.*(predict|prediction)|miss.*(predict|prediction|deadline)|random score|is it (random|data)/.test(s)) return "If you miss the deadline, the app auto-fills a prediction for you. It's not purely random — it leans toward the least-popular result (so you're not just copying the crowd), then fills in a scoreline for that outcome. Auto-predictions score exactly like manual ones."
   return null
@@ -612,7 +741,7 @@ async function reindexKb(openai: OpenAI, sbService: Sb): Promise<Response> {
 
 // ---- spec + registry --------------------------------------------------------
 type Spec = { intent: string; confidence: number; margin: number; second: string; op: string; dim: string | null; teams: string[]; date: any; phase: string | null; predicate: boolean }
-type Ctx = { spec: Spec; question: string; sbPublic: Sb; sbUser: Sb; sbService: Sb; openai: OpenAI; me: () => Promise<string | null> }
+type Ctx = { spec: Spec; question: string; sbPublic: Sb; sbUser: Sb; sbService: Sb; openai: OpenAI; me: () => Promise<string | null>; names: string[] }
 type Tool = { id: string; match: (s: Spec) => boolean; run: (c: Ctx) => Promise<{ answer: string; llm?: boolean; retrieved?: number; crew?: any }> }
 
 const NEED_LOGIN = 'Please sign in — I can only look up your personal data when you are logged in.'
@@ -629,7 +758,15 @@ const REGISTRY: Tool[] = [
       const me = await c.me(); if (!me) return { answer: NEED_LOGIN }
       const groups = await myGroups(c.sbUser, me)
       const target = resolveGroupName(c.question, groups)
+      // v20: named a group that isn't yours -> honest refusal, never a silent all-groups dump
+      if (!target) { const cand = groupRefCandidate(c.question); if (cand) return { answer: unknownGroupAnswer(cand, groups) } }
       const ql = c.question.toLowerCase()
+      // v20: asking about a group-MATE's prediction ("what did nitzo predict...")
+      if (/predict|guess|call(ed)?\b/.test(ql) && !/\b(i|my|we|our)\b/.test(ql)) {
+        const members = await myGroupMembers(c.sbUser, groups.map((g) => g.id))
+        const member = resolveMemberName(c.question, members)
+        if (member && member.id !== me) return { answer: await memberPrediction(c.sbUser, me, member, await resolveGameRef(c.sbPublic, c.question, c.spec.teams, c.spec.phase)) }
+      }
       if (/exact|spot.?on|nail|precise|on the (nose|dot)/.test(ql) && !/percent|%/.test(ql)) return { answer: await myExact(c.sbPublic, c.sbUser, me, groups, target) }
       if (/rank|place|position|standing|where am i/.test(ql)) return { answer: await myFocus(c.sbUser, me, groups, target, 'rank') }
       if (/pick|champion|top scorer|bet on/.test(ql)) return { answer: await myFocus(c.sbUser, me, groups, target, 'picks') }
@@ -639,8 +776,24 @@ const REGISTRY: Tool[] = [
       const me = await c.me(); if (!me) return { answer: NEED_LOGIN }
       const groups = await myGroups(c.sbUser, me)
       const target = resolveGroupName(c.question, groups)
+      // v20: foreign / unknown group -> honest refusal instead of dumping all your groups
+      if (!target) { const cand = groupRefCandidate(c.question); if (cand) return { answer: unknownGroupAnswer(cand, groups) } }
       return { answer: await groupStandings(c.sbUser, me, c.spec.op === 'rank' && /exact/i.test(c.question), groups, target) } } },
-  { id: 'group_history', match: (s) => s.intent === 'group_history', run: async (c) => { const me = await c.me(); if (!me) return { answer: NEED_LOGIN }; return c.spec.teams.length >= 2 ? { answer: await groupHistory(c.sbPublic, c.sbUser, me, c.spec.teams[0], c.spec.teams[1]) } : { answer: 'Which game? Name both teams, e.g. "what did we predict for Everton vs Manchester City?"' } } },
+  // v20: group_history understands group-mates ("what did nitzo predict"), relative game
+  // refs ("the last game", "the final") and falls back to LLM understanding when ambiguous.
+  { id: 'group_history', match: (s) => s.intent === 'group_history', run: async (c) => {
+      const me = await c.me(); if (!me) return { answer: NEED_LOGIN }
+      if (c.spec.teams.length >= 2) return { answer: await groupHistory(c.sbPublic, c.sbUser, me, c.spec.teams[0], c.spec.teams[1]) }
+      const groups = await myGroups(c.sbUser, me)
+      const members = await myGroupMembers(c.sbUser, groups.map((g) => g.id))
+      const member = resolveMemberName(c.question, members)
+      const game = await resolveGameRef(c.sbPublic, c.question, c.spec.teams, c.spec.phase)
+      if (member && member.id !== me && game) return { answer: await memberPrediction(c.sbUser, me, member, game) }
+      if (game) return { answer: await groupHistory(c.sbPublic, c.sbUser, me, game.team_home as string, game.team_away as string) }
+      const u = await llmUnderstand(c.openai, c.question, groups.map((g) => g.name), members.map((m) => m.username))
+      const ans = await execUnderstood(u, c, me, groups, members)
+      if (ans) return { answer: ans, llm: true }
+      return { answer: 'Which game? Name both teams, e.g. "what did we predict for Everton vs Manchester City?"' } } },
 ]
 
 // v19: the whole per-question routing pipeline, callable once per clause so compound
@@ -688,9 +841,21 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
     if (/\bwho'?s? (the )?best\b|\bwho is the best\b/.test(qlow) && spec.teams.length === 0 && !groupScoped)
       return done('Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards? Or ask for the leaderboard.', { llm_used: false, clarify: true })
 
+    // v20: group META (member count / list / captain) — real DATA for a specific group,
+    // not the rules-FAQ cap. Cap questions ("how many members CAN...") never reach here.
+    if (/\bmembers?\b|\bcaptain\b|who('s| is) in\b/.test(qlow) && !/can (have|be|join)|allowed|max|maximum|limit|up to/.test(qlow) && !/first place|last place|winning|lead|top of|rank|standing|points/.test(qlow)) {
+      const uid = await me()
+      if (uid) {
+        const groups = await myGroups(sbUser, uid)
+        const target = resolveGroupName(question, groups)
+        if (!target) { const cand = groupRefCandidate(question); if (cand) return done(unknownGroupAnswer(cand, groups), { llm_used: false }) }
+        if (target || /\b(my|our) groups?\b/.test(qlow)) return done(await groupMeta(sbUser, uid, target ? [target] : groups, qlow), { llm_used: false })
+      }
+    }
+
     const PRIVATE = new Set(['my_data', 'group_standings', 'group_history'])
     if (PRIVATE.has(spec.intent)) {
-      for (const t of REGISTRY) if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me }); return done(r.answer, { llm_used: !!r.llm }) }
+      for (const t of REGISTRY) if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me, names }); return done(r.answer, { llm_used: !!r.llm }) }
     }
 
     // ---- deterministic overrides (operation-based, cut across intent) ----
@@ -716,6 +881,16 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
 
     // ---- CLARIFY only when nothing concrete matched (rare) ----
     if (!(spec.intent === 'off_topic' && spec.confidence < CONF_MIN) && spec.op === 'lookup' && agg === 'none' && spec.margin < CLARIFY_MARGIN && spec.confidence < CLARIFY_CONF && spec.second && spec.second !== spec.intent) {
+      // v20: before asking the user to rephrase, spend ONE LLM call to parse the QUESTION
+      // TEXT into a structured spec, then execute it deterministically (no data to the LLM).
+      const uid = await me()
+      if (uid) {
+        const groups = await myGroups(sbUser, uid)
+        const members = await myGroupMembers(sbUser, groups.map((g) => g.id))
+        const u = await llmUnderstand(openai, question, groups.map((g) => g.name), members.map((m) => m.username))
+        const ans = await execUnderstood(u, { question, sbPublic, sbUser, names }, uid, groups, members)
+        if (ans) return done(ans, { llm_used: true, fallback: true })
+      }
       const label: Record<string, string> = { schedule: 'the schedule', who_scored: 'match scorers', stats: 'team/player stats', my_data: 'your own stats', group_standings: 'group standings', group_history: 'group predictions', rules: 'how the app works' }
       return done(`I'm not sure if you mean ${label[spec.intent] ?? spec.intent} or ${label[spec.second] ?? spec.second}. Could you rephrase?`, { llm_used: false, clarify: true })
     }
@@ -725,7 +900,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
 
     // registry dispatch for intent-based tools (schedule/who_scored/my_data/group_*)
     for (const t of REGISTRY) {
-      if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me }); return done(r.answer, { llm_used: !!r.llm }) }
+      if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me, names }); return done(r.answer, { llm_used: !!r.llm }) }
     }
 
     // rules -> deterministic FAQ, else grounded LLM (cached)
@@ -739,6 +914,19 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
 
     // stats fuzzy "describe" -> RAG + crew (never cached: volatile)
     if (spec.intent === 'stats') {
+      // v20: a "stats" question that actually names YOUR group or a group-MATE is a private
+      // question in disguise ("hows my squad beta sharks holding up?") — the public crew can
+      // never answer it. Divert to the understanding fallback (question text only to the LLM).
+      const uid = await me()
+      if (uid) {
+        const groups = await myGroups(sbUser, uid)
+        const members = await myGroupMembers(sbUser, groups.map((g) => g.id))
+        if (groups.length && (resolveGroupName(question, groups) || groupRefCandidate(question) || resolveMemberName(question, members))) {
+          const u = await llmUnderstand(openai, question, groups.map((g) => g.name), members.map((m) => m.username))
+          const ans = await execUnderstood(u, { question, sbPublic, sbUser, names }, uid, groups, members)
+          if (ans) return done(ans, { llm_used: true, fallback: true })
+        }
+      }
       // P2: a superlative that didn't resolve to a deterministic metric must NOT go to the crew —
       // the LLM would invent a leader. Ask which stat instead of hallucinating one.
       if ((spec.op === 'rank' || /\b(best|most|worst|highest|lowest|dirtiest|meanest|cleanest|leakiest)\b/.test(qlow)) && !dimToMetric(spec.dim, question))

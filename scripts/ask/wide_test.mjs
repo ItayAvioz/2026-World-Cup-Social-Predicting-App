@@ -54,6 +54,20 @@ const T = [
   ['group', 'simple', 'auth', 'who is winning our group?', ['bot_e2e_test']],
   ['group', 'medium', 'auth', 'who has the most exact scores in Alpha Wolves?', ['bot_e2e_test', '2', '!Beta']],
   ['group', 'hard', 'auth', 'what did we predict for Brazil vs England?', ['1-0']],
+  // ---- v20: group meta (member count / list / captain — data, not the rules cap) ----
+  ['meta', 'medium', 'auth', 'how many members are in Beta Sharks?', ['Beta Sharks', '2 members', 'bot_e2e_mate', '!12']],
+  ['meta', 'hard', 'auth', 'who is the captain of beta sharks?', ['captain', 'bot_e2e_test']],
+  ['meta', 'simple', 'auth', 'who is in my groups?', ['Alpha Wolves', 'Beta Sharks', 'bot_e2e_mate']],
+  // ---- v20: privacy clarity — foreign groups (incl. typos) & pre-kickoff ----
+  ['privacy', 'hard', 'auth', 'who is winning the cheaters group?', ['private', 'cheaters', '!pts']],
+  ['privacy', 'hard', 'auth', 'who lead the legeand droup?', ['private', '!#1']],
+  ['privacy', 'medium', 'auth', 'how many members in the cheaters group?', ['private', 'cheaters', '!12']],
+  // the dev "final" kicks off Jul 19 (future): mate predicted 2-0 there — it must stay hidden
+  ['privacy', 'hard', 'auth', 'what was bot_e2e_mate prediction in the final?', ['until kickoff', '!2-0']],
+  ['privacy', 'hard', 'auth', 'what did we predict for the final?', ['0-1', '!2-0']],
+  // ---- v20: group-mate predictions (kicked-off game -> visible via shared group) ----
+  ['member', 'medium', 'auth', 'what did bot_e2e_mate predict for Portugal vs United States?', ['0-1', 'bot_e2e_mate']],
+  ['member', 'hard', 'auth', 'hows my squad beta sharks holding up on the table?', ['bot_e2e_test']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

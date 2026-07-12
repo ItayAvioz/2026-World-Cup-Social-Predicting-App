@@ -57,7 +57,7 @@
   <rect x="40" y="468" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="494" r="14" fill="#2d6cdf"/><text x="66" y="499" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">7</text>
   <text x="92" y="489" fill="#fff" font-size="14.5" font-weight="600">Extract entities  [D]</text>
-  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">matches teams (aliases + typos), dates, round/phase — and your OWN group's name</text>
+  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group's name, group-MATE names, "last game"</text>
 
   <!-- 8 -->
   <rect x="40" y="526" width="620" height="52" rx="8" fill="#1c1330" stroke="#8a5cd8"/>
@@ -68,8 +68,8 @@
   <!-- 9 -->
   <rect x="40" y="584" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="610" r="14" fill="#2d6cdf"/><text x="66" y="615" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">9</text>
-  <text x="92" y="605" fill="#fff" font-size="14.5" font-weight="600">Assemble QuerySpec  [D]</text>
-  <text x="92" y="625" fill="#9fb6e0" font-size="12.5">packs it all into one spec; if too vague → asks a clarifying question</text>
+  <text x="92" y="605" fill="#fff" font-size="14.5" font-weight="600">Assemble QuerySpec  [D]  +  LLM-understand fallback  [L]</text>
+  <text x="92" y="625" fill="#9fb6e0" font-size="12.5">too vague → ONE LLM call parses the QUESTION TEXT into a spec → still executed by SQL</text>
 
   <!-- 10 -->
   <rect x="40" y="642" width="620" height="58" rx="8" fill="#0f1c33" stroke="#2d6cdf" stroke-width="2"/>
@@ -82,8 +82,8 @@
   <rect x="40" y="706" width="620" height="58" rx="8" fill="#141414" stroke="#333"/>
   <circle cx="66" cy="735" r="14" fill="#2d6cdf"/><text x="66" y="740" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">11</text>
   <text x="92" y="728" fill="#fff" font-size="14.5" font-weight="600">Registry + rules  [D / L]</text>
-  <text x="92" y="748" fill="#bdbdbd" font-size="12.5">intent tools; my-data → exact(+games) / rank / picks / points; rules → cache → FAQ → LLM</text>
-  <text x="92" y="763" fill="#8fbf8f" font-size="11.5">private, group-scopable ("in Alpha Wolves"), template only — never sent to an LLM</text>
+  <text x="92" y="748" fill="#bdbdbd" font-size="12.5">my-data exact(+games)/rank/picks/pts · mate's prediction · group members/captain · rules</text>
+  <text x="92" y="763" fill="#8fbf8f" font-size="11.5">private, group-scopable; locked data answers WHY (pre-kickoff / not your group) — no LLM</text>
 
   <!-- 12 -->
   <rect x="40" y="770" width="620" height="60" rx="8" fill="#2a1a0e" stroke="#d8823c"/>
@@ -131,7 +131,7 @@
     <text x="716" y="474" fill="#eaeaea" font-weight="600">lookupGame / scheduleList</text><text x="940" y="474" fill="#9a9a9a">next game, fixtures, a round</text>
     <text x="716" y="498" fill="#eaeaea" font-weight="600">whoScored</text><text x="940" y="498" fill="#9a9a9a">goalscorers in a match (+ET/pens)</text>
     <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myContext</text><text x="940" y="522" fill="#9a9a9a">exact scores (+which games) · rank · picks · pts</text>
-    <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / groupHistory</text><text x="940" y="546" fill="#9a9a9a">group table / who predicted — scopable</text>
+    <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / memberPrediction / groupMeta</text><text x="1010" y="546" fill="#9a9a9a">table · a mate's pick · members</text>
     <text x="716" y="570" fill="#eaeaea" font-weight="600">rulesFAQ</text><text x="940" y="570" fill="#9a9a9a">scoring / locks / limits — canned [D]</text>
     <text x="716" y="594" fill="#e0b48a" font-weight="600">rules LLM (cached)</text><text x="940" y="594" fill="#9a9a9a">other "how does the app work" [L]</text>
     <text x="716" y="612" fill="#7fbf7f" font-size="11.5">green = private, JWT→RLS, template only — never to an LLM</text>
@@ -190,8 +190,8 @@
     <text x="840" y="1022">games); group standings — all scopable to a</text>
     <text x="840" y="1040">group you name; members' picks after kickoff.</text>
   </g>
-  <text x="840" y="1066" fill="#79b892" font-size="11.5">source: sbUser — your JWT → RLS</text>
-  <text x="840" y="1088" fill="#f0b0b0" font-size="11.5">visibility: ONLY YOU / your groups — never other users or groups</text>
+  <text x="840" y="1066" fill="#79b892" font-size="11.5">source: sbUser — your JWT → RLS · refusals say WHY:</text>
+  <text x="840" y="1088" fill="#f0b0b0" font-size="11.5">pre-kickoff = "hidden until kickoff" · other groups = "private to their members"</text>
 
   <!-- footer -->
   <text x="620" y="1140" fill="#8a8a8a" font-size="13" text-anchor="middle">Stages 1–9 always run per clause (a compound question runs the pipeline twice). 10 / 11 / 12 are exit points — first match wins.</text>

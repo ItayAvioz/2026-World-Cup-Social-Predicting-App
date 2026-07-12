@@ -18,8 +18,21 @@ Deploy via **Supabase CLI from the local file** (the MCP inline-deploy path chok
 # from repo root
 npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
 ```
-> Current: DEV runs **v19** and the local file **matches it byte-for-byte** (verified 2026-07-12 via
-> `get_edge_function` diff). v15 `gameStats`; v16 global board one-row-per-(player×group);
+> Current: DEV runs **v21** and the local file **matches it byte-for-byte** (verified 2026-07-13 via
+> `get_edge_function` diff). **v20/v21 (privacy clarity + LLM understanding fallback, code-only, NO
+> reindex):** (a) every locked door says WHY — pre-kickoff predictions answer "hidden until kickoff",
+> a group you're not in answers "private to their members" (foreign-group names detected
+> deterministically incl. typos, `groupRefCandidate` + `unknownGroupAnswer`); (b) new entities:
+> group-MATE usernames (`resolveMemberName`, typo-tolerant) + relative game refs ("the last game",
+> "the final") via `resolveGameRef`; new tools `memberPrediction` (a mate's pick for one game —
+> RLS decides, message explains) and `groupMeta` (member count / list / captain — real data; the
+> rules-FAQ cap answer now fires only for "how many members CAN..."); (c) **LLM understanding
+> fallback** — when routing is ambiguous (clarify band), when group_history lacks a game, or when a
+> "stats" question names your group/mate, ONE gpt-4o-mini call parses the QUESTION TEXT ONLY into
+> `{asks, group, member, teams, game_ref, stat}` and `execUnderstood` runs it 100% deterministically.
+> No DB data ever reaches the LLM through this path. Wide test 39/39 (v18 baseline was 24/29).
+>
+> History: v15 `gameStats`; v16 global board one-row-per-(player×group);
 > v17 routing fixes (private intents before public overrides; rulesFAQ short-circuit; op/dim gaps) — needed
 > a reindex; v18 cleaned up v17's regressions (broad global-leaderboard detector, box-score first-person
 > guard removed, rulesFAQ collision fixes, scoped `fixtures? for`) — code-only, NO reindex.
@@ -74,9 +87,10 @@ Note it grades routing only, not answer correctness — spot-check answers again
 
 **`scripts/ask/wide_test.mjs` — answer-graded, incl. the PRIVATE path.** Signs in as the seeded
 e2e user `bot_e2e_test` (bot.e2e.test.wc2026@gmail.com — groups **Alpha Wolves** 2 exact / 4 preds,
-**Beta Sharks** 1 exact / 2 preds, known picks) and asserts expected substrings in the ANSWER,
-including negative `!substring` scoping checks (e.g. Beta's games must NOT leak into an
-Alpha-scoped answer). 29 questions across areas × complexity. v19 = 29/29.
+**Beta Sharks** 1 exact / 2 preds + mate `bot_e2e_mate` with a visible Portugal-USA pred 0-1 and an
+RLS-hidden pre-kickoff final pred 2-0, known picks) and asserts expected substrings in the ANSWER,
+including negative `!substring` scoping/leak checks (e.g. the mate's hidden 2-0 must NEVER appear).
+39 questions across areas × complexity incl. privacy-refusal cases. v21 = 39/39.
 ```bash
 node scripts/ask/wide_test.mjs scripts/ask/wide_results.json
 ```
