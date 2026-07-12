@@ -4,6 +4,7 @@ import BottomNav from './BottomNav.jsx'
 import FeedbackButton from './FeedbackButton.jsx'
 import HowToPlay from './HowToPlay.jsx'
 import EnvBadge from './EnvBadge.jsx'
+import AskBot from './AskBot.jsx'
 
 export default function Layout({ title, children, showBack = true, rightSlot, leftSlot }) {
   const navigate = useNavigate()
@@ -33,6 +34,7 @@ export default function Layout({ title, children, showBack = true, rightSlot, le
       <FeedbackButton />
       <HowToPlay isOpen={htpOpen} onClose={() => setHtpOpen(false)} />
       <EnvBadge />
+      <AskBot />
     </div>
   )
 }
