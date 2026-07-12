@@ -30,6 +30,21 @@ export function knockoutEliminated(games) {
   return s
 }
 
+// Teams that can NO LONGER win the 3rd-place game, judged BEFORE that game is decided.
+// A team is out of bronze contention iff it reached the Final (it plays for gold, never
+// enters the bronze game) OR it was eliminated before the SF (never reached the bronze game).
+// ⚠️ SF losers are NOT out — they ARE the two bronze contenders, so they stay eligible until
+// the 3rd-place game is played. That's why the plain `eliminated` set (which includes SF
+// losers) must NOT be used to red-out a 3rd-winner pick; use this instead.
+export function knockoutOutOfBronze(games) {
+  const reached = knockoutReached(games)     // reached.final = finalists · reached.third = SF losers
+  const eliminated = knockoutEliminated(games)
+  const out = new Set()
+  for (const t of reached.final) out.add(t)                         // finalists can't play for bronze
+  for (const t of eliminated) if (!reached.third.has(t)) out.add(t) // knocked out before the SF
+  return out
+}
+
 // Actual winner of a phase's game (Final = champion, 3rd-place play-off = bronze winner).
 // Filter to the DECIDED game (knockout_winner set) — a phase can have >1 row (e.g. a TBD
 // placeholder final) and array order could otherwise return a null.

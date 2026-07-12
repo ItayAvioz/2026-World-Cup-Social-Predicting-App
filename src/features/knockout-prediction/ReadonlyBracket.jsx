@@ -3,7 +3,7 @@ import {
   LEFT_COLS, RIGHT_COLS, PHASE_LABEL, TEAM_SHORT, NODES_BY_PHASE,
   nodeCandidates, bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE, placeGamesOnNodes,
 } from './bracketTree.js'
-import { knockoutReached, knockoutEliminated, actualWinner, computeKnockoutScore } from './scoring.js'
+import { knockoutReached, knockoutEliminated, knockoutOutOfBronze, actualWinner, computeKnockoutScore } from './scoring.js'
 import { picksToRounds } from './reconstruct.js'
 import { MAX_POINTS } from './constants.js'
 
@@ -29,6 +29,7 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   const byNode = useMemo(() => placeGamesOnNodes(games || []), [games])
   const reached = useMemo(() => knockoutReached(games || []), [games])
   const eliminated = useMemo(() => knockoutEliminated(games || []), [games])
+  const outOfBronze = useMemo(() => knockoutOutOfBronze(games || []), [games])
   const score = useMemo(
     () => computeKnockoutScore(picksToRounds(picks), games || []),
     [picks, games]
@@ -44,14 +45,14 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
     return ''
   }
   // Champion / 3rd-winner colouring. Once the decisive game is played, judge against the
-  // actual winner. Before that, `checkEliminated` (champion only) reds-out a pick whose team
-  // is already knocked out — mirrors the reach slots so a dead champion pick doesn't stay gold.
-  // NOT applied to the 3rd-winner card: SF losers ARE the bronze contenders, so `eliminated`
-  // (which includes SF losers) would wrongly red a team still alive for 3rd place.
-  const winnerResultClass = (team, actualTeam, checkEliminated) => {
+  // actual winner. Before that, `isOut(team)` reds-out a pick that can no longer win — so a
+  // dead pick doesn't stay gold, mirroring the reach slots. Each card passes its OWN out-test:
+  // champion → `eliminated` (any KO loss ends the title run); 3rd-winner → `outOfBronze` (SF
+  // losers stay eligible, only finalists / pre-SF exits are out). Never share the same set.
+  const winnerResultClass = (team, actualTeam, isOut) => {
     if (!team) return ''
     if (actualTeam) return team === actualTeam ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
-    if (checkEliminated && eliminated.has(team)) return ' rtf-pred-row--wrong'
+    if (isOut) return ' rtf-pred-row--wrong'
     return ''
   }
 
@@ -95,14 +96,14 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   }
 
   // Static winner card (champion / 3rd-place winner) — the member's single pick.
-  function WinnerCard({ node, teams, actualTeam, checkEliminated }) {
+  function WinnerCard({ node, teams, actualTeam, outFn }) {
     const sel = picks[node]
     return (
       <div className="rtf-match rtf-pred">
         {[0, 1].map(i => {
           const team = teams[i]
           const isSel = team && sel === team
-          const result = isSel ? winnerResultClass(team, actualTeam, checkEliminated) : ''
+          const result = isSel ? winnerResultClass(team, actualTeam, outFn?.(team)) : ''
           return (
             <div key={i} className={`rtf-pred-row rtf-pred-row--ro${isSel ? ' rtf-pred-row--sel' : ''}${result}`}>
               <Flag code={codeOf(team)} />
@@ -146,9 +147,9 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
           <div className="rtf-side">{LEFT_COLS.map(c => renderCol(c, 'left'))}</div>
           <div className="rtf-center">
             <div className="rtf-round-title">Champion</div>
-            <WinnerCard node={CHAMPION_NODE} teams={finalists} actualTeam={actualChampion} checkEliminated />
+            <WinnerCard node={CHAMPION_NODE} teams={finalists} actualTeam={actualChampion} outFn={t => eliminated.has(t)} />
             <div className="rtf-round-title rtf-third-title">3rd Place Winner</div>
-            <WinnerCard node={THIRD_WINNER_NODE} teams={bronze} actualTeam={actualBronzeWin} />
+            <WinnerCard node={THIRD_WINNER_NODE} teams={bronze} actualTeam={actualBronzeWin} outFn={t => outOfBronze.has(t)} />
           </div>
           <div className="rtf-side">{RIGHT_COLS.map(c => renderCol(c, 'right'))}</div>
         </div>

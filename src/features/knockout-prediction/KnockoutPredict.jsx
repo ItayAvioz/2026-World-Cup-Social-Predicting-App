@@ -4,7 +4,7 @@ import {
   NODES_BY_PHASE, nodeCandidates, bronzeTeams, CHAMPION_NODE, THIRD_WINNER_NODE,
 } from './bracketTree.js'
 import { useKnockoutPrediction } from './useKnockoutPrediction.js'
-import { knockoutReached, knockoutEliminated, actualWinner } from './scoring.js'
+import { knockoutReached, knockoutEliminated, knockoutOutOfBronze, actualWinner } from './scoring.js'
 import {
   MAX_POINTS, KO_PREDICT_LOCK, KO_FINAL_KICKOFF, ROUND_BONUS, PER_TEAM,
   CHAMPION_POINTS, THIRD_WINNER_POINTS,
@@ -66,6 +66,7 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
   const codeOf = t => teamCodeMap[t]
   const reached = useMemo(() => knockoutReached(games || []), [games])
   const eliminated = useMemo(() => knockoutEliminated(games || []), [games])
+  const outOfBronze = useMemo(() => knockoutOutOfBronze(games || []), [games])
   const finalTs = useMemo(
     () => (games || []).find(g => g.phase === 'final' && g.kick_off_time)?.kick_off_time,
     [games]
@@ -145,21 +146,26 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
   const actualChampion = useMemo(() => actualWinner(games || [], 'final'), [games])
   const actualBronzeWin = useMemo(() => actualWinner(games || [], 'third'), [games])
 
-  // Colour the SELECTED winner row once the game is decided: gold if right, red if wrong.
-  const winnerResultClass = (team, isSel, actual) => {
-    if (!team || !isSel || !actual) return ''
-    return team === actual ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
+  // Colour the SELECTED winner row. Once the game is decided → gold if right, red if wrong.
+  // Before that, `isOut(team)` reds-out a pick that can no longer win, so a dead pick doesn't
+  // stay gold. Each card passes its OWN out-test: champion → `eliminated` (any KO loss ends the
+  // title run); 3rd-winner → `outOfBronze` (SF losers stay eligible). Never share the same set.
+  const winnerResultClass = (team, isSel, actual, isOut) => {
+    if (!team || !isSel) return ''
+    if (actual) return team === actual ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
+    if (isOut) return ' rtf-pred-row--wrong'
+    return ''
   }
 
   // Tap one of two teams to crown the winner of a single match (champion / 3rd-place).
-  function WinnerPickCard({ node, teams, actual }) {
+  function WinnerPickCard({ node, teams, actual, outFn }) {
     const sel = picks[node]
     return (
       <div className="rtf-match rtf-pred">
         {[0, 1].map(i => {
           const team = teams[i]
           const isSel = team && sel === team
-          const result = isSel ? winnerResultClass(team, isSel, actual) : ''
+          const result = isSel ? winnerResultClass(team, isSel, actual, outFn?.(team)) : ''
           return (
             <button
               key={i}
@@ -227,9 +233,9 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
           <div className="rtf-side">{LEFT_COLS.map(c => renderCol(c, 'left'))}</div>
           <div className="rtf-center">
             <div className="rtf-round-title">Champion</div>
-            <WinnerPickCard node={CHAMPION_NODE} teams={finalists} actual={actualChampion} />
+            <WinnerPickCard node={CHAMPION_NODE} teams={finalists} actual={actualChampion} outFn={t => eliminated.has(t)} />
             <div className="rtf-round-title rtf-third-title">3rd Place Winner</div>
-            <WinnerPickCard node={THIRD_WINNER_NODE} teams={bronze} actual={actualBronzeWin} />
+            <WinnerPickCard node={THIRD_WINNER_NODE} teams={bronze} actual={actualBronzeWin} outFn={t => outOfBronze.has(t)} />
           </div>
           <div className="rtf-side">{RIGHT_COLS.map(c => renderCol(c, 'right'))}</div>
         </div>
