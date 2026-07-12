@@ -43,9 +43,16 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
     if (eliminated.has(team)) return ' rtf-pred-row--wrong'
     return ''
   }
-  const winnerResultClass = (team, actualTeam) => {
-    if (!team || !actualTeam) return ''
-    return team === actualTeam ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
+  // Champion / 3rd-winner colouring. Once the decisive game is played, judge against the
+  // actual winner. Before that, `checkEliminated` (champion only) reds-out a pick whose team
+  // is already knocked out — mirrors the reach slots so a dead champion pick doesn't stay gold.
+  // NOT applied to the 3rd-winner card: SF losers ARE the bronze contenders, so `eliminated`
+  // (which includes SF losers) would wrongly red a team still alive for 3rd place.
+  const winnerResultClass = (team, actualTeam, checkEliminated) => {
+    if (!team) return ''
+    if (actualTeam) return team === actualTeam ? ' rtf-pred-row--gold' : ' rtf-pred-row--wrong'
+    if (checkEliminated && eliminated.has(team)) return ' rtf-pred-row--wrong'
+    return ''
   }
 
   // Static actual R32 card (establishes the R16 matchups)
@@ -88,14 +95,14 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   }
 
   // Static winner card (champion / 3rd-place winner) — the member's single pick.
-  function WinnerCard({ node, teams, actualTeam }) {
+  function WinnerCard({ node, teams, actualTeam, checkEliminated }) {
     const sel = picks[node]
     return (
       <div className="rtf-match rtf-pred">
         {[0, 1].map(i => {
           const team = teams[i]
           const isSel = team && sel === team
-          const result = isSel ? winnerResultClass(team, actualTeam) : ''
+          const result = isSel ? winnerResultClass(team, actualTeam, checkEliminated) : ''
           return (
             <div key={i} className={`rtf-pred-row rtf-pred-row--ro${isSel ? ' rtf-pred-row--sel' : ''}${result}`}>
               <Flag code={codeOf(team)} />
@@ -139,7 +146,7 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
           <div className="rtf-side">{LEFT_COLS.map(c => renderCol(c, 'left'))}</div>
           <div className="rtf-center">
             <div className="rtf-round-title">Champion</div>
-            <WinnerCard node={CHAMPION_NODE} teams={finalists} actualTeam={actualChampion} />
+            <WinnerCard node={CHAMPION_NODE} teams={finalists} actualTeam={actualChampion} checkEliminated />
             <div className="rtf-round-title rtf-third-title">3rd Place Winner</div>
             <WinnerCard node={THIRD_WINNER_NODE} teams={bronze} actualTeam={actualBronzeWin} />
           </div>
