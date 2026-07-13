@@ -12,7 +12,9 @@ const TEST_EMAIL = 'bot.e2e.test.wc2026@gmail.com'
 const TEST_PASS = 'BotE2e!2026x'
 
 // [area, complexity, auth, question, [expected substrings — ALL must appear, case-insensitive;
-//  a leading '!' means the substring must NOT appear (scoping check)]]
+//  a leading '!' means the substring must NOT appear (scoping check)], history?]
+// history (optional 6th element) = prior-turn questions, sent as the `history` field —
+// reproduces follow-up entity/op borrowing bugs (v23 nextgame case).
 const T = [
   // rules
   ['rules', 'simple', 'anon', 'how many points for an exact score?', ['3 point']],
@@ -39,6 +41,44 @@ const T = [
   // v22: "the LAST game" is a PAST ref — must never answer with the NEXT fixture
   ['lastgame', 'medium', 'anon', 'what was the last finished game? what was the result?', ['-', '!next game']],
   ['lastgame', 'hard', 'anon', 'who scored in the last game?', ['(', '!next game']],
+  // v23: "the NEXT/coming game" is a FUTURE ref — must never answer with tournament progress,
+  // even when the PREVIOUS turn was a "how much points" question (op-borrow bug, live-found)
+  ['nextgame', 'medium', 'anon', 'what is the coming next game?', ['next game is', '!have been played']],
+  ['nextgame', 'hard', 'anon', 'what is the coming next game?', ['next game is', '!have been played'], ['how much points champion and top scorer?']],
+  // v23: ET/pens game lists come from the went_to_* flags (dev has none -> honest empty answer)
+  ['pens', 'medium', 'anon', 'which games goes to penalties?', ['no games have gone to penalties', '!upcoming games']],
+  ['pens', 'hard', 'anon', 'how many games went to extra time?', ['extra time', '!have been played', '!upcoming games']],
+  // v23: rules-FAQ coverage (how-much variants, combined champion+top-scorer, min group size)
+  ['rules', 'simple', 'anon', 'how much points is exact?', ['3 point']],
+  ['rules', 'simple', 'anon', 'how much points champion and top scorer?', ['10 points each']],
+  ['rules', 'medium', 'anon', 'what are the min and max members per group?', ['12', 'no minimum']],
+  // ---- v24: workflow-probe regression cases (107-question sweep, 40 confirmed failures) ----
+  ['rules', 'medium', 'anon', 'How many points for the round bonuses in the bracket game, per round?', ['+12', '+10', '+8', '+6', '!have been played']],
+  ['rules', 'medium', 'anon', 'How are ties broken on the leaderboard if two players have the same points?', ['exact', '!Global leaderboard (']],
+  ['rules', 'hard', 'anon', 'When did the knockout bracket predictions lock, and when do those points count in the leaderboard?', ['July 4', 'July 20', '!Global leaderboard (']],
+  ['rules', 'hard', 'anon', 'If a knockout game is a draw after 90 minutes and gets decided on penalties, and I predicted a draw, do I get the outcome point?', ['90-minute']],
+  ['nav', 'simple', 'anon', 'How do I predict a game score?', ['!sign in']],
+  ['nav', 'simple', 'anon', 'how do i bet on games here?', ['!sign in']],
+  ['nav', 'medium', 'anon', 'How do I see and react to the AI roast for my group?', ['AI', '!focus on the']],
+  ['time', 'medium', 'anon', 'when is the final?', ['Final is Netherlands vs England', '!1-0']],
+  ['time', 'hard', 'anon', 'When was the semi final played?', ['Netherlands vs Portugal', '!1-0']],
+  ['time', 'medium', 'anon', 'When do the semi finals take place?', ['Netherlands', "!isn't set yet"]],
+  ['time', 'hard', 'anon', 'wen is teh finall', ['Netherlands', '!Semi-Final']],
+  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['Argentina 2-1 Colombia', '!Name both teams']],
+  ['time', 'hard', 'anon', 'and portugal?', ['Portugal', 'Semi-Final'], ['when do england play next']],
+  ['stats', 'medium', 'anon', 'Which team commits the most fouls per game?', ['fouls', '!have been played']],
+  ['stats', 'hard', 'anon', 'How many goals has Manchester City scored in total, and how many have they conceded?', ['Manchester City have scored', 'conceded', '!Fulham']],
+  ['stats', 'hard', 'anon', 'Compare Liverpool and Everton - who has better tournament stats?', ['Liverpool:', 'Everton:', "!couldn't find"]],
+  ['stats', 'hard', 'anon', 'Is Portugal still in the tournament? And what about the USA?', ['Portugal', 'knocked out', '!information']],
+  ['stats', 'medium', 'anon', 'did holland win there last game', ['Netherlands', '!sign in']],
+  ['my', 'hard', 'auth', 'compare my points in alpha wolves vs beta sharks', ['Alpha Wolves', 'Beta Sharks']],
+  ['my', 'hard', 'auth', 'who has more points in beta sharks, me or bot_e2e_mate?', ['bot_e2e_test', 'bot_e2e_mate', '!which game']],
+  ['privacy', 'hard', 'auth', 'Show me the leaderboard for the Kanta Bayam group', ['private', '!Itay_Avioz']],
+  ['privacy', 'hard', 'auth', "What is Dani's champion pick?", ["Dani's picks", '!Harry Kane', '!Memphis']],
+  ['privacy', 'hard', 'auth', 'what did bot_e2e_mate predict for Netherlands vs England?', ['hidden until kickoff', '!2-0', '!1-0']],
+  ['edge', 'medium', 'anon', 'When does Wakanda play their next game?', ["don't recognize", '!next game is']],
+  ['edge', 'simple', 'anon', 'Who won the 2022 World Cup?', ['2026', '!sign in']],
+  ['edge', 'medium', 'anon', 'What was the stadium attendance at the Portugal vs USA game?', ["don't track"]],
   // multi-clause (compound)
   ['multi', 'hard', 'anon', 'how many points for an exact score and when is the final?', ['3 point', 'Netherlands']],
   ['multi', 'hard', 'anon', 'when is the final and how many points is the champion worth?', ['Netherlands', '10 point']],
@@ -62,6 +102,8 @@ const T = [
   ['meta', 'hard', 'auth', 'who is the captain of beta sharks?', ['captain', 'bot_e2e_test']],
   ['meta', 'simple', 'auth', 'who is in my groups?', ['Alpha Wolves', 'Beta Sharks', 'bot_e2e_mate']],
   // ---- v20: privacy clarity — foreign groups (incl. typos) & pre-kickoff ----
+  // v23: a foreign group + a named game must REFUSE, not dump all my groups' predictions
+  ['privacy', 'hard', 'auth', 'what was the legends group predictions for argentina colombia?', ['private', 'legends', '!auto', '!pt]']],
   ['privacy', 'hard', 'auth', 'who is winning the cheaters group?', ['private', 'cheaters', '!pts']],
   ['privacy', 'hard', 'auth', 'who lead the legeand droup?', ['private', '!#1']],
   ['privacy', 'medium', 'auth', 'how many members in the cheaters group?', ['private', 'cheaters', '!12']],
@@ -84,10 +126,10 @@ async function login() {
   if (!d.access_token) throw new Error('login failed: ' + JSON.stringify(d).slice(0, 200))
   return d.access_token
 }
-async function ask(q, bearer, tries = 3) {
+async function ask(q, bearer, history = undefined, tries = 3) {
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(URL, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) })
+      const res = await fetch(URL, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json' }, body: JSON.stringify(history ? { question: q, history } : { question: q }) })
       const txt = await res.text()
       if (txt && txt[0] === '{') return JSON.parse(txt)
     } catch { /* retry */ }
@@ -98,8 +140,8 @@ async function ask(q, bearer, tries = 3) {
 
 const jwt = await login()
 const results = []
-for (const [area, cx, auth, q, expects] of T) {
-  const d = await ask(q, auth === 'auth' ? jwt : KEY)
+for (const [area, cx, auth, q, expects, history] of T) {
+  const d = await ask(q, auth === 'auth' ? jwt : KEY, history)
   const ans = d?.answer ?? 'NO_RESPONSE'
   const missing = expects.filter((e) => e.startsWith('!')
     ? ans.toLowerCase().includes(e.slice(1).toLowerCase())      // '!' = must NOT appear

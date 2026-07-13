@@ -57,7 +57,7 @@
   <rect x="40" y="468" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="494" r="14" fill="#2d6cdf"/><text x="66" y="499" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">7</text>
   <text x="92" y="489" fill="#fff" font-size="14.5" font-weight="600">Extract entities  [D]</text>
-  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group's name, group-MATE names, "last game"</text>
+  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group's name, group-MATE names, "last/next game"</text>
 
   <!-- 8 -->
   <rect x="40" y="526" width="620" height="52" rx="8" fill="#1c1330" stroke="#8a5cd8"/>
@@ -75,8 +75,8 @@
   <rect x="40" y="642" width="620" height="58" rx="8" fill="#0f1c33" stroke="#2d6cdf" stroke-width="2"/>
   <circle cx="66" cy="671" r="14" fill="#2d6cdf"/><text x="66" y="676" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">10</text>
   <text x="92" y="664" fill="#fff" font-size="14.5" font-weight="600">Override routes  [D]  →  SQL → template</text>
-  <text x="92" y="684" fill="#9fb6e0" font-size="12.5">exact answers by shape, not intent (box-score/count/rank/compare/bracket…)</text>
-  <text x="92" y="699" fill="#6fe0a0" font-size="11.5">most questions EXIT here — 0 LLM</text>
+  <text x="92" y="684" fill="#9fb6e0" font-size="12.5">exact answers by shape, not intent (last/next game, ET/pens list, box-score/count/rank/compare…)</text>
+  <text x="92" y="699" fill="#6fe0a0" font-size="11.5">most questions EXIT here — 0 LLM · guards: unknown team, non-2026 year, untracked stat, follow-up "and X?"</text>
 
   <!-- 11 -->
   <rect x="40" y="706" width="620" height="58" rx="8" fill="#141414" stroke="#333"/>
@@ -113,7 +113,7 @@
   <text x="716" y="144" fill="#9fd0ff" font-size="13.5" font-weight="700">STAGE 10 · deterministic override tools [D]  (SQL → template, 0 LLM)</text>
   <g font-size="12.5">
     <text x="716" y="170" fill="#eaeaea" font-weight="600">gameStats</text><text x="860" y="170" fill="#9a9a9a">per-match box score: poss, shots, corners, cards, xG</text>
-    <text x="716" y="194" fill="#eaeaea" font-weight="600">gameDetail</text><text x="860" y="194" fill="#9a9a9a">extra-time / penalties / who advanced</text>
+    <text x="716" y="194" fill="#eaeaea" font-weight="600">gameDetail / etPensList</text><text x="860" y="194" fill="#9a9a9a">ET / pens for one game · which games went to ET/pens</text>
     <text x="716" y="218" fill="#eaeaea" font-weight="600">teamStat</text><text x="860" y="218" fill="#9a9a9a">one team's totals — games played, goals for/against</text>
     <text x="716" y="242" fill="#eaeaea" font-weight="600">playerStat</text><text x="860" y="242" fill="#9a9a9a">one player's goals / assists / cards</text>
     <text x="716" y="266" fill="#eaeaea" font-weight="600">avgGoalsPerGame</text><text x="860" y="266" fill="#9a9a9a">tournament-wide average goals</text>
@@ -121,7 +121,7 @@
     <text x="716" y="314" fill="#eaeaea" font-weight="600">statLeaderboard</text><text x="860" y="314" fill="#9a9a9a">rank leaders (top scorer, best defense…), tie-aware</text>
     <text x="716" y="338" fill="#eaeaea" font-weight="600">compareTeams</text><text x="860" y="338" fill="#9a9a9a">head-to-head form &amp; averages for two teams</text>
     <text x="716" y="362" fill="#eaeaea" font-weight="600">bracketStatus</text><text x="860" y="362" fill="#9a9a9a">is a team still in / knocked out / champion</text>
-    <text x="716" y="386" fill="#eaeaea" font-weight="600">globalStandings</text><text x="860" y="386" fill="#9a9a9a">top of the global leaderboard</text>
+    <text x="716" y="386" fill="#eaeaea" font-weight="600">globalStandings / userPicksPublic</text><text x="960" y="386" fill="#9a9a9a">global board · a user's public picks</text>
   </g>
 
   <!-- group B: registry / intent tools -->
