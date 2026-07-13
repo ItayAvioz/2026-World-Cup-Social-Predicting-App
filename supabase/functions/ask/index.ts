@@ -1,4 +1,21 @@
-// ask — in-app AI bot (DEV ONLY) — v24 workflow-probe fixes (107-question 10-topic sweep → 40 confirmed)
+// ask — in-app AI bot (DEV ONLY) — v26 trust + resilience round (6-agent audit → 60+ findings)
+// v26 TRUST/TRUTH: group typo-matching never substitutes a DIFFERENT name (digit-bearing
+//   tokens excluded from the lev pass — "test3" refused instead of silently becoming "TestA");
+//   "<Name> leaderboard" (no word "group") reaches the group tools, not the global dump;
+//   "when is the LAST game (of the tournament/phase)" = future schedule, never a past result;
+//   pick-value FAQs no longer swallow stat questions ("how many goals does the top scorer have");
+//   count+superlative ("the leading scorer") answers the leader, not tournament totals;
+//   gameStats box score shows ET/pens; etPensList includes friendlies (labeled); compound
+//   split rejects verb-less tails and a clause-2 clarify never pollutes a good clause-1 answer;
+//   game-scoped single-stat answers ("red cards in PSG vs Arsenal"); player-count aggregates
+//   ("how many players got a red card"); bracketStatus ignores future-kickoff (dev-quirk) rows.
+// v26 RESILIENCE/SECURITY: OpenAI outage no longer kills deterministic routes (embed/classify
+//   try/catch -> keyword-only degraded mode; 12s client timeout); DB errors throw (must())
+//   instead of reading as confident empty answers; friendly degraded catch-all (no raw errors);
+//   ask_log table records question/route/answer/latency (service-role only); rate-limit keyed
+//   per user+IP (anon users no longer share one bucket); reindex modes require the service-role
+//   key; poisonable cross-user qa_cache REMOVED; answerCrew = ONE structured call + deterministic
+//   number-grounding check + evidence gate (no LLM call on zero cards); team-names cached 5 min.
 // v24: time-aware phase lookups ("the Final IS ... Jul 19", never a future score/"was"); resolveTeams
 //   TYPO_STOP (lev pass matched "place"→Crystal Palace, "leads"→Leeds); how-to questions route to rules
 //   (never a login gate); rules-FAQ +4 (round bonuses, tie-breaks, points fold-in timing, 90-min/pens
@@ -45,9 +62,6 @@ const EMBED_MODEL = 'text-embedding-3-small'
 const CONF_MIN = 0.28          // below this top-similarity => off-topic
 const CLARIFY_MARGIN = 0.02    // intent gap below this (and low conf) => clarify
 const CLARIFY_CONF = 0.50
-const CACHE_HIT = 0.93
-const JUDGE_MIN = 7
-const MAX_WRITER = 2
 const RATE_MAX = 30, RATE_WIN = 60_000  // 30 questions / 60s / user (best-effort, in-memory)
 
 const RULES = `
@@ -163,6 +177,22 @@ function lev(a: string, b: string): number {
   return d[n]
 }
 
+// v26: keyword-only intent guess for the OpenAI-outage degraded mode — deterministic
+// routes (schedule/scores/standings/my-data) keep answering when embeddings are down.
+function guessIntent(q: string): string {
+  const s = q.toLowerCase()
+  if (/\b(my|me|mine|am i|do i have)\b/.test(s)) return 'my_data'
+  if (/who scored|scorers?\b/.test(s)) return 'who_scored'
+  if (/leaderboard|standings|who('s| is) (winning|leading|top|first)/.test(s)) return 'group_standings'
+  if (/\bpredict(ed)?\b|\bguess(ed)?\b/.test(s)) return 'group_history'
+  if (/\bwhen\b|\bnext\b|fixture|schedule|\bplays?\b|games? (on|today|tomorrow)/.test(s)) return 'schedule'
+  if (/how (do|does|can)|points?|rules?|lock|deadline|worth/.test(s)) return 'rules'
+  return 'stats'
+}
+// v26: a failed query must surface as a retry message — never read as an empty result
+// ("You have no exact scores yet" on a DB blip was a confident lie).
+function must<T>(r: { data: T; error: any }): T { if (r.error) throw new Error('db: ' + r.error.message); return r.data }
+
 // ---- guardrails -------------------------------------------------------------
 function preGuard(q: string): { ok: boolean; msg?: string } {
   if (q.length > 500) return { ok: false, msg: 'That question is a bit long — please shorten it.' }
@@ -175,16 +205,21 @@ function preGuard(q: string): { ok: boolean; msg?: string } {
 // it inline (myExact always lists the games). Clause 2 borrows entities from
 // clause 1 via the existing follow-up history mechanism.
 function splitCompound(q: string): string[] {
-  const m = q.match(/^(.*?\?)\s*(?:and|&)\s+(.{4,})$/i) || q.match(/^(.{10,}?)\s+and\s+((?:when|where|who|what|which|how many|how much)\b.{4,})$/i)
+  const m = q.match(/^(.*?\?)\s*(?:and|&)\s+(.{4,})$/i) || q.match(/^(.{10,}?)\s+and\s+((?:when|where|who|what|which|how many|how much|did|do|does|is|are|has|have|will|can)\b.{4,})$/i)
   if (!m) return [q]
   const tail = m[2].trim()
   if (/^(in\s+)?which (games?|matches|ones)\b/i.test(tail)) return [q]
+  // v26: a verb-less noun fragment ("...? and score") is a continuation of clause 1, not a
+  // second question — splitting it glued a bogus clarify onto a correct clause-1 answer.
+  if (!/\b(when|where|who|what|which|how|did|do|does|is|are|was|were|has|have|will|can|show|list|give|tell)\b/i.test(tail)) return [q]
   return [m[1].trim(), tail]
 }
 const RL = new Map<string, number[]>()
 function rateOk(key: string): boolean {
   const now = Date.now(), arr = (RL.get(key) ?? []).filter((t) => now - t < RATE_WIN)
-  arr.push(now); RL.set(key, arr); return arr.length <= RATE_MAX
+  arr.push(now); RL.set(key, arr)
+  if (RL.size > 500) for (const [k, v] of RL) if (v.every((t) => now - t >= RATE_WIN)) RL.delete(k)  // v26: evict stale keys
+  return arr.length <= RATE_MAX
 }
 
 // ---- classify (embeddings): max-per-intent + margin -------------------------
@@ -202,10 +237,14 @@ async function classify(sb: Sb, qvec: number[]): Promise<{ intent: string; confi
 }
 
 // ---- entity / dimension / operation extraction (deterministic) --------------
+// v26: cached per isolate — team names change only when fixtures are inserted; this was a
+// full games scan on EVERY request. Write-once-read-many (timestamp + array swap).
+let _namesCache: { t: number; v: string[] } = { t: 0, v: [] }
 async function fetchTeamNames(sb: Sb): Promise<string[]> {
+  if (_namesCache.v.length && Date.now() - _namesCache.t < 300_000) return _namesCache.v
   const { data } = await sb.from('games').select('team_home, team_away').range(0, 999)
   const s = new Set<string>(); for (const g of data ?? []) { if (g.team_home) s.add(g.team_home as string); if (g.team_away) s.add(g.team_away as string) }
-  s.delete('TBD'); return [...s]
+  s.delete('TBD'); const v = [...s]; if (v.length) _namesCache = { t: Date.now(), v }; return v
 }
 const TEAM_ALIAS: Record<string, string> = { psg: 'Paris Saint Germain', 'man city': 'Manchester City', 'man utd': 'Manchester United', 'man united': 'Manchester United', spurs: 'Tottenham', usa: 'United States', 'u.s.a': 'United States', 'the states': 'United States', holland: 'Netherlands', oranje: 'Netherlands', 'the dutch': 'Netherlands', 'three lions': 'England', 'les bleus': 'France', 'la albiceleste': 'Argentina', selecao: 'Brazil', 'la roja': 'Spain', socceroos: 'Australia', 'the azzurri': 'Italy', azzurri: 'Italy', 'die mannschaft': 'Germany' }
 const COMMON_TOK = new Set(['united', 'city', 'republic', 'north', 'south', 'saint', 'their', 'about', 'which', 'these', 'those', 'there', 'where'])
@@ -318,7 +357,7 @@ async function scheduleList(sb: Sb, date: { start: string; end: string; label: s
   if (date) q = q.gte('kick_off_time', date.start).lt('kick_off_time', date.end)
   else if (phase) q = q.eq('phase', phase)
   else q = q.gt('kick_off_time', new Date().toISOString())
-  const rows = (await q).data ?? []
+  const rows = must(await q) ?? []
   if (!rows.length) return date ? `No games are scheduled for ${date.label}.` : (phase ? `No ${PHASE[phase] ?? phase} games are scheduled yet.` : `No upcoming games are scheduled.`)
   const head = date ? `Games ${date.label}:` : (phase ? `${PHASE[phase] ?? phase} games:` : `Upcoming games:`)
   // v23: never show a score for a game that hasn't kicked off (dev rows can carry future scores)
@@ -327,16 +366,17 @@ async function scheduleList(sb: Sb, date: { start: string; end: string; label: s
 }
 async function tournamentProgress(sb: Sb, q: string): Promise<string> {
   const base = sb.from('games').select('score_home, score_away', { count: 'exact', head: false }).neq('phase', 'friendly').neq('team_home', 'TBD')
-  const { data } = await base
-  const rows = data ?? []
+  const rows = must(await base) ?? []
   const played = rows.filter((g) => g.score_home !== null)
   const remaining = rows.length - played.length
   if (/\bgoals?\b/.test(q.toLowerCase())) { const goals = played.reduce((s, g) => s + (g.score_home as number) + (g.score_away as number), 0); return `${goals} goals have been scored across ${played.length} completed games so far.` }
   return `${played.length} of ${rows.length} games have been played; ${remaining} remain.`
 }
 async function findGame(sb: Sb, a: string, b: string) {
-  const one = async (h: string, w: string) => (await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq('team_home', h).eq('team_away', w).order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
-  return (await one(a, b)) ?? (await one(b, a))
+  // v26: one query for both orientations (was two sequential round-trips). Team names are
+  // canonical DB values and contain no commas/parens, so the or() filter is safe.
+  const { data } = await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').or(`and(team_home.eq.${a},team_away.eq.${b}),and(team_home.eq.${b},team_away.eq.${a})`).order('kick_off_time', { ascending: false }).limit(1)
+  return data?.[0]
 }
 // Shared: extra-time / penalties tail appended to any game summary.
 function etPensLine(g: any): string {
@@ -398,7 +438,9 @@ async function compareTeams(sb: Sb, a: string, b: string): Promise<string> {
 async function bracketStatus(sb: Sb, team: string): Promise<string> {
   const fut = (await sb.from('games').select('team_home, team_away, phase, kick_off_time').or(`team_home.eq.${team},team_away.eq.${team}`).is('score_home', null).neq('phase', 'friendly').gt('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: true }).limit(1)).data?.[0]
   if (fut) { const opp = fut.team_home === team ? fut.team_away : fut.team_home; return `${team} is still in it — next up: ${PHASE[fut.phase as string] ?? fut.phase} vs ${opp}, ${fmtKO(fut.kick_off_time as string)}.` }
-  const last = (await sb.from('games').select('team_home, team_away, phase, knockout_winner, score_home').or(`team_home.eq.${team},team_away.eq.${team}`).not('score_home', 'is', null).neq('phase', 'friendly').neq('phase', 'group').order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
+  // v26: .lte(kickoff) — dev rows can carry a knockout_winner on a FUTURE game; without the
+  // filter the bot declared a tournament champion days before the final.
+  const last = (await sb.from('games').select('team_home, team_away, phase, knockout_winner, score_home').or(`team_home.eq.${team},team_away.eq.${team}`).not('score_home', 'is', null).neq('phase', 'friendly').neq('phase', 'group').lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
   if (last && last.knockout_winner && last.knockout_winner !== team) { const opp = last.team_home === team ? last.team_away : last.team_home; return `${team} were knocked out in the ${PHASE[last.phase as string] ?? last.phase} by ${opp}.` }
   if (last && last.knockout_winner === team && last.phase === 'final') return `${team} won the tournament! 🏆`
   return `${team} are in the tournament — I don't see an elimination for them yet.`
@@ -441,8 +483,7 @@ async function teamStat(sb: Sb, team: string, dim: string | null): Promise<strin
 }
 // P1: game detail — extra time / penalties / result attributes
 async function gameDetail(sb: Sb, a: string, b: string): Promise<string> {
-  const one = async (h: string, w: string) => (await sb.from('games').select('team_home, team_away, score_home, score_away, phase, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq('team_home', h).eq('team_away', w).order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
-  const g = (await one(a, b)) ?? (await one(b, a))
+  const g = await findGame(sb, a, b)
   if (!g) return `I couldn't find a game between ${a} and ${b}.`
   if (g.score_home === null) return `${g.team_home} vs ${g.team_away} hasn't been played yet.`
   const base = `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase}) after 90'.`
@@ -465,7 +506,42 @@ async function gameStats(sb: Sb, a: string, b: string): Promise<string> {
   const head = `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away} (${PHASE[game.phase as string] ?? game.phase})`
   if (!rh || !ra) return `${head}. I don't have detailed match stats for this game yet.`
   const line = (r: any) => `${r.team}: ${r.possession ?? '—'}% poss · ${r.shots_total ?? '—'} shots (${r.shots_on_target ?? '—'} on target) · ${r.corners ?? '—'} corners · ${r.fouls ?? '—'} fouls · ${r.yellow_cards ?? 0}Y ${r.red_cards ?? 0}R · ${r.offsides ?? '—'} offside${r.xg != null ? ` · xG ${(+r.xg).toFixed(1)}` : ''}`
-  return `${head}:\n${line(rh)}\n${line(ra)}`
+  return `${head}:\n${line(rh)}\n${line(ra)}${etPensLine(game) ? '\n' + etPensLine(game).trim() : ''}`  // v26: box score shows ET/pens
+}
+// v26: ONE stat for ONE game ("how many red cards were there in PSG vs Arsenal?") — the full
+// box-score dump is reserved for "stats"-type asks.
+async function gameStatSingle(sb: Sb, a: string, b: string, dim: string): Promise<string> {
+  const game = await findGame(sb, a, b)
+  if (!game || game.score_home === null) return `I couldn't find a completed game between ${a} and ${b}.`
+  const { data } = await sb.from('game_team_stats').select('team, possession, shots_total, shots_on_target, corners, fouls, yellow_cards, red_cards, offsides, xg').eq('game_id', game.id)
+  const rows = data ?? []
+  const rh = rows.find((r) => r.team === game.team_home), ra = rows.find((r) => r.team === game.team_away)
+  const head = `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away} (${PHASE[game.phase as string] ?? game.phase})`
+  if (!rh || !ra) return `${head}. I don't have detailed match stats for this game yet.`
+  const pick = (r: any): string => {
+    switch (dim) {
+      case 'red': { const n = r.red_cards ?? 0; return `${n} red card${n === 1 ? '' : 's'}` }
+      case 'yellow': { const n = r.yellow_cards ?? 0; return `${n} yellow card${n === 1 ? '' : 's'}` }
+      case 'cards': return `${r.yellow_cards ?? 0} yellow, ${r.red_cards ?? 0} red`
+      case 'corners': return `${r.corners ?? 0} corners`
+      case 'fouls': return `${r.fouls ?? 0} fouls`
+      case 'possession': return `${r.possession ?? '—'}% possession`
+      default: return `${r.shots_total ?? 0} shots (${r.shots_on_target ?? 0} on target)`
+    }
+  }
+  return `${head}: ${game.team_home} ${pick(rh)} · ${game.team_away} ${pick(ra)}.${etPensLine(game)}`
+}
+// v26: how many PLAYERS have scored / been booked / sent off — tournament-wide player counts
+// (used to dump the nearest stat card instead of answering the count).
+async function playerCount(sb: Sb, dim: string): Promise<string> {
+  const col = dim === 'red' ? 'total_red_cards' : dim === 'yellow' ? 'total_yellow_cards' : dim === 'assists' ? 'total_assists' : dim === 'cards' ? 'total_yellow_cards' : 'total_goals'
+  const noun = dim === 'red' ? 'received a red card' : dim === 'yellow' ? 'picked up a yellow card' : dim === 'assists' ? 'recorded an assist' : dim === 'cards' ? 'been booked' : 'scored'
+  const { count } = await sb.from('player_tournament_stats').select('player_name', { count: 'exact', head: true }).gt(col, 0).gt('games_played', 0)
+  if (dim === 'cards') {
+    const { count: reds } = await sb.from('player_tournament_stats').select('player_name', { count: 'exact', head: true }).gt('total_red_cards', 0).gt('games_played', 0)
+    return `${count ?? 0} players have been booked (yellow) and ${reds ?? 0} ${(reds ?? 0) === 1 ? 'has' : 'have'} been sent off in the tournament so far.`
+  }
+  return `${count ?? 0} player${(count ?? 0) === 1 ? ' has' : 's have'} ${noun} in the tournament so far.`
 }
 // v23: list / count the finished games that went to penalties or extra time (from the
 // went_to_* flags). "Which games went to pens" used to fall into the fixtures list.
@@ -473,19 +549,23 @@ async function etPensList(sb: Sb, q: string): Promise<string> {
   const s = q.toLowerCase()
   const wantPens = /penalt|shoot.?out/.test(s)
   const col = wantPens ? 'went_to_penalties' : 'went_to_extra_time'
-  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq(col, true).not('score_home', 'is', null).neq('phase', 'friendly').order('kick_off_time', { ascending: true })
+  // v26: friendlies are included but labeled — "which games went to pens" answered "none"
+  // while the PSG-Arsenal friendly had a 4-3 shootout sitting right there in the flags.
+  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq(col, true).not('score_home', 'is', null).order('kick_off_time', { ascending: true })
   const rows = data ?? []
   const label = wantPens ? 'penalties' : 'extra time'
-  if (!rows.length) return `No games have gone to ${label} yet.`
-  const list = rows.map((g) => `• ${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})${etPensLine(g)}`).join('\n')
-  if (/how many|how much|number of|\bcount\b/.test(s)) return `${rows.length} game${rows.length === 1 ? ' has' : 's have'} gone to ${label} so far:\n${list}`
-  return `Games that went to ${label}:\n${list}`
+  const wc = rows.filter((g) => g.phase !== 'friendly'), fr = rows.filter((g) => g.phase === 'friendly')
+  const fmt = (g: any) => `• ${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})${etPensLine(g)}`
+  if (!wc.length) return `No World Cup games have gone to ${label} yet.` + (fr.length ? `\nFriendlies that did:\n` + fr.map(fmt).join('\n') : '')
+  const extra = fr.length ? `\nFriendlies too:\n` + fr.map(fmt).join('\n') : ''
+  if (/how many|how much|number of|\bcount\b/.test(s)) return `${wc.length} World Cup game${wc.length === 1 ? ' has' : 's have'} gone to ${label} so far:\n${wc.map(fmt).join('\n')}${extra}`
+  return `World Cup games that went to ${label}:\n${wc.map(fmt).join('\n')}${extra}`
 }
 
 // private (RLS via user JWT)
 type Grp = { id: string; name: string }
 async function myGroups(sbUser: Sb, me: string) {
-  const gm = (await sbUser.from('group_members').select('group_id').eq('user_id', me)).data ?? []
+  const gm = must(await sbUser.from('group_members').select('group_id').eq('user_id', me)) ?? []
   const ids = gm.map((r) => r.group_id as string); if (!ids.length) return [] as Grp[]
   const gr = (await sbUser.from('groups').select('id, name').in('id', ids)).data ?? []; return gr.map((g) => ({ id: g.id as string, name: g.name as string }))
 }
@@ -504,8 +584,12 @@ function resolveGroupsAll(q: string, groups: Grp[]): Grp[] {
     if (ql.includes(' ' + nl + ' ')) score = 100 + nl.length
     else {
       const toks = nl.split(' ').filter((w) => w.length >= 3 && !['the', 'group', 'team'].includes(w))
-      score = toks.filter((w) => ql.includes(' ' + w + ' ')).length
-      if (!score) for (const t of toks) for (const qw of qtok) { const L = lev(t, qw); if ((t.length >= 4 && L === 1) || (t.length >= 6 && L === 2)) { score = 1; break } }  // typo tolerance
+      score = toks.filter((w) => ql.includes(' ' + w + ' ')).length * 10
+      // v26: typo tolerance NEVER substitutes a distinct name — digit-bearing tokens are
+      // excluded from the lev pass ("test3" is one edit from "TestA" but is a DIFFERENT
+      // group; "alpha wolvs" -> "Alpha Wolves" stays forgiven). The refusal path then
+      // fires with the literal candidate instead of silently answering the wrong group.
+      if (!score) for (const t of toks) for (const qw of qtok) { const L = lev(t, qw); if (((t.length >= 4 && L === 1) || (t.length >= 6 && L === 2)) && !/\d/.test(t) && !/\d/.test(qw)) { score = 1; break } }
     }
     if (score) hits.push({ g, score })
   }
@@ -520,10 +604,13 @@ function groupRefCandidate(q: string): string | null {
   // v23: any "<words> group" now qualifies (was preposition-anchored only, so "the legends
   // group predictions" slipped through and dumped ALL the caller's groups). Filler tokens
   // are stripped from the front; if nothing meaningful remains it's not a group name.
-  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'entire'])
-  const NOUN_STOP = new Set(['stage', 'stages', 'prediction', 'predictions', 'member', 'members', 'leaderboard', 'standings', 'standing', 'table', 'board', 'chat', 'rank', 'ranking', 'game', 'games'])
+  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'entire', 'global', 'overall', 'app', 'main', 'current', 'live', 'full', 'complete', 'world', 'worldwide', 'total', 'league', 'points', 'today', 'todays'])
+  const NOUN_STOP = new Set(['stage', 'stages', 'prediction', 'predictions', 'member', 'members', 'leaderboard', 'standings', 'standing', 'table', 'board', 'chat', 'rank', 'ranking', 'game', 'games', 'player', 'players', 'team', 'teams', 'scorer', 'scorers', 'trivia', 'bracket', 'champion'])
+  // v26: "<Name> leaderboard/standings/table" (no literal word "group") is also a group-name
+  // reference — "Beta Sharks leaderboard" was grabbed by the bare global-leaderboard cue.
   const m = s.match(/([a-z0-9א-׿]+(?: [a-z0-9א-׿]+)?)'?s? (?:group|droup|gorup|grup|goup)\b/)
     || s.match(/\b(?:group|droup|gorup|grup|goup) (?:called |named )?([a-z0-9א-׿]+)/)
+    || s.match(/([a-z0-9א-׿]+(?: [a-z0-9א-׿]+)?)'?s? (?:leaderboard|standings|table)\b/)
   if (!m) return null
   const toks = m[1].trim().split(' ').filter((w) => !STOP.has(w))
   if (!toks.length || toks.some((w) => NOUN_STOP.has(w))) return null
@@ -665,7 +752,7 @@ async function myFocus(sbUser: Sb, me: string, all: Grp[], target: Grp | null, k
 async function myExact(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null): Promise<string> {
   let q = sbUser.from('predictions').select('game_id, group_id').eq('user_id', me).eq('points_earned', 3)
   if (target) q = q.eq('group_id', target.id)
-  const rows = (await q).data ?? []
+  const rows = must(await q) ?? []
   if (!rows.length) return target ? `No exact scores in ${target.name} yet — keep predicting!` : `You have no exact scores yet — keep predicting!`
   const ids = [...new Set(rows.map((r) => r.game_id as string))]
   const games = ((await sbPublic.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
@@ -681,7 +768,7 @@ async function groupStandings(sbUser: Sb, me: string, mostExact: boolean, all: G
   if (!all.length) return `You're not in any group yet — ask me "who's winning overall" for the global leaderboard.`
   const groups = target ? [target] : all
   const blocks: string[] = []
-  for (const g of groups) { const rows = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]; if (!rows.length) { blocks.push(`${g.name}: (no members)`); continue }
+  for (const g of groups) { const rows = (must(await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })) ?? []) as any[]; if (!rows.length) { blocks.push(`${g.name}: (no members)`); continue }
     if (mostExact) { const t = [...rows].sort((a, b) => b.exact_scores - a.exact_scores)[0]; blocks.push(`${g.name}: most exact — ${t.username} (${t.exact_scores} exact, ${t.total_points} pts).`) }
     else blocks.push(`${g.name}: ` + [...rows].sort((a, b) => a.group_rank - b.group_rank).slice(0, 5).map((r) => `#${r.group_rank} ${r.username} ${r.total_points}pts${r.user_id === me ? ' (you)' : ''}`).join(', ')) }
   return blocks.join('\n')
@@ -700,8 +787,7 @@ async function userPicksPublic(sb: Sb, q: string): Promise<string | null> {
   return `${hit}'s picks (public since the June 11 lock):\n` + lines.join('\n')
 }
 async function globalStandings(sb: Sb, limit = 5): Promise<string> {
-  const { data } = await sb.rpc('get_leaderboard')
-  const rows = (data ?? []) as any[]; if (!rows.length) return 'The leaderboard is empty.'
+  const rows = (must(await sb.rpc('get_leaderboard')) ?? []) as any[]; if (!rows.length) return 'The leaderboard is empty.'
   // The global board is one row per (player x group) — a player in N groups has N ranked rows.
   // Show them as-is with the group name; do NOT dedupe by username (that hid real ranks).
   const top = rows.slice(0, Math.max(1, Math.min(limit, 20)))
@@ -712,7 +798,7 @@ async function groupHistory(sbPublic: Sb, sbUser: Sb, me: string, a: string, b: 
   // v23: honor a group the caller named ("Demo group predictions for X") — scope to it.
   let q = sbUser.from('predictions').select('user_id, group_id, pred_home, pred_away, points_earned, is_auto').eq('game_id', game.id)
   if (target) q = q.eq('group_id', target.id)
-  const { data: preds } = await q
+  const preds = must(await q)
   // v20: say exactly WHY nothing is visible — pre-kickoff privacy vs no shared group.
   if (!preds || preds.length === 0) {
     if (new Date(game.kick_off_time as string) > new Date()) return `${game.team_home} vs ${game.team_away} hasn't kicked off yet — everyone's predictions stay hidden until kickoff. Ask me again after the whistle!`
@@ -735,9 +821,11 @@ function rulesFAQ(q: string): string | null {
   if (/(penalt|extra time|shoot.?out)[\s\S]{0,90}(points?\b|predict|outcome|scoring)|(points?\b|predict|outcome|scoring)[\s\S]{0,90}(penalt|extra time|shoot.?out)/.test(s) && !/which games|what games|how many games|list/.test(s)) return "Prediction points are scored on the 90-minute result ONLY — extra time and penalties never change prediction scoring (they only decide who advances). Predicted a draw and it's level after 90'? You get the outcome point even if it's decided on penalties."
   if (/outcome.*(point|worth)|point.*(win|draw|loss|outcome)|what do i get for.*(result|win|draw|correct)|correct (result|outcome)/.test(s)) return 'A correct outcome (Win/Draw/Loss) is worth 1 point. An exact scoreline is 3 points total (it already includes the outcome point).'
   // v23: champion AND top scorer asked together -> answer both (each FAQ line alone dropped half)
-  if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s)) return 'The Champion and Top Scorer picks are worth 10 points each.'
-  if (/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) return 'A correct Champion pick is worth 10 points.'
-  if (/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
+  // v26: pick-value FAQs must not swallow STAT questions — "how many goals does the top
+  // scorer have?" is a leaderboard lookup, not the 10-point rule.
+  if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s) && !/goals?\b|assists?\b|scored\b/.test(s)) return 'The Champion and Top Scorer picks are worth 10 points each.'
+  if ((/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) && !/goals?\b|assists?\b|scored\b/.test(s)) return 'A correct Champion pick is worth 10 points.'
+  if ((/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) && !/goals?\b|assists?\b|scored\b|\bhave\b|\bhas\b/.test(s)) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
   // v24: whole-round bonuses ("how many points for the round bonuses, per round?")
   if (/round bonus|bonus(es)? (for|per|of|in)|whole round|full round|entire round/.test(s)) return 'Knockout-bracket whole-round bonuses: QF +12, SF +10, Final +8, 3rd-4th +6 — on top of +2 for every team you correctly have reaching a round.'
   if (/(max|maximum|highest|most).*(bracket|road to final)|bracket.*(max|maximum|how many points|points can|worth)/.test(s)) return 'The knockout bracket game is worth up to 83 points in total (max).'
@@ -758,39 +846,28 @@ function rulesFAQ(q: string): string | null {
 }
 
 // ---- RAG (fuzzy describe only) ----------------------------------------------
-async function searchStats(sb: Sb, qvec: number[], teams: string[]): Promise<{ title: string; content: string }[]> {
+async function searchStats(sb: Sb, qvec: number[] | null, teams: string[]): Promise<{ title: string; content: string }[]> {
   if (teams.length) { const { data } = await sb.from('kb_embeddings').select('title, content').in('title', teams); if (data && data.length) return data as any[] }  // fetch resolved entity cards directly
+  if (!qvec) return []  // v26: degraded mode (no embedding) — evidence gate handles the empty set
   const { data } = await sb.rpc('match_kb', { query_embedding: qvec, match_count: 6, kind_filter: null })
   return (data ?? []) as { title: string; content: string }[]
 }
+// v26: ONE structured Writer call + a DETERMINISTIC grounding check (was a 2-4-call
+// Writer<->Judge loop whose LLM judge silently PASSED answers when its JSON failed to
+// parse). Evidence gate: zero retrieved cards = no LLM call at all. Every number in the
+// answer must literally appear in the facts, else the honest "no stats" fallback fires.
 async function answerCrew(openai: OpenAI, question: string, cards: { content: string }[]): Promise<{ answer: string; attempts: number; score: number }> {
-  const facts = cards.map((c) => '- ' + c.content).join('\n') || '(no stats found)'
-  let best = { text: '', score: -1 }, feedback = '', attempts = 0
-  for (let i = 1; i <= MAX_WRITER; i++) {
-    attempts = i
-    const w = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.3, seed: 42, max_tokens: 300, messages: [
-      { role: 'system', content: `You answer WorldCup app questions using ONLY the FACTS below. Be concise, friendly, accurate. If the facts don't cover it, say so honestly. Never invent numbers. Do NOT rank or claim "the most/best" — that is handled elsewhere.\n\nFACTS:\n${facts}` },
-      { role: 'user', content: question + (feedback ? `\n\n(Fix this from the last try: ${feedback})` : '') },
-    ] })
-    const text = w.choices[0]?.message?.content?.trim() ?? ''
-    const j = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.1, seed: 1, max_tokens: 120, response_format: { type: 'json_object' }, messages: [
-      { role: 'system', content: 'You are a strict judge. Given FACTS and an ANSWER, return JSON {"score":0-10,"feedback":"one line"}. Score high only if the answer uses ONLY the facts, invents no numbers, and actually answers the question.' },
-      { role: 'user', content: `FACTS:\n${facts}\n\nQUESTION: ${question}\n\nANSWER: ${text}` },
-    ] })
-    let score = 5; try { const p = JSON.parse(j.choices[0]?.message?.content ?? '{}'); score = p.score ?? 5; feedback = p.feedback ?? '' } catch { /* keep */ }
-    if (score > best.score) best = { text, score }
-    if (score >= JUDGE_MIN) break
-  }
-  return { answer: best.text, attempts, score: best.score }
-}
-
-// ---- cache (rules only) -----------------------------------------------------
-async function cacheLookup(sb: Sb, qvec: number[]): Promise<string | null> {
-  const { data } = await sb.rpc('match_cache', { query_embedding: qvec }); const r = (data ?? [])[0] as any
-  return r && r.similarity >= CACHE_HIT && r.intent === 'rules' ? r.answer : null
-}
-async function cacheWrite(sbService: Sb, question: string, qvec: number[], intent: string, answer: string) {
-  try { await sbService.from('qa_cache').insert({ question, embedding: qvec, intent, answer }) } catch { /* non-fatal */ }
+  if (!cards.length) return { answer: '', attempts: 0, score: 0 }
+  const facts = cards.map((c) => '- ' + c.content).join('\n')
+  const w = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 320, response_format: { type: 'json_object' }, messages: [
+    { role: 'system', content: `You answer WorldCup app questions using ONLY the FACTS below. Be concise, friendly, accurate. Never invent numbers. Do NOT rank or claim "the most/best" — that is handled elsewhere. Return JSON {"answer":"...","grounded":true|false} where grounded=false means the facts do not cover the question.\n\nFACTS:\n${facts}` },
+    { role: 'user', content: question },
+  ] })
+  let text = '', grounded = false
+  try { const p = JSON.parse(w.choices[0]?.message?.content ?? '{}'); text = String(p.answer ?? '').trim(); grounded = p.grounded !== false } catch { /* fall through to fallback */ }
+  const factNums = new Set(facts.match(/\d+(?:\.\d+)?/g) ?? []); factNums.add('2026')
+  const ok = grounded && !!text && (text.match(/\d+(?:\.\d+)?/g) ?? []).every((n) => factNums.has(n))
+  return { answer: ok ? text : '', attempts: 1, score: ok ? 10 : 0 }
 }
 
 // ---- reindex ----------------------------------------------------------------
@@ -922,12 +999,17 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
   // intent (e.g. "how many points is the top scorer worth"). The exact-score FAQ regex is scoped
   // to require "points", so first-person personal counts ("how many exact scores do I have") fall
   // through to normal routing rather than being answered as a rule.
-  { const faqEarly = rulesFAQ(question); if (faqEarly) return { answer: faqEarly, pub: { intent: 'rules' }, extra: { llm_used: false } } }
+  { const faqEarly = rulesFAQ(question); if (faqEarly) return { answer: faqEarly, pub: { intent: 'rules' }, extra: { llm_used: false, route: 'rules_faq' } } }
 
-  const [qvec] = await embed(openai, question)
-  const cls = await classify(sbPublic, qvec)
+  // v26: OpenAI must never take down the deterministic routes — on embed/classify failure
+  // fall back to keyword-only routing (qvec=null skips the dim-embedding and RAG paths).
+  let qvec: number[] | null = null
+  let cls = { intent: 'rules', confidence: 0.5, margin: 1, second: '' }
+  let degraded = false
+  try { const [v] = await embed(openai, question); qvec = v; cls = await classify(sbPublic, qvec) }
+  catch { degraded = true; cls = { intent: guessIntent(question), confidence: 0.29, margin: 1, second: '' } }
   let teams = resolveTeams(question, names)
-  let dim = await classifyDim(sbPublic, question, qvec)
+  let dim = qvec ? await classifyDim(sbPublic, question, qvec) : detectDim(question)
   let agg = detectAgg(question)
   let op = detectOp(question)
   let phase = detectPhase(question)
@@ -944,7 +1026,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
   let intent = cls.intent
   if (intent === 'who_scored' && detectPredicate(question)) intent = 'group_history'  // "who PREDICTED..." vs "who SCORED..."
   const spec: Spec = { intent, confidence: Number(cls.confidence.toFixed(3)), margin: Number(cls.margin.toFixed(3)), second: cls.second, op, dim, teams, date: resolveDate(question), phase, predicate: detectPredicate(question) }
-  const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim }
+  const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim, ...(degraded ? { degraded: true } : {}) }
   const done = (answer: string, extra: Record<string, unknown> = {}): RouteOut => ({ answer: answer || "Sorry, I couldn't find an answer.", pub: pubSpec, extra })
   console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length }))
   const qlow = question.toLowerCase()
@@ -1013,14 +1095,24 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
     // v24: stats nobody tracks — be honest instead of answering with something else.
     if (/attendance|referee|\bweather\b|stadium|\bcrowd\b|throw.?ins?\b|\bvar\b/.test(qlow) && !/possession|shots?|corners|cards/.test(qlow))
       return done("I don't track that — for a game I can give you the score, scorers and match stats (shots, possession, corners, fouls, cards, offsides, xG).", { llm_used: false })
+    // v26: "when is the LAST game (of the tournament / group stage)?" is a FUTURE schedule
+    // question — the latest kickoff, never a past result (this used to answer a played QF).
+    if (/\bwhen (is|are|does|will)\b/.test(qlow) && /\blast\b[\s\S]{0,24}\b(game|match|fixture)\b/.test(qlow)) {
+      let q2 = sbPublic.from('games').select('team_home, team_away, phase, kick_off_time').neq('phase', 'friendly').neq('team_home', 'TBD').order('kick_off_time', { ascending: false }).limit(1)
+      if (spec.phase) q2 = q2.eq('phase', spec.phase)
+      const g = (await q2).data?.[0]
+      if (g) return done(`The last ${spec.phase ? (PHASE[spec.phase] ?? spec.phase) + ' game' : 'game of the tournament'} is ${g.team_home} vs ${g.team_away} — ${PHASE[g.phase as string] ?? g.phase}, ${fmtKO(g.kick_off_time as string)}.`, { llm_used: false, route: 'last_fixture' })
+    }
     // v22: "the LAST game" is a PAST reference — it must never fall into the next-game
     // lookup ("what was the last finished game?" used to answer with the NEXT fixture).
     // Resolves the most recent kicked-off finished game (or a named team's last game).
-    if (/\b(last|latest|previous|most recent)\b[\s\S]{0,24}\b(game|match|fixture|result|score|one)\b|yesterday'?s? (game|match)|\bjust (finished|ended|concluded)\b/i.test(qlow) && !/next|coming|upcoming|remaining|left\b|last 16/.test(qlow) && spec.teams.length <= 1) {
-      const g = await resolveGameRef(sbPublic, 'last game', spec.teams, null)
+    // v26: future-tense framings excluded (handled above); a detected phase is honored
+    // ("what was the last quarter final" = that phase's most recent game).
+    if (/\b(last|latest|previous|most recent)\b[\s\S]{0,24}\b(game|match|fixture|result|score|one)\b|yesterday'?s? (game|match)|\bjust (finished|ended|concluded)\b/i.test(qlow) && !/next|coming|upcoming|remaining|left\b|last 16/.test(qlow) && !/\bwhen (is|are|does|will)\b/.test(qlow) && spec.teams.length <= 1) {
+      const g = await resolveGameRef(sbPublic, 'last game', spec.teams, spec.phase)
       if (g) {
-        if (/who scored|scorers?\b|who got the goals/.test(qlow)) return done(await whoScored(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false })
-        return done(await gameDetail(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false })
+        if (/who scored|scorers?\b|who got the goals/.test(qlow)) return done(await whoScored(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false, route: 'last_game_scorers' })
+        return done(await gameDetail(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false, route: 'last_game' })
       }
     }
     // v23: "the NEXT/coming game" is a FUTURE reference — route it straight to the
@@ -1032,9 +1124,13 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
     // went_to_* flags (used to fall into the upcoming-fixtures list or tournament progress).
     if (/penalt|shoot.?out|extra time/i.test(qlow) && spec.teams.length < 2 && !/what happens|affects?|\brules?\b|predictions?|scoring|points/.test(qlow) && (/\b(which|what|list|show|any|how many|how much)\b[\s\S]{0,30}\b(games?|matches)\b/.test(qlow) || /\bgames? (that |which )?(went|go(es)?|gone)\b/.test(qlow)))
       return done(await etPensList(sbPublic, question), { llm_used: false })
+    // v26: a SINGLE-stat game question ("how many red cards in PSG vs Arsenal?") answers just
+    // that stat — the full box-score dump is reserved for "stats"-type asks.
+    if (spec.teams.length >= 2 && spec.dim && !/\bstats?\b|statistic|box score/.test(qlow) && /cards?|corners|fouls|possession|shots?|offsides?|\bxg\b|yellow|red/.test(qlow) && !/who scored|scorer|summar/i.test(qlow) && spec.op !== 'compare' && !/tournament|overall|in total|this competition/.test(qlow))
+      return done(await gameStatSingle(sbPublic, spec.teams[0], spec.teams[1], spec.dim), { llm_used: false, route: 'game_stat_single' })
     // P1: per-game match stats (box score) — "shots/corners/possession/cards for TeamA vs TeamB".
     // v24: +cards/fouls/offsides keywords; never hijack a COMPARE or tournament-wide question.
-    if (spec.teams.length >= 2 && /\bstat|statistic|\bshots?\b|corners|possession|passes|\bxg\b|box score|cards?\b|fouls|offsides?/i.test(qlow) && !/who scored|scorer|summar/i.test(qlow) && spec.op !== 'compare' && !/tournament|overall|in total|this competition/.test(qlow)) return done(await gameStats(sbPublic, spec.teams[0], spec.teams[1]), { llm_used: false })
+    if (spec.teams.length >= 2 && /\bstat|statistic|\bshots?\b|corners|possession|passes|\bxg\b|box score|cards?\b|fouls|offsides?/i.test(qlow) && !/who scored|scorer|summar/i.test(qlow) && spec.op !== 'compare' && !/tournament|overall|in total|this competition/.test(qlow)) return done(await gameStats(sbPublic, spec.teams[0], spec.teams[1]), { llm_used: false, route: 'box_score' })
     // P1: game detail (extra time / penalties). (box-score & detail are public match data — "give me"
     // is NOT a personal cue here, so no first-person guard; only tournamentProgress needs one below.)
     if (/extra time|\bet\b|penalt|shoot.?out|went to (extra|pens)/i.test(qlow) && spec.teams.length >= 2) return done(await gameDetail(sbPublic, spec.teams[0], spec.teams[1]), { llm_used: false })
@@ -1046,6 +1142,12 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
     if (spec.op === 'count' || agg !== 'none') {
       const metric = dimToMetric(spec.dim, question)
       const wantsGames = /\bgames?\b|\bmatch(es)?\b|played|remain|left|fixtures?/.test(qlow) && !/goal|assist|card|per (game|match)/.test(qlow)
+      // v26: "how many goals has the LEADING scorer scored?" — a superlative entity inside a
+      // count question is a rank answer, not tournament totals.
+      if (/\b(top|leading|best)\b[\s\S]{0,16}\b(scorer|goalscorer|player)\b/.test(qlow) && metric && !firstPerson) return done(await statLeaderboard(sbPublic, metric), { llm_used: false, route: 'stat_leader' })
+      // v26: "how many PLAYERS got a red card / scored?" — count players, never a stat-card dump.
+      if (/\bplayers?\b/.test(qlow) && /red|yellow|card|goal|assist|scor/.test(qlow) && !wantsGames && !firstPerson)
+        return done(await playerCount(sbPublic, spec.dim ?? (qlow.includes('red') ? 'red' : qlow.includes('yellow') ? 'yellow' : /card|book/.test(qlow) ? 'cards' : /assist/.test(qlow) ? 'assists' : 'goals')), { llm_used: false, route: 'player_count' })
       if (spec.teams.length && (metric || wantsGames)) return done(await teamStat(sbPublic, spec.teams[0], spec.dim), { llm_used: false })
       if (agg === 'avg' && (spec.dim === 'goals_or_attack' || spec.dim === 'goals') && !spec.teams.length) return done(await avgGoalsPerGame(sbPublic), { llm_used: false })
       if (!wantsGames && /goal|assist|card/.test(qlow)) { const p = await resolvePlayer(sbPublic, question, names); if (p) return done(playerStat(p, spec.dim), { llm_used: false }) }
@@ -1070,24 +1172,25 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
       return done(`I'm not sure if you mean ${label[spec.intent] ?? spec.intent} or ${label[spec.second] ?? spec.second}. Could you rephrase?`, { llm_used: false, clarify: true })
     }
 
-    // cache (rules only, static)
-    if (spec.intent === 'rules') { const hit = await cacheLookup(sbPublic, qvec); if (hit) return done(hit, { llm_used: false, cached: true }) }
+    // v26: the poisonable cross-user qa_cache is REMOVED — an injected "rules question"
+    // could get its LLM answer served to OTHER users at >=0.93 similarity. At 5 cached
+    // rows lifetime it was saving nothing.
 
     // registry dispatch for intent-based tools (schedule/who_scored/my_data/group_*)
     for (const t of REGISTRY) {
-      if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me, names }); return done(r.answer, { llm_used: !!r.llm }) }
+      if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me, names }); return done(r.answer, { llm_used: !!r.llm, route: t.id }) }
     }
 
-    // rules -> deterministic FAQ, else grounded LLM (cached)
+    // rules -> deterministic FAQ, else grounded LLM
     if (spec.intent === 'rules') {
-      const faq = rulesFAQ(question); if (faq) return done(faq, { llm_used: false })
+      const faq = rulesFAQ(question); if (faq) return done(faq, { llm_used: false, route: 'rules_faq' })
       // v24: a 1-2 word fragment ("score?") gets a clarify, not an LLM guess
       if (qlow.replace(/[^a-zא-׿ ]/g, ' ').trim().split(/\s+/).filter(Boolean).length <= 2 && spec.teams.length === 0 && !spec.phase && !spec.date)
         return done('Could you give me a bit more? e.g. "what was the score of Argentina vs Colombia?" or "when is the next game?"', { llm_used: false, clarify: true })
-      const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: RULES_PROMPT }, { role: 'user', content: question }] })
-      const answer = res.choices[0]?.message?.content?.trim() ?? ''
-      await cacheWrite(sbService, question, qvec, 'rules', answer)
-      return done(answer, { llm_used: true })
+      try {
+        const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: RULES_PROMPT }, { role: 'user', content: question }] })
+        return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'rules_llm' })
+      } catch { return done("I'm having trouble reaching my language model right now — try again in a minute, or ask me a data question (schedule, scores, standings) which I can answer directly.", { llm_used: false, degraded: true }) }
     }
 
     // stats fuzzy "describe" -> RAG + crew (never cached: volatile)
@@ -1110,26 +1213,41 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
       if ((spec.op === 'rank' || /\b(best|most|worst|highest|lowest|dirtiest|meanest|cleanest|leakiest)\b/.test(qlow)) && !dimToMetric(spec.dim, question))
         return done('Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards?', { llm_used: false, clarify: true })
       const cards = await searchStats(sbPublic, qvec, spec.teams)
-      const crew = await answerCrew(openai, question, cards)
-      return done(crew.answer || "I don't have stats to answer that yet.", { llm_used: true, retrieved: cards.length, crew: { attempts: crew.attempts, judge: crew.score } })
+      try {
+        const crew = await answerCrew(openai, question, cards)
+        return done(crew.answer || "I don't have stats to answer that yet.", { llm_used: crew.attempts > 0, retrieved: cards.length, route: 'rag_crew', crew: { attempts: crew.attempts, judge: crew.score } })
+      } catch { return done("I don't have stats to answer that yet.", { llm_used: false, retrieved: cards.length, degraded: true }) }
     }
 
     // off_topic -> short LLM steer-back
-    const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: 'You are the WorldCup 2026 app assistant. The user asked something off-topic. Briefly and warmly say you focus on the app/tournament, then invite an on-topic question. 1-2 sentences.' }, { role: 'user', content: question }] })
-    return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true })
+    try {
+      const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: 'You are the WorldCup 2026 app assistant. The user asked something off-topic. Briefly and warmly say you focus on the app/tournament, then invite an on-topic question. 1-2 sentences.' }, { role: 'user', content: question }] })
+      return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'off_topic' })
+    } catch { return done('I focus on the tournament and the app — ask me about the schedule, scores, standings or the rules!', { llm_used: false, degraded: true }) }
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  const t0 = Date.now()
   try {
     const url = Deno.env.get('SUPABASE_URL')!, anon = Deno.env.get('SUPABASE_ANON_KEY')!
     const openaiKey = Deno.env.get('OPENAI_API_KEY') || Deno.env.get('AI_Summary_GPT_Key') || ''
     if (!openaiKey) return json({ ok: false, error: 'OpenAI key not configured.' }, 500)
-    const openai = new OpenAI({ apiKey: openaiKey })
+    // v26: bounded client — the SDK default is a 10-MINUTE timeout with 2 retries, which
+    // could hold a hung request past the Edge Function wall clock.
+    const openai = new OpenAI({ apiKey: openaiKey, timeout: 12_000, maxRetries: 1 })
     const body = await req.json().catch(() => ({}))
-    if (body?.mode === 'reindex_intents') return await reindexIntents(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
-    if (body?.mode === 'reindex_dims') return await reindexDims(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
-    if (body?.mode === 'reindex_kb') return await reindexKb(openai, createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!))
+    if (typeof body?.mode === 'string' && body.mode.startsWith('reindex')) {
+      // v26: reindex is ADMIN-ONLY — it deletes+re-embeds whole tables and spends OpenAI
+      // money; the public anon key must not reach it. pg_cron/net.http_post with the vault
+      // service key passes; so does the dashboard. (verify_jwt already ran before us.)
+      if ((req.headers.get('Authorization') ?? '') !== 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!) return json({ ok: false, error: 'reindex requires the service-role key' }, 403)
+      const svc = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+      if (body.mode === 'reindex_intents') return await reindexIntents(openai, svc)
+      if (body.mode === 'reindex_dims') return await reindexDims(openai, svc)
+      if (body.mode === 'reindex_kb') return await reindexKb(openai, svc)
+      return json({ ok: false, error: 'unknown mode' }, 400)
+    }
 
     const question = body?.question
     if (!question || typeof question !== 'string') return json({ ok: false, error: 'Missing question.' }, 400)
@@ -1142,20 +1260,38 @@ serve(async (req) => {
     const sbService = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     let _me: string | null | undefined
     const me = async () => { if (_me === undefined) _me = (await sbUser.auth.getUser()).data?.user?.id ?? null; return _me }
-    if (!rateOk(authHeader.slice(-24) || 'anon')) return json({ step: 'final', ok: true, spec: { intent: 'rate_limited' }, llm_used: false, answer: 'You are asking a lot very fast — give me a few seconds and try again.' })
+    // v26: rate key = token tail + client IP. Every signed-out visitor sends the SAME anon
+    // key, so they all shared one bucket (one curl loop rate-limited every logged-out user).
+    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'noip'
+    if (!rateOk((authHeader.slice(-24) || 'anon') + '|' + ip)) return json({ step: 'final', ok: true, spec: { intent: 'rate_limited' }, llm_used: false, answer: 'You are asking a lot very fast — give me a few seconds and try again.' })
 
     const names = await fetchTeamNames(sbPublic)
-    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string').slice(-2) : []
+    // v26: history items are length-capped (they flow into lev/regex passes — a multi-MB
+    // item was a CPU-exhaustion vector) and pass the same preGuard as the question.
+    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string' && preGuard(x).ok).map((x: string) => x.slice(0, 500)).slice(-2) : []
     const deps: RouteDeps = { openai, sbPublic, sbUser, sbService, me, names }
+
+    // v26: every answered question is logged (service-role-only table) — question, route,
+    // answer, latency. Without this, user complaints were undebuggable after EF log expiry.
+    const finish = async (payload: Record<string, unknown>, answer: string) => {
+      try {
+        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route: (payload.route as string) ?? null, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0 })
+      } catch { /* logging must never break the answer */ }
+      return json({ ...payload, answer })
+    }
 
     // v19: compound questions — route each clause (clause 2 sees clause 1 as history
     // so it can borrow entities), then join the two answers.
     const parts = splitCompound(question)
     const r1 = await routeQuestion(parts[0], history, deps)
-    if (parts.length === 1) return json({ step: 'final', ok: true, spec: r1.pub, ...r1.extra, answer: r1.answer })
+    if (parts.length === 1) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
     const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps)
-    return json({ step: 'final', ok: true, spec: r1.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used), answer: `${r1.answer}\n\n${r2.answer}` })
+    // v26: a clause-2 clarify/parse-failure must not pollute a good clause-1 answer.
+    if (r2.extra?.clarify && !r1.extra?.clarify) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
+    return await finish({ step: 'final', ok: true, spec: r1.pub, spec2: r2.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used) }, `${r1.answer}\n\n${r2.answer}`)
   } catch (err) {
-    return json({ step: 'final', ok: false, error: String(err) }, 500)
+    // v26: never leak raw internals; answer with a friendly degraded message instead of a 500.
+    console.error('ask fatal:', String(err))
+    return json({ step: 'final', ok: true, degraded: true, spec: { intent: 'error' }, llm_used: false, answer: "I'm having trouble answering right now — please try again in a minute." })
   }
 })

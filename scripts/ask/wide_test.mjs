@@ -45,8 +45,9 @@ const T = [
   // even when the PREVIOUS turn was a "how much points" question (op-borrow bug, live-found)
   ['nextgame', 'medium', 'anon', 'what is the coming next game?', ['next game is', '!have been played']],
   ['nextgame', 'hard', 'anon', 'what is the coming next game?', ['next game is', '!have been played'], ['how much points champion and top scorer?']],
-  // v23: ET/pens game lists come from the went_to_* flags (dev has none -> honest empty answer)
-  ['pens', 'medium', 'anon', 'which games goes to penalties?', ['no games have gone to penalties', '!upcoming games']],
+  // v23: ET/pens game lists come from the went_to_* flags. v26: friendlies now included
+  // (labeled) — the PSG-Arsenal 4-3 shootout must show instead of a blanket "none".
+  ['pens', 'medium', 'anon', 'which games goes to penalties?', ['no world cup games have gone to penalties', 'penalties: 4-3', '!upcoming games']],
   ['pens', 'hard', 'anon', 'how many games went to extra time?', ['extra time', '!have been played', '!upcoming games']],
   // v23: rules-FAQ coverage (how-much variants, combined champion+top-scorer, min group size)
   ['rules', 'simple', 'anon', 'how much points is exact?', ['3 point']],
