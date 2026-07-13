@@ -36,6 +36,9 @@ const T = [
   // global leaderboard
   ['global', 'simple', 'anon', 'show the global leaderboard', ['Global leaderboard']],
   ['global', 'medium', 'anon', 'top 3 players globally', ['1.', '3.']],
+  // v22: "the LAST game" is a PAST ref — must never answer with the NEXT fixture
+  ['lastgame', 'medium', 'anon', 'what was the last finished game? what was the result?', ['-', '!next game']],
+  ['lastgame', 'hard', 'anon', 'who scored in the last game?', ['(', '!next game']],
   // multi-clause (compound)
   ['multi', 'hard', 'anon', 'how many points for an exact score and when is the final?', ['3 point', 'Netherlands']],
   ['multi', 'hard', 'anon', 'when is the final and how many points is the champion worth?', ['Netherlands', '10 point']],
@@ -67,7 +70,8 @@ const T = [
   ['privacy', 'hard', 'auth', 'what did we predict for the final?', ['0-1', '!2-0']],
   // ---- v20: group-mate predictions (kicked-off game -> visible via shared group) ----
   ['member', 'medium', 'auth', 'what did bot_e2e_mate predict for Portugal vs United States?', ['0-1', 'bot_e2e_mate']],
-  ['member', 'hard', 'auth', 'hows my squad beta sharks holding up on the table?', ['bot_e2e_test']],
+  // colloquial + group name -> LLM fallback; may read it as the group board OR my standing (both valid)
+  ['member', 'hard', 'auth', 'hows my squad beta sharks holding up on the table?', ['Beta Sharks', '#1']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

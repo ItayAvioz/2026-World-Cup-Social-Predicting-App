@@ -859,6 +859,16 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps):
     }
 
     // ---- deterministic overrides (operation-based, cut across intent) ----
+    // v22: "the LAST game" is a PAST reference — it must never fall into the next-game
+    // lookup ("what was the last finished game?" used to answer with the NEXT fixture).
+    // Resolves the most recent kicked-off finished game (or a named team's last game).
+    if (/\b(last|latest|previous|most recent)\b[\s\S]{0,24}\b(game|match|fixture|result|score)\b|yesterday'?s? (game|match)/i.test(qlow) && !/next|coming|upcoming|remaining|left\b|last 16/.test(qlow) && spec.teams.length <= 1) {
+      const g = await resolveGameRef(sbPublic, 'last game', spec.teams, null)
+      if (g) {
+        if (/who scored|scorers?\b|who got the goals/.test(qlow)) return done(await whoScored(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false })
+        return done(await gameDetail(sbPublic, g.team_home as string, g.team_away as string), { llm_used: false })
+      }
+    }
     // P1: per-game match stats (box score) — "shots/corners/possession/stats for TeamA vs TeamB"
     if (spec.teams.length >= 2 && /\bstat|statistic|\bshots?\b|corners|possession|passes|\bxg\b|box score/i.test(qlow) && !/who scored|scorer|summar/i.test(qlow)) return done(await gameStats(sbPublic, spec.teams[0], spec.teams[1]), { llm_used: false })
     // P1: game detail (extra time / penalties). (box-score & detail are public match data — "give me"

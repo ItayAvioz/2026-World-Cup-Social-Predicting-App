@@ -18,8 +18,15 @@ Deploy via **Supabase CLI from the local file** (the MCP inline-deploy path chok
 # from repo root
 npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
 ```
-> Current: DEV runs **v21** and the local file **matches it byte-for-byte** (verified 2026-07-13 via
-> `get_edge_function` diff). **v20/v21 (privacy clarity + LLM understanding fallback, code-only, NO
+> Current: DEV runs **v22** and the local file **matches it byte-for-byte** (verified 2026-07-13 via
+> `get_edge_function` diff). **v22 (last-game time-direction fix, code-only):** "what was the LAST
+> finished game?" used to fall into the next-game lookup and answer with the NEXT fixture. New
+> deterministic override (before box-score): a past ref (last/latest/previous/most recent/yesterday's
+> game·match·result·score, excluding "next/upcoming/last 16") resolves the most recent KICKED-OFF
+> finished game via `resolveGameRef` → `gameDetail` (result incl. ET/pens) or `whoScored` when the
+> question asks for scorers. Note: the LLM fallback could NOT catch this class — the classifier was
+> confidently (not ambiguously) wrong, and the fallback only fires on ambiguity; time-direction is a
+> deterministic-routing concern. **v20/v21 (privacy clarity + LLM understanding fallback, code-only, NO
 > reindex):** (a) every locked door says WHY — pre-kickoff predictions answer "hidden until kickoff",
 > a group you're not in answers "private to their members" (foreign-group names detected
 > deterministically incl. typos, `groupRefCandidate` + `unknownGroupAnswer`); (b) new entities:
@@ -90,7 +97,9 @@ e2e user `bot_e2e_test` (bot.e2e.test.wc2026@gmail.com — groups **Alpha Wolves
 **Beta Sharks** 1 exact / 2 preds + mate `bot_e2e_mate` with a visible Portugal-USA pred 0-1 and an
 RLS-hidden pre-kickoff final pred 2-0, known picks) and asserts expected substrings in the ANSWER,
 including negative `!substring` scoping/leak checks (e.g. the mate's hidden 2-0 must NEVER appear).
-39 questions across areas × complexity incl. privacy-refusal cases. v21 = 39/39.
+41 questions across areas × complexity incl. privacy-refusal + last-game cases. v22 = 41/41.
+(One expectation is deliberately loose: colloquial group questions may be read by the LLM
+fallback as the group board OR your own standing — both are valid answers.)
 ```bash
 node scripts/ask/wide_test.mjs scripts/ask/wide_results.json
 ```
