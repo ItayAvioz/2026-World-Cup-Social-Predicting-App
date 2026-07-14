@@ -17,6 +17,44 @@ never invents a number, never sees private data.**
 
 ---
 
+# PART 0 — NOTHING IS THROWN AWAY
+
+v29 is **not a rewrite**. It is the *same* components, re-sequenced. Every existing stage survives;
+one stage loses a privilege it should never have had. Map it component by component:
+
+| Today (EF v48) | Where it lives in v29 | Status |
+|---|---|---|
+| **Embeddings** (`embed()`, 1536-d, `text-embedding-3-small`) | still the substrate for intent-match, dim-match and RAG retrieval | ✅ **KEPT, unchanged** |
+| **Intent classifier** (`match_intent`, `intent_examples`, 127 rows) | inside **S3 fast path** — and the whole of degraded mode when the LLM is down | ✅ **KEPT** |
+| **Dim classifier** (`match_dim`, `dim_examples`, 10 dims / 48 rows, `reindex_dims`) | feeds `Spec.metric` + `Spec.agg` at **S3/S4**. Still the thing that knows "clean sheets" → `conceded` | ✅ **KEPT, unchanged** |
+| **Entity extraction** (aliases + typo/Levenshtein match) | becomes **S5**, now emitting *typed* refs instead of bare strings. **The fuzzy matcher itself is untouched — all 6 typo probes PASS today** | ⬆️ **UPGRADED** |
+| **op / agg detection** (keyword) | folded into the `Spec` at S3/S4 | ✅ **KEPT** |
+| **`llmUnderstand`** (today: a *fallback* at stage 9) | **promoted to S4**, same function, earlier position | ⬆️ **PROMOTED** |
+| **Override rules** (v28 `ROUTE_RULES`) | **S3 fast path** + outage net | ✅ **KEPT** |
+| **Tool registry** (deterministic SQL tools) | **S8** | ✅ **KEPT, untouched** |
+| **Rules FAQ** (`rulesFAQ`) | **S8** | ✅ **KEPT** |
+| **Rules LLM** (`RULES_PROMPT`) | **S8/S9** — now gets a **FACTS block with today's date** | ⬆️ **GROUNDED** |
+| **RAG retrieval** (`kb_embeddings`, `match_kb`, 1,606 stat cards) | **S8** — retrieval is unchanged; it still fetches the right cards | ✅ **KEPT** |
+| **RAG writer** (`answerCrew`) | **S9** — may still *phrase* an answer from the cards… | ⚠️ **KEPT, but** |
+| ↳ *its licence to state **numbers*** | — | ❌ **REVOKED** (see below) |
+| ↳ *its fake grounding check* (`factNums.has(n)`) | replaced by **V4** | ❌ **DELETED** |
+| **Intent-inherited auth gate** | replaced by **S7** (tool-bound) | ❌ **DELETED** |
+
+**NEW, and only these five:** S1 courtesy · S5 *typing* (the resolver existed; the type system didn't)
+· S6 clarify gate · S7 tool-bound auth · **S10 validation** (nothing checks the answer today).
+
+## The one real removal
+
+`answerCrew` (RAG) may keep writing prose. It may **no longer speak a number**. Numbers are rendered
+from `rows`; the model gets placeholders (`{{n1}}`) and writes around them.
+
+**Why:** RAG is retrieval over *stat cards*. It is a good tool for *"how is Argentina's defense?"* and
+a terrible tool for *"how many red cards in the tournament?"* — that is a `COUNT(*)`, not a
+similarity search. Asking RAG to aggregate is what produced **"there have been 0 red cards"** (truth:
+≥12). So: **RAG describes. SQL counts.** Aggregate questions route to SQL and never reach the crew.
+
+---
+
 # PART 1 — THE PIPELINE: question → answer
 
 Eleven stages. Each has a typed contract, a failure action, and a telemetry field.
