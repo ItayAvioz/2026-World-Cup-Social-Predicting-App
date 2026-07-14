@@ -27,3 +27,4 @@ scripts/eval/data/
 
 # Supabase CLI local state
 supabase/.temp/
+scripts/ask/audit_v48.json

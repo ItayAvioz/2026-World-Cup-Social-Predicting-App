@@ -1,161 +1,180 @@
 # Ask Bot v29 — plan for a complete, reliable, independent bot
 
-**Status:** proposed (2026-07-14). Supersedes the "add another rule" approach.
-**Baseline:** DEV EF v48 (v28 rule table). `wide_test` **99/99**. `real_chat_test` **11/17**.
-Those two numbers together are the whole story — see §1.
+**Status:** proposed (2026-07-14). Supersedes "add another rule".
+**Measured on:** DEV EF v48 (v28 rule table).
+**Scores:** `wide_test` **99/99** · `real_chat_test` **11/17** · `audit_probe` **~60/82 (≈1 in 4 wrong)**.
 
 ---
 
-## 1. The evidence
+## 1. Evidence
 
-A real user session produced ~7 wrong answers in a row while the 99-case suite was green.
-I turned that session into `scripts/ask/real_chat_test.mjs` and ran it against live v48: **11/17**.
+Three suites, deliberately different:
 
-**The 99-case suite tests what I thought to test. The real-chat suite tests what users type.**
-When they disagree, the real one is right. Every acceptance gate below is measured on real-chat.
-
-Confirmed live failures (all reproduced, all in `ask_log`):
-
-| # | Question | Got | Should be |
-|---|---|---|---|
-| A1 | `in how much group i can be?` | World Cup **Group I** standings | "up to 3 groups" |
-| A2 | `in how much group i can be member?` | World Cup **Group I** standings | "up to 3 groups" |
-| B1 | `where i can see game stat?` | a dump of **my group standings** | "open the game → Match Stats" |
-| C1 | `what is the nexg game?` | **the previous answer** (red-card list), verbatim | the next fixture |
-| D1 | `who finishe 1 in group a?` | a **57-row table** | one team name |
-| D2 | `in which of my groups i have the best streak?` | a **global** Exact%/streak line | names a group |
-| E1 | `how many trivia questions are there in total?` | the trivia **points** rule | "40" |
-
----
-
-## 2. Root cause — five classes, only one of which is a "bug"
-
-**A. Word-sense / entity ambiguity.** The rule is `/\bgroup ([a-l])\b/`. In "in how much group **i**
-can be", the substring `group i` is literally present — but the `i` is the *pronoun*.
-**A regex cannot do word-sense disambiguation.** There is no ordering of regexes that fixes this,
-and the same hole reappears for any friend group named with a single letter.
-
-**B. Intent misroute on sloppy word order.** The how-to rule requires `where (do|can) I`; the user
-typed `where i can`. Regexes match *strings*, and users type *language*.
-
-**C. Context bleed.** A typo (`nexg`) matched nothing, so the borrow logic filled the gap from the
-**previous answer** and replayed a red-card list for a schedule question. The bot would rather
-repeat itself than admit confusion. **This is the worst class**: confidently, silently wrong.
-
-**D. Answer shaping.** The tool ran fine and returned its default payload; nobody checked whether it
-answered *the question asked*. "Who finished 1st" wants one name, not a table. "In which of my
-groups" wants a group, not a global rate.
-
-**E. Coverage.** `how many trivia questions` had no tool to call, so it fell through to a rules FAQ
-that matched on "trivia" and answered about *points*. The bot guessed because it had nothing to read.
-
-> **D1's table had 57 rows because on DEV `group_name='A'` holds 52 club games** — the test data we
-> deliberately keep ([[dev-data-scope-decision]]). On PROD Group A has 4 teams. So half of D1 is a
-> data artifact, not a bot bug. The other half — dumping a table when asked for one name — is real.
-
-**The unifying diagnosis:** the router matches **strings**; it needs to resolve **meaning**. The v28
-rule table made *ordering* visible and testable, which was worth doing and stays. But the matcher
-underneath is still regex-over-raw-text, and that is the ceiling we keep hitting.
-
----
-
-## 3. Data coverage map — "does everything have a reference?"
-
-Every `public` table vs. the tool that reads it (from `grep from('…')` on `index.ts`):
-
-| Table | Read by bot | Tool |
+| Suite | What it is | Score on v48 |
 |---|---|---|
-| games | ✅ ×21 | schedule, lastGame, gameDetail, gameStats, tournamentGroupTable, … |
-| predictions | ✅ | myExact, groupHistory, dayPoints |
-| player_tournament_stats (view) | ✅ | statLeaderboard, playerStat, playerCount |
-| team_tournament_stats (view) | ✅ | teamStat, compareTeams |
-| groups / group_members / profiles | ✅ | groupMeta, groupStandings, whoPicked |
-| game_team_stats / game_events | ✅ | box score, scorers |
-| game_odds / champion_odds | ✅ | gameOddsAnswer, championOddsAnswer |
-| knockout_pick | ✅ | myBracket |
-| ai_summaries | ✅ | latestRoast |
-| champion_pick / top_scorer_pick | ✅ *(indirect, via leaderboard RPCs)* | whoPicked |
-| **trivia_questions** | ❌ **NONE** | — |
-| **trivia_answers** | ❌ **NONE** | — |
-| **teams** | ❌ **NONE** | — |
-| **top_scorer_candidates** | ❌ **NONE** | — |
+| `wide_test.mjs` | 99 cases **I invented** | 99/99 ✅ |
+| `real_chat_test.mjs` | 17 cases **a real user typed** | 11/17 ❌ |
+| `audit_probe.mjs` | 82-question adversarial sweep of **every domain** | **~22 wrong** ❌ |
 
-**Four real gaps:**
-1. **Trivia has zero tools.** The user asked about trivia *twice*; both answers were LLM prose, one
-   of them wrong. Needs: question count, schedule/window, *my* trivia score, today's status.
-2. **`teams` is never read.** It is the natural **entity registry** (48 WC teams, flags, WC group).
-   Because we derive WC groups from `games.group_name` instead, club test rows leak into Group A —
-   and there is no authoritative "is this a WC team?" check anywhere.
-3. **`top_scorer_candidates`** — no "who can I pick for top scorer?" tool.
-4. Everything else (feedback, app_events, edit logs, prompt_versions) is admin-only. Correctly absent.
+The first number is the trap: **a green synthetic suite hid a 1-in-4 failure rate.** All gates below
+are measured on the real suites. `wide_test` is kept only as a no-regression net.
 
 ---
 
-## 4. Architecture — understanding-first (the actual fix)
+## 2. What the sweep actually found — and what it disproved
 
-Today: **regex rules decide; the LLM parse (`llmUnderstand`) is a fallback** after they fail.
-v29: **flip it.** The LLM becomes the *parser*, never the answerer. The rules become the fast path
-and the outage net.
+### ❌ DISPROVED: "typos are the problem"
+All six typo probes **passed** (`wat is the nex game`, `hwo is the top scorrer`, `when is teh final`,
+`how muhc points i hav`, `wich team scored most goals`, `argentna vs colombia score`). Fuzzy matching
+already works. My earlier read of the `nexg` bug was wrong — see NON-DETERMINISM below.
+
+### 🔴 CLASS 1 — THE BOT STATES FALSE FACTS (worst; fix first)
+
+| Question | Answer | Truth |
+|---|---|---|
+| `how many red cards in the tournament?` | **"There have been 0 red cards"** | ≥12 (the bot itself lists 12 players with one each) |
+| `is there a trivia question today?` | "it's currently **before** June 11" | today is **July 14** |
+| `when is the next trivia question?` | "**June 11**" | that is 5 weeks in the past |
+| `how many yellow cards did argentina get?` | "Argentina have played 2 games (1W 0D 0L)" | never answered |
+| `what are the odds for the final?` | "couldn't find an **upcoming** game" | the Final is Jul 19, upcoming |
+| `which team scored the most goals?` | "Bayern — 5.0 goals **per game**" | asked for a *total*, got an *average* |
+
+Two distinct root causes:
+- **`rag_crew` fabricates numbers.** "0 red cards" came from the RAG path. The v26 number-grounding
+  check only guards *some* of it. **A stat path that can invent a number is worse than no path.**
+- **The rules LLM has no clock.** Nothing injects "today" into `RULES_PROMPT`, so it reasons about
+  June 11 as if it were the future. **Every date it utters is a guess.**
+
+### 🔴 CLASS 2 — LOGIN GATE ON PUBLIC QUESTIONS
+
+| Question (anon) | Answer |
+|---|---|
+| `how to play this game?` | *"Please sign in"* |
+| `who can i pick as top scorer?` | *"Please sign in"* |
+| `is group c finished?` | *"Please sign in"* |
+| `thanks!` | *"Please sign in"* |
+
+A misclassified intent inherits that intent's **auth gate**. So a stray classification doesn't just
+give a wrong answer, it gives a *wall*. `thanks!` demanding a login is the clearest tell.
+
+### 🟠 CLASS 3 — ANSWERS THE TOOL, NOT THE QUESTION (shape)
+
+- `who finished 1 in group d?` → the whole table (asked for **one** name)
+- `which group am i doing best in?` → lists both groups, picks neither
+- `in which of my groups i have the best streak?` → a **global** rate, names no group
+- `where i can see game stat?` → dumps my group standings (asked **where**)
+- `where i see my points?` → gives points, never says where
+
+### 🟠 CLASS 4 — WC GROUP vs FRIEND GROUP vs THE PRONOUN "I"
+
+- `in how much group i can be?` → **World Cup Group I** (the "i" is a pronoun)
+- `am i in group a?` → World Cup Group A table (asked about *my* membership)
+
+### 🟠 CLASS 5 — ZERO COVERAGE (bot has nothing to read → it guesses)
+
+`trivia_questions`, `trivia_answers`, `teams`, `top_scorer_candidates` have **no tool at all**.
+Every trivia answer above is invention. This is why Class 1 exists: *the bot guesses when it is blind.*
+
+### 🟡 CLASS 6 — NON-DETERMINISM: same question, two answers
+
+`what is the nexg game?` returned the **red-card list** in the live log, and the **correct fixture**
+on re-probe. Same input, different output. This is the user's "different answer to same question",
+and it is a *stability* bug, not a parsing bug.
+
+### 🟡 CLASS 7 — CONVERSATION / PRIVACY CONSISTENCY
+
+- `why?` after an answer → off-topic brush-off instead of elaborating.
+- `what is dani's champion pick?` → reveals his picks **labelled with `[Demo]`, `[Kanta Bayam]`** —
+  groups the caller isn't in. Picks *are* public after the June-11 lock (by design), but we **refuse**
+  the Demo leaderboard in the same breath. The pick is public; **the group-membership label may not
+  be.** Needs a product decision, not a code fix.
+
+---
+
+## 3. Coverage map — "does everything have a reference?"
+
+| Table | Tool? |
+|---|---|
+| games · predictions · team/player_tournament_stats · groups · group_members · profiles · game_team_stats · game_events · game_odds · champion_odds · knockout_pick · ai_summaries | ✅ |
+| champion_pick · top_scorer_pick | ✅ (indirect, via leaderboard RPCs) |
+| **trivia_questions · trivia_answers** | ❌ **none** |
+| **teams** | ❌ **none** — so WC groups come from `games.group_name`, and club test rows leak into Group A |
+| **top_scorer_candidates** | ❌ **none** |
+
+---
+
+## 4. Architecture
+
+Keep what works: **deterministic SQL execution** and the **privacy boundary** (only question text +
+the caller's own group/member names ever reach the LLM). Change what doesn't: *the bot must never
+speak a fact it did not read.*
 
 ```
 question
-  ├─ 0. FAST PATH        exact/high-confidence deterministic rules (ROUTE_RULES, from v28)
-  │                       hit -> execute. Cheap, no LLM. Covers the common, unambiguous asks.
-  │
-  ├─ 1. UNDERSTAND       ONE structured LLM call: question text -> typed spec
-  │                       { intent, entities[{type,value,confidence}], output_shape, slots, ambiguity[] }
-  │                       Knows "group i" is a pronoun. Knows "nexg" is "next". Knows word order.
-  │                       ⚠️ PRIVACY BOUNDARY UNCHANGED: only the question text + the caller's OWN
-  │                       group/member NAMES go up. No predictions, no picks, no ranks. Ever.
-  │
-  ├─ 2. RESOLVE          every entity -> exactly one TYPED reference, against a registry:
-  │                       wc_group(A-L) | friend_group(caller's only) | team | player | phase |
-  │                       screen | rule_topic | member.  `teams` table becomes the source of truth.
-  │                       Unresolvable or 2+ candidates -> ambiguity.
-  │
-  ├─ 3. CLARIFY GATE     required slot missing, or ambiguity -> ONE targeted question and STOP.
-  │                       ("World Cup Group A, or your friend group?")  Guessing is banned:
-  │                       a confident wrong answer costs more than a question.
-  │
-  ├─ 4. EXECUTE          deterministic SQL tools. UNCHANGED. This is where correctness already lives.
-  │
-  └─ 5. SHAPE + CHECK    render to the ASKED shape (one|list|count|table), then verify:
-                          - does the answer contain what was asked for?
-                          - is it byte-identical to the previous answer for a DIFFERENT question?
-                            -> that is always a bug -> clarify instead.
+ ├─ 0 FAST PATH    v28 ROUTE_RULES — cheap, deterministic, and the outage net
+ ├─ 1 UNDERSTAND   ONE structured LLM call -> typed spec {intent, entities, output_shape, slots}
+ │                 (LLM is a PARSER, never an answerer). Privacy boundary unchanged.
+ ├─ 2 RESOLVE      entities -> ONE typed ref against a registry:
+ │                 wc_group(A-L) | friend_group(caller's) | team | player | phase | screen | topic
+ │                 `teams` becomes source of truth. Pronoun "i" != Group I, structurally.
+ ├─ 3 CLARIFY      missing slot / ambiguity -> ONE question, and STOP. Guessing is banned.
+ ├─ 4 EXECUTE      deterministic SQL. Unchanged — correctness already lives here.
+ └─ 5 SHAPE+CHECK  render to the ASKED shape, then VALIDATE before emitting (§5).
 ```
 
-**Degraded mode keeps working.** If OpenAI is down, step 1 is skipped and the v28 rules answer
-alone — exactly today's behaviour. The rules stop being the brain and become the safety net.
-
-**Cost/latency.** Step 1 replaces the current embedding+classify round-trip for the non-fast-path
-cases, so it is roughly cost-neutral: still ≤1 LLM call per question. `ask_log` already records
-latency, so this is measurable rather than argued.
+**Every LLM prompt gets a FACTS block** — today's date, the tournament phase, and any numbers it is
+allowed to state. **The model may not utter a date or number outside that block.** That single rule
+kills Class 1.
 
 ---
 
-## 5. Phases (each ships independently, each has a gate)
+## 5. The validation layer (deterministic, free, runs on EVERY answer)
+
+No LLM. Fails → clarify or refuse; **never emit**.
+
+1. **Not-a-repeat** — byte-identical to the previous answer for a *different* question ⇒ always a bug.
+2. **Shape** — `who/which` ⇒ names exactly one entity · `where` ⇒ names a screen · `how many X` ⇒
+   gives a count **of X**.
+3. **Entity-exists** — every team/player named must exist in the registry (no invented names).
+4. **Number-traceable** — every number must come from the SQL result (generalize the v26 RAG check).
+5. **On-topic-entity** — asked about Group D ⇒ the answer says Group D.
+6. **No-gate-on-public** — a public intent may never return "please sign in".
+
+> These are dumb, free guards — and they would have caught **Classes 2, 3, 6 and most of 1** *without
+> any language understanding at all*. That is why validation ships **first**, before the rewrite.
+
+---
+
+## 6. Phases (optimized — ordered by truth-risk, not by elegance)
 
 | Phase | Work | Gate |
 |---|---|---|
-| **P0 — Entity registry** | Read `teams`. Build the typed registry + resolver. WC-group answers sourced from `teams`, not `games.group_name`. Pronoun/letter disambiguation lands here. | A1, A2, A3, D1 pass |
-| **P1 — Trivia tools** | `triviaInfo` (count/schedule/window), `myTrivia` (own score — private, deterministic). Kill the FAQ shadowing. | E1, E2 pass |
-| **P2 — Understand-first** | Structured-spec LLM call promoted to primary router; rules become fast path + degraded net. | B1, B2, C1, C2 pass |
-| **P3 — Clarify gate** | Per-tool required slots; ambiguity → one question. Ban silent guessing. | new ambiguity cases pass; no regression |
-| **P4 — Answer shaping** | Output-shape renderer + "answered the question?" and "not a repeat" post-checks. | D1, D2 pass |
-| **P5 — Eval loop** | `real_chat_test` grows from `ask_log` every week. Both suites in one command. | real-chat **17/17**, wide **99/99** |
+| **P0 — STOP LYING** | Inject a FACTS block (incl. **today's date**) into every LLM prompt; ban un-grounded dates/numbers. Hard-ground or kill `rag_crew`. Fix `teamStat` ignoring the cards dim; fix "most goals" total-vs-average; fix odds-for-the-final. | Class 1 = 0 |
+| **P0b — VALIDATION LAYER** | The 6 checks in §5, on every answer. Fail ⇒ clarify. | repeat/shape/gate bugs caught at runtime |
+| **P1 — UN-GATE PUBLIC** | Auth gate binds to the **tool**, not the guessed intent. Public asks never demand login. Add a `courtesy` route (`thanks`, `ok`). | Class 2 = 0 |
+| **P2 — COVERAGE** | `teams` registry; trivia tools (count, window, today, **my score**); top-scorer-candidates tool. | Class 5 = 0 |
+| **P3 — SHAPE** | Output-shape renderer (one \| list \| count \| table) driven by the question. | Class 3 = 0 |
+| **P4 — ENTITY TYPING** | wc_group vs friend_group vs pronoun as **types**, not regex luck. | Class 4 = 0 |
+| **P5 — UNDERSTAND-FIRST** | LLM-as-parser promoted to primary router; rules become fast path + outage net. | real-chat 17/17 |
+| **P6 — DETERMINISM** | Same question ⇒ same answer. Pin temperature/seed; make borrowing explicit and bounded. | Class 6 = 0 |
+| **P7 — EVAL GATE** | One command runs all three suites; **deploy blocked on regression**. | green required to ship |
+| **P8 — LEARNING LOOP** | Mine `ask_log` weekly: correct routes ⇒ new embedding examples; wrong ⇒ new eval cases. 👍/👎 in the AskBot UI. **Curated, never auto-fed** (auto-feeding teaches the bot its own mistakes). | suite grows every week |
 
-**Definition of done:** real-chat 17/17 **and** wide 99/99, on DEV EF, with `ask_log` showing a
-`route` on every answer.
+**Definition of done:** `audit_probe` ≥ 80/82 · `real_chat_test` 17/17 · `wide_test` 99/99 ·
+every answer carries a `route` · **zero un-grounded numbers or dates.**
 
 ---
 
-## 6. What we are NOT doing
+## 7. Open product decisions (not mine to make)
 
-- **Not** deleting the v28 rule table. It is the fast path and the outage net, and it is the only
-  reason routing is testable at all.
-- **Not** sending data to the LLM. The privacy boundary (question text + own group/member names only)
-  is the one invariant that never moves.
-- **Not** cleaning the DEV club data ([[dev-data-scope-decision]]) — but P0 makes the bot robust to
-  it, which is the durable fix.
-- **Not** touching PROD. DEV-only until after the tournament.
+1. **Group-label leak**: post-lock picks are public by design — but should the answer name the
+   *group* (`[Demo]`) of a user whose group you're not in?
+2. **DEV club data** stays ([[dev-data-scope-decision]]); P2's `teams` registry makes the bot robust
+   to it rather than "fixing" the data.
+3. **PROD cutover**: after the tournament.
+
+## 8. Not doing
+
+- Not deleting the v28 rule table (fast path + outage net; the only reason routing is testable).
+- Not sending data to the LLM — the privacy boundary never moves.
+- Not caching answers (`qa_cache` was removed in v26 as poisonable; caching is not learning).
