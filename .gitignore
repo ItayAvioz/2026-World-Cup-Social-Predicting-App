@@ -22,3 +22,6 @@ supabase/functions/ask/_build/
 
 # ask EF test outputs
 scripts/ask/wide_results*.json
+
+# AI-summary eval run artifacts (generated reports/payloads, ~1.6MB)
+scripts/eval/data/

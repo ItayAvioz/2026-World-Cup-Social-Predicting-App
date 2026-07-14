@@ -787,3 +787,20 @@ GROUP game, not R32, per the old 1489xxx id block).
 (+ Algeria Mahrez 2, Belghali 1). Confirmed before touching PROD.
 **Fix:** `UPDATE game_player_stats SET goals=1 WHERE game_id='025fa947…' AND api_player_id=7722 AND goals=0`
 (1 row). Reconciles 6=6. Display-only impact (Top Scorers tally); prediction/score points were always correct.
+
+---
+
+## 2026-07-07 — Portugal 0–1 Spain (R16): passes/xG lag
+
+**Game:** `e3344cc6-b7c6-41be-81b0-06c982d14402` · api_fixture_id `1576756` · phase `r16` (Jul 6).
+**Symptom:** Routine passes/xG lag (same class as Cases 2/5/9/10). `passes_total`/`passes_accuracy`/`xg`
+NULL for **both** teams → blank "Total Passes / % Accuracy Passes / xG" rows on the Game-page Match Stats
+(reported via screenshot). Possession/shots/corners/fouls/cards/offsides were all present and matched.
+**Verify-first (DEV `probe_stats` 1576756, read-only):** Portugal 426 passes / 84% / xG 0.58;
+Spain 531 passes / 88% / xG 1.77.
+**Fix (PROD):** 2-row `UPDATE game_team_stats SET passes_total, passes_accuracy, xg` keyed on
+`(game_id, team)`. Left possession(44/56) + shots(9/15) untouched (probe's rounded 45/55 & 10 shots are
+api revision noise; stored values matched the UI/screenshot). 0 NULLs remain.
+**No other gaps:** full-tournament scan (all finished games) = this was the ONLY game with NULL team-stats;
+goal reconciliation clean everywhere (event_goals == Σ player goals; Merino's lone Spain goal reconciles 1=1).
+Display-only, zero scoring impact.
