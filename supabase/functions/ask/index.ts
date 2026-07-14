@@ -330,7 +330,10 @@ function resolveDate(q: string): { start: string; end: string; label: string } |
   return null
 }
 const PHASE: Record<string, string> = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarter-Final', sf: 'Semi-Final', third: 'Third Place', final: 'Final' }
-const PHASE_WORD: [RegExp, string][] = [[/round of 32|\br32\b/i, 'r32'], [/round of 16|last 16|\br16\b/i, 'r16'], [/quarter[- ]?finals?|\bqf\b/i, 'qf'], [/semi[- ]?finals?|\bsf\b/i, 'sf'], [/third[- ]?place|3rd[- ]?place/i, 'third'], [/\bfinal(l|e)?s?\b/i, 'final']]
+// v27: "group stage" is a PHASE too — without it, "when is the last group stage game?" lost the
+// phase and answered with the last game of the WHOLE tournament. Only the two-word forms match,
+// so a FRIEND-group question ("who is winning our group") never becomes a phase.
+const PHASE_WORD: [RegExp, string][] = [[/group stage|group phase|\bgroup games?\b/i, 'group'], [/round of 32|\br32\b/i, 'r32'], [/round of 16|last 16|\br16\b/i, 'r16'], [/quarter[- ]?finals?|\bqf\b/i, 'qf'], [/semi[- ]?finals?|\bsf\b/i, 'sf'], [/third[- ]?place|3rd[- ]?place/i, 'third'], [/\bfinal(l|e)?s?\b/i, 'final']]
 function detectPhase(q: string): string | null { for (const [re, ph] of PHASE_WORD) if (re.test(q)) return ph; return null }
 function detectPredicate(q: string): boolean { return /\bpredict|\bguess|\bnail|got .{0,40}\bright\b|exact score|\bcalled?\b/i.test(q) }
 function detectOp(q: string): string {
@@ -1500,10 +1503,16 @@ serve(async (req) => {
     const openai = new OpenAI({ apiKey: openaiKey, timeout: 12_000, maxRetries: 1 })
     const body = await req.json().catch(() => ({}))
     if (typeof body?.mode === 'string' && body.mode.startsWith('reindex')) {
-      // v26: reindex is ADMIN-ONLY — it deletes+re-embeds whole tables and spends OpenAI
-      // money; the public anon key must not reach it. pg_cron/net.http_post with the vault
-      // service key passes; so does the dashboard. (verify_jwt already ran before us.)
-      if ((req.headers.get('Authorization') ?? '') !== 'Bearer ' + Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!) return json({ ok: false, error: 'reindex requires the service-role key' }, 403)
+      // v26/v27: reindex is ADMIN-ONLY — it deletes + re-embeds whole tables and spends
+      // OpenAI money, so the public anon key must not reach it.
+      // The gate is a CAPABILITY check, not a string compare: we try a read that only
+      // service_role can do (ask_log has RLS on and its grants revoked from anon +
+      // authenticated). v26 compared the header to SUPABASE_SERVICE_ROLE_KEY, which also
+      // rejected the LEGACY JWT service key held in the vault — so pg_cron/net.http_post,
+      // the one caller that actually needs this, got a 403.
+      const callerKey = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+      const canAdmin = callerKey && !(await createClient(url, callerKey).from('ask_log').select('id').limit(1)).error
+      if (!canAdmin) return json({ ok: false, error: 'reindex requires the service-role key' }, 403)
       const svc = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
       if (body.mode === 'reindex_intents') return await reindexIntents(openai, svc)
       if (body.mode === 'reindex_dims') return await reindexDims(openai, svc)

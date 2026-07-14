@@ -31,16 +31,37 @@ Anything not in this table should **refuse or clarify** — never substitute a n
 | **Refuses** | other groups' data (incl. near-miss names like `test3` vs `TestA`), pre-kickoff predictions, non-2026 years, unknown teams, untracked stats (attendance/referee/venue/city/weather/throw-ins/VAR) | deterministic guards |
 | **Clarifies** | bare superlatives with no metric, 1–2-word fragments, genuinely ambiguous intents | clarify band → LLM understanding fallback |
 
-## Deployed vs local
-Deploy via the **Supabase MCP `deploy_edge_function`** tool (own auth, no token needed),
-`project_id: ftryuvfdihmhlzvbpfeu`, `verify_jwt: true`, `files=[{name:'index.ts', content:<full file>}]`
-— paste the file content VERBATIM from generated chunks, never retype. The CLI path
-(`npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu`) also works but needs
-`SUPABASE_ACCESS_TOKEN`, which this shell doesn't have. After deploying, diff `get_edge_function`
-against the local file (expect CRLF→LF + trailing-newline normalization only).
-> Current: DEV runs **v27** and the local file **matches it** (verified 2026-07-14 via
-> `get_edge_function` diff — identical modulo CRLF→LF normalization + trailing newline; the local
-> file is CRLF on this Windows checkout, the deploy stores LF).
+## Deploy (⚠️ read this before touching the EF)
+`index.ts` is ~148KB. The MCP `deploy_edge_function` tool takes the source as an **inline string
+argument**, so the whole file must fit inside ONE tool call — and 148KB does not. **A truncated
+deploy silently ships a fragment with no `serve()` handler and the function 504s on every request.**
+That has happened; do not let it happen again.
+
+**The deploy procedure:**
+```bash
+node scripts/ask/build.cjs        # -> supabase/functions/ask/_build/index.ts (~120KB, comments stripped)
+```
+Then deploy **`_build/index.ts`** (not `index.ts`) via MCP `deploy_edge_function`
+(`project_id: ftryuvfdihmhlzvbpfeu`, `verify_jwt: true`), pasting the bundle VERBATIM in a single call.
+Then verify — this step is not optional:
+```bash
+# fetch the deployed source (get_edge_function saves its large result to a file), then:
+node scripts/ask/verify_deploy.mjs <path-to-saved-get_edge_function-result>
+# must print: EXACT (modulo trailing newline): true
+```
+The invariant is **`deployed === build(index.ts)`**. Comments live in the source; only the deployed
+bundle is slimmed. `build.cjs` strips whole-line `//` comments only — never a `//` inside a string
+or regex.
+
+> **Better long-term fix:** with a `SUPABASE_ACCESS_TOKEN` in the env,
+> `npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu` reads `index.ts` straight
+> from disk — no size limit, byte-exact by construction, and the build step becomes unnecessary.
+> The CLI is installed; it just needs `supabase login` (browser flow) or a token.
+> Splitting `index.ts` into modules does NOT help: the deploy call still carries every file's content.
+> Current: DEV runs EF **version 47** = the **v27** code. Verified 2026-07-14: deployed == the local
+> build artifact byte-for-byte (119,563 chars) via `scripts/ask/verify_deploy.mjs`.
+> **Wide test: 99/99 PASS.** `reindex_dims` has been run (10 dims / 48 examples, incl. the new
+> `offsides` + `shots`).
 >
 > **v27 (coverage + conversation). ⚠️ needs `reindex_dims` (DIM_EXAMPLES changed).**
 > Four whole data domains the UI ships but the bot had NO tools for: **odds** (game Bet365 +
