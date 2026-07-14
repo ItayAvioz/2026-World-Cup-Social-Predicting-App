@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1210" viewBox="0 0 1240 1210" font-family="Segoe UI, Arial, sans-serif">
   <rect width="1240" height="1210" fill="#0a0a0a"/>
-  <text x="620" y="42" fill="#ffffff" font-size="25" font-weight="700" text-anchor="middle">ask bot — 12-stage pipeline &amp; tools (DEV only)</text>
+  <text x="620" y="42" fill="#ffffff" font-size="25" font-weight="700" text-anchor="middle">ask bot — 12-stage pipeline &amp; tools (DEV only) · v29 phases 1-4</text>
 
   <!-- legend -->
   <g font-size="13">
@@ -27,7 +27,7 @@
   <rect x="40" y="178" width="620" height="52" rx="8" fill="#0f1c33" stroke="#2d6cdf"/>
   <circle cx="66" cy="204" r="14" fill="#2d6cdf"/><text x="66" y="209" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">2</text>
   <text x="92" y="199" fill="#fff" font-size="14.5" font-weight="600">Pre-guard  [D]</text>
-  <text x="92" y="219" fill="#9fb6e0" font-size="12.5">blocks injection/abuse · splits compound Qs ("…and when is the final?") into 2 clauses</text>
+  <text x="92" y="219" fill="#9fb6e0" font-size="12.5">blocks injection/abuse · splits compound Qs · v29: "thanks/ok" exits HERE — no LLM, no auth</text>
 
   <!-- 3 -->
   <rect x="40" y="236" width="620" height="52" rx="8" fill="#0f1c33" stroke="#2d6cdf"/>
@@ -57,7 +57,7 @@
   <rect x="40" y="468" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="494" r="14" fill="#2d6cdf"/><text x="66" y="499" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">7</text>
   <text x="92" y="489" fill="#fff" font-size="14.5" font-weight="600">Extract entities  [D]</text>
-  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group, group-MATEs, "last/next game" + prev turn's spec/answer</text>
+  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams, dates, phase, your OWN group, "last/next game" + prev spec/answer · v29: "group I" ≠ pronoun "I"</text>
 
   <!-- 8 -->
   <rect x="40" y="526" width="620" height="52" rx="8" fill="#1c1330" stroke="#8a5cd8"/>
@@ -76,7 +76,7 @@
   <circle cx="66" cy="671" r="14" fill="#2d6cdf"/><text x="66" y="676" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">10</text>
   <text x="92" y="664" fill="#fff" font-size="14.5" font-weight="600">Override routes  [D]  →  SQL → template</text>
   <text x="92" y="684" fill="#9fb6e0" font-size="12.5">answers by SHAPE, not intent (last/next game, odds, WC group, form, ET/pens, box-score, rank…) + guards</text>
-  <text x="92" y="699" fill="#6fe0a0" font-size="11.5">most questions EXIT here — 0 LLM · guards: unknown team, non-2026 year, untracked stat, follow-up "and X?"</text>
+  <text x="92" y="699" fill="#6fe0a0" font-size="11.5">most questions EXIT here — 0 LLM · v29: cardsTotal/triviaInfo/topScorerCandidates (aggregates never reach RAG)</text>
 
   <!-- 11 -->
   <rect x="40" y="706" width="620" height="58" rx="8" fill="#141414" stroke="#333"/>
@@ -89,8 +89,8 @@
   <rect x="40" y="770" width="620" height="60" rx="8" fill="#2a1a0e" stroke="#d8823c"/>
   <circle cx="66" cy="800" r="14" fill="#d8823c"/><text x="66" y="805" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">12</text>
   <text x="92" y="793" fill="#fff" font-size="14.5" font-weight="600">Fuzzy stats RAG + crew  [L]  /  off-topic</text>
-  <text x="92" y="813" fill="#e8c3a0" font-size="12.5">retrieve stat-cards → Writer⇄Judge writes a grounded answer; then log &amp; cache</text>
-  <text x="92" y="827" fill="#c99a6a" font-size="11.5">the ONLY stage that composes text with the LLM</text>
+  <text x="92" y="813" fill="#e8c3a0" font-size="12.5">retrieve stat-cards → 1 grounded call; FACTS block gives it today's real date</text>
+  <text x="92" y="827" fill="#c99a6a" font-size="11.5">v29: a number must match ONE card verbatim — never a sum/total (fixed "0 red cards" → 13)</text>
 
   <!-- arrows -->
   <g stroke="#5f5f5f" stroke-width="1.5" marker-end="url(#a)">
@@ -124,6 +124,7 @@
     <text x="716" y="386" fill="#eaeaea" font-weight="600">globalStandings / userPicksPublic</text><text x="960" y="386" fill="#9a9a9a">global board · a user's public picks</text>
     <text x="716" y="406" fill="#eaeaea" font-weight="600">gameOdds / championOdds / wcGroupTable</text><text x="1000" y="406" fill="#9a9a9a">odds · WC groups A–L</text>
   </g>
+  <text x="716" y="419" fill="#7fbfa0" font-size="10">v29 NEW: cardsTotal (tournament SUM) · triviaInfo (count/window/today) · topScorerCandidates</text>
 
   <!-- group B: registry / intent tools -->
   <rect x="700" y="424" width="500" height="196" rx="9" fill="#101010" stroke="#333"/>
@@ -131,9 +132,9 @@
   <g font-size="12.5">
     <text x="716" y="474" fill="#eaeaea" font-weight="600">lookupGame / scheduleList</text><text x="940" y="474" fill="#9a9a9a">next game, fixtures, a round</text>
     <text x="716" y="498" fill="#eaeaea" font-weight="600">whoScored</text><text x="940" y="498" fill="#9a9a9a">goalscorers in a match (+ET/pens)</text>
-    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myRates / myBracket</text><text x="980" y="522" fill="#9a9a9a">exacts · rank/pts/picks · Exact% · bracket</text>
+    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myRates / myBestGroup / myBracket</text><text x="1074" y="522" fill="#9a9a9a" font-size="11">v29: best group</text>
     <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / memberPrediction / groupMeta</text><text x="1010" y="546" fill="#9a9a9a">table · a mate's pick · members</text>
-    <text x="716" y="566" fill="#7fd0a0" font-weight="600">whoPicked / dayPoints / latestRoast</text><text x="980" y="566" fill="#9a9a9a">who picked X · a match-day · the roast</text>
+    <text x="716" y="566" fill="#7fd0a0" font-weight="600">whoPicked / dayPoints / latestRoast / myTriviaScore</text><text x="1074" y="566" fill="#9a9a9a" font-size="11">v29: trivia</text>
     <text x="716" y="586" fill="#eaeaea" font-weight="600">rulesFAQ</text><text x="940" y="586" fill="#9a9a9a">scoring / locks / limits — canned [D]</text>
     <text x="716" y="606" fill="#e0b48a" font-weight="600">rules LLM (grounded)</text><text x="940" y="606" fill="#9a9a9a">other "how does the app work" [L]</text>
     <text x="716" y="612" fill="#7fbf7f" font-size="11.5">green = private, JWT→RLS, template only — never to an LLM</text>
@@ -144,7 +145,7 @@
   <text x="716" y="656" fill="#f0c090" font-size="13.5" font-weight="700">STAGE 12 · the only LLM answer path [L]</text>
   <g font-size="12.5">
     <text x="716" y="682" fill="#eaeaea" font-weight="600">searchStats (RAG)</text><text x="940" y="682" fill="#c9a884">fetch public stat-cards by vector [E]</text>
-    <text x="716" y="706" fill="#eaeaea" font-weight="600">answerCrew</text><text x="940" y="706" fill="#c9a884">1 grounded call + deterministic number-check</text>
+    <text x="716" y="706" fill="#eaeaea" font-weight="600">answerCrew</text><text x="940" y="706" fill="#c9a884">1 call, per-card number check (v29); no aggregates</text>
     <text x="716" y="730" fill="#eaeaea" font-weight="600">off-topic reply</text><text x="940" y="730" fill="#c9a884">short polite steer-back [L]</text>
     <text x="716" y="756" fill="#c9a06a" font-size="11.5">LLM only ever sees: the question + static rules + PUBLIC stats.</text>
     <text x="716" y="772" fill="#c9a06a" font-size="11.5">No predictions, picks or ranks ever reach it.</text>
@@ -156,8 +157,9 @@
   <g font-size="12">
     <text x="716" y="840" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbPublic</tspan> anon → public reads (stats, schedule, scorers)</text>
     <text x="716" y="860" fill="#cfcfcf"><tspan fill="#7fd0a0" font-weight="600">sbUser</tspan> caller JWT → RLS gates all private data</text>
-    <text x="716" y="880" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbService</tspan> service-role → ask_log / reindex writes only</text>
+    <text x="716" y="880" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbService</tspan> service-role → ask_log / reindex / trivia-schedule reads</text>
   </g>
+  <text x="716" y="887" fill="#e0c060" font-size="10">v29: assertPublicPayload THROWS if a private-shaped token heads for any of the 4 LLM calls</text>
 
   <!-- ================= CAPABILITY BAND: what it answers & who sees what ================= -->
   <text x="40" y="944" fill="#8a8a8a" font-size="14" font-weight="700">WHAT IT ANSWERS  ·  and which data each user is allowed to see</text>
@@ -179,10 +181,11 @@
   <g font-size="12.5" fill="#c6d6ea">
     <text x="449" y="1004">schedule &amp; fixtures, scores, goalscorers,</text>
     <text x="449" y="1022">team &amp; player stats, box scores, compare,</text>
-    <text x="449" y="1040">bracket status, global leaderboard top.</text>
+    <text x="449" y="1040">bracket status, leaderboard top; card totals,</text>
+    <text x="449" y="1058">trivia schedule, top-scorer picks (v29).</text>
   </g>
-  <text x="449" y="1066" fill="#7f9fce" font-size="11.5">source: public tables via sbPublic (anon)</text>
-  <text x="449" y="1088" fill="#8fbf8f" font-size="11.5">visibility: SAME for every user (general)</text>
+  <text x="449" y="1080" fill="#7f9fce" font-size="11.5">source: public tables via sbPublic (anon)</text>
+  <text x="449" y="1099" fill="#8fbf8f" font-size="11">visibility: SAME for every user (general)</text>
 
   <!-- C: your group data -->
   <rect x="822" y="956" width="378" height="150" rx="9" fill="#0c1a12" stroke="#2f6a44"/>
@@ -190,7 +193,7 @@
   <g font-size="12.5" fill="#bfe6cc">
     <text x="840" y="1004">your rank, picks, points, exact scores (+which</text>
     <text x="840" y="1022">games); group standings — all scopable to a</text>
-    <text x="840" y="1040">group you name; members' picks after kickoff.</text>
+    <text x="840" y="1040">group you name; members' picks; my trivia score.</text>
   </g>
   <text x="840" y="1066" fill="#79b892" font-size="11.5">source: sbUser — your JWT → RLS · refusals say WHY:</text>
   <text x="840" y="1088" fill="#f0b0b0" font-size="11.5">pre-kickoff = "hidden until kickoff" · other groups = "private to their members"</text>
@@ -198,5 +201,5 @@
   <!-- footer -->
   <text x="620" y="1140" fill="#8a8a8a" font-size="13" text-anchor="middle">Stages 1–9 always run per clause (a compound question runs the pipeline twice). 10 / 11 / 12 are exit points — first match wins.</text>
   <text x="620" y="1162" fill="#8a8a8a" font-size="13" text-anchor="middle">Routing uses intent × op × dim × entities, so a mis-labelled intent still lands on the right tool at stage 10.</text>
-  <text x="620" y="1184" fill="#6f8f6f" font-size="12.5" text-anchor="middle">DEV project ftryuvfdihmhlzvbpfeu only · never PROD.</text>
+  <text x="620" y="1184" fill="#6f8f6f" font-size="12.5" text-anchor="middle">DEV project ftryuvfdihmhlzvbpfeu only · never PROD. Ship gate: node scripts/ask/eval.mjs (wide_test + real_chat_test, real_chat_test is the one that matters).</text>
 </svg>

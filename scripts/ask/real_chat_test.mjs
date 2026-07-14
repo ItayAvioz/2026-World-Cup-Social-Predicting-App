@@ -40,8 +40,10 @@ const T = [
   // ---- CLASS D: answer shaping — answer the question ASKED, not the tool's default dump ----
   // "who finished 1st" asks for ONE team, not a 57-row table.
   ['D1-superlative', 'anon', 'who finished 1 in group d?', ['!5.']],
-  // "in WHICH of my groups" asks WHICH GROUP — v48 answered with a global Exact%/streak line.
-  ['D2-which-group', 'auth', 'in which of my groups i have the best streak?', ['group']],
+  // "in WHICH of my groups" asks WHICH GROUP — v48 answered with a global Exact%/streak line
+  // naming no group. Fixed answer NAMES the group ("Alpha Wolves") rather than containing the
+  // literal word "group" — check for the e2e user's real group name, not that literal string.
+  ['D2-which-group', 'auth', 'in which of my groups i have the best streak?', ['Alpha Wolves', '!Beta Sharks: #']],
 
   // ---- CLASS E: rules precision (deterministic facts, not LLM prose) ----
   // v48 said "one per day until the last question closes" — never gave the number.

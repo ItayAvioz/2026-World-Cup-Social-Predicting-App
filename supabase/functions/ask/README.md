@@ -11,6 +11,7 @@ live data questions (schedule, scorers, stats, standings, counts, per-game box s
   - `20260706000000_chatbot_intent_embeddings.sql` — `intent_examples`/`match_intent` (intent classifier)
   - `20260706100000_chatbot_dim_examples.sql` — `dim_examples`/`match_dim` (stat-dimension classifier)
   - `20260713000001_ask_log.sql` — **`ask_log`** (question → route → answer → latency; RLS on, service-role only)
+  - `20260714000001_ask_log_validation_telemetry.sql` — adds `validation_fail`/`expected_shape`/`rows_count` to `ask_log` (v29 P0b/P9 — only `validation_fail='repeat'` is written so far, by V1)
 - **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded; sends the last **3** user turns as `history` **plus** `last_answer` and `prev_spec` for structured/answer-aware follow-ups) + mounted in `src/components/Layout.jsx`.
 
 ## Coverage matrix (what the bot answers, refuses, or clarifies)
@@ -23,13 +24,24 @@ Anything not in this table should **refuse or clarify** — never substitute a n
 | Team stats | leaders per dim (goals/assists/cards/defense/possession/corners/fouls/offsides/shots), compare, per-team totals, recent form / last-N, bracket status | `statLeaderboard` `compareTeams` `teamStat` `recentForm` `bracketStatus` |
 | Player stats | per-player totals, player counts ("how many players got a red card") | `resolvePlayer`+`playerStat` `playerCount` |
 | Odds | game odds (Bet365), champion outright odds (William Hill) | `gameOddsAnswer` `championOddsAnswer` |
-| WC groups A–L | computed group tables | `tournamentGroupTable` |
-| My data | rank, points, picks, exact scores (+which games), exact%/hit%/streak, my bracket, points from a match-day | `myFocus` `myExact` `myRates` `myBracket` `dayPoints` |
+| WC groups A–L | computed group tables (sourced from `teams.group_name` — clean 4/group), "who finished 1st/last" | `tournamentGroupTable` |
+| Trivia | total question count, open window, "is there one today", **my own trivia score** (private) | `triviaInfo` `myTriviaScore` |
+| Top scorer candidates | who's eligible to pick, per-team candidate list | `topScorerCandidates` |
+| Card totals | tournament-wide red/yellow card sums (a `SUM()`, never RAG) | `cardsTotal` |
+| My data | rank, points, picks, exact scores (+which games), exact%/hit%/streak, my bracket, points from a match-day, **best-performing group** ("which of my groups...") | `myFocus` `myExact` `myRates` `myBestGroup` `myBracket` `dayPoints` |
 | Group data | standings, members/captain, group predictions per game, a mate's prediction, who picked X, latest AI roast | `groupStandings` `groupMeta` `groupHistory` `memberPrediction` `whoPicked` `latestRoast` |
 | Global | global leaderboard, another user's (public, post-lock) picks | `globalStandings` `userPicksPublic` |
-| Rules/how-to | scoring, deadlines, caps, bracket rules, tie-breaks, fold-in dates, navigation, roast timing, inactive members, self-service locks | `rulesFAQ` → grounded RULES LLM |
+| Rules/how-to | scoring, deadlines, caps, bracket rules, tie-breaks, fold-in dates, navigation, roast timing, inactive members, self-service locks | `rulesFAQ` → grounded RULES LLM (v29: FACTS block with today's real date) |
+| Courtesy | "thanks" / "ok" / "cool" — never touches data, auth, or the LLM | `courtesy` route |
 | **Refuses** | other groups' data (incl. near-miss names like `test3` vs `TestA`), pre-kickoff predictions, non-2026 years, unknown teams, untracked stats (attendance/referee/venue/city/weather/throw-ins/VAR) | deterministic guards |
 | **Clarifies** | bare superlatives with no metric, 1–2-word fragments, genuinely ambiguous intents | clarify band → LLM understanding fallback |
+
+**Public vs private line (decided, see memory `ask-bot-public-private-line.md`):** champion/top-scorer
+picks, group **names**, and global leaderboard rank+points are PUBLIC after the June-11 lock — the
+bot may answer them for ANY user, including the group label (`what is dani's champion pick?` →
+`[Demo] champion Netherlands`). PRIVATE, always: predictions before that game's kickoff, and any
+group the caller is not a member of (its board/members/predictions). The test is "is this field
+already public in the app UI?", not "whose data is it" — don't harden picks/ranks into refusals.
 
 ## Deploy
 **Use the CLI. One command, from disk:**
@@ -55,9 +67,11 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 48** = the **v28** code, deployed from disk 2026-07-14.
-> **Wide test: 99/99 PASS.** `reindex_dims` has been run (10 dims / 48 examples, incl. the new
-> `offsides` + `shots`).
+> Current: DEV runs EF **version 53** = **v29 phases 1-4** (docs/PLAN_ASK_BOT_V29.md — a scoped
+> subset, NOT the full understand-first rewrite), deployed from disk 2026-07-14.
+> **`node scripts/ask/eval.mjs` → wide_test 99/99, real_chat_test 17/17.** No reindex needed
+> (v29 phases 1-4 added tools/rules, not embedding examples — INTENT_EXAMPLES/DIM_EXAMPLES
+> unchanged).
 >
 > **v27 (coverage + conversation). ⚠️ needs `reindex_dims` (DIM_EXAMPLES changed).**
 > Four whole data domains the UI ships but the bot had NO tools for: **odds** (game Bet365 +
@@ -229,12 +243,10 @@ The one sequence every change follows, in order. Skipping a step is how DEV went
                    see "Do NOT deploy via MCP" above. NEVER a different project-ref.
 4. REINDEX?        Only if this change edited INTENT_EXAMPLES / DIM_EXAMPLES / kb stat-card text —
                    see "Reindex" above. Skip for pure code/logic changes (v24/v25/v26/v28 needed none).
-5. VALIDATE        run in this order — each is a DIFFERENT question, don't skip to the last one:
-     a. node scripts/ask/wide_test.mjs          # 99 cases I wrote — regression net, must stay 99/99
-     b. node scripts/ask/real_chat_test.mjs     # cases a REAL USER typed — the actual gate, must be 17/17
-     c. node scripts/ask/audit_probe.mjs out.json  # 82-question adversarial sweep, EVERY domain —
-        exploratory, NOT auto-graded yet (P7 will unify all three into one eval.mjs exit code).
-        Read the printed answers yourself; anything wrong graduates into a new real_chat_test case
+5. VALIDATE        node scripts/ask/eval.mjs   # runs wide_test then real_chat_test, ONE exit code
+                   Non-zero = DO NOT SHIP. Then separately, exploratory (not graded, not blocking):
+     node scripts/ask/audit_probe.mjs out.json   # 82-question adversarial sweep, EVERY domain —
+        read the printed answers yourself; anything wrong graduates into a new real_chat_test case
         BEFORE you consider the change done — that is how the suite grows (see PLAN §Learning loop).
 6. SPOT-CHECK      ask_log for the questions you just changed behavior for:
      select question, route, answer, created_at from ask_log
@@ -257,10 +269,11 @@ The one sequence every change follows, in order. Skipping a step is how DEV went
 function for ~2 hours (see the deploy-hazard note above). The CLI removed the SIZE risk; it did not
 remove the "someone else ran it and I didn't watch the version number change" risk.
 
-**Never call step 5(a) alone "done".** `wide_test` passing 99/99 while `real_chat_test` sat at
-11/17 is the exact failure this workflow exists to prevent — a synthetic suite I wrote can be green
-while ~1 in 4 real questions are wrong. `real_chat_test` (and eventually `audit_probe`, once P7 grades
-it) are the suites that matter; `wide_test` only proves you didn't regress something already fixed.
+**Never call `wide_test` alone "done".** It passing 99/99 while `real_chat_test` sat at 11/17 is
+the exact failure `eval.mjs` exists to prevent — a synthetic suite I wrote can be green while ~1 in
+4 real questions are wrong. `real_chat_test` is the suite that matters; `wide_test` only proves you
+didn't regress something already fixed. `audit_probe` is the widest net (find NEW failure classes)
+but isn't graded yet — read it by hand.
 
 ## Architecture (one line)
 `preGuard+rateLimit → splitCompound → [embed once | keyword-only if OpenAI is down] → QuerySpec
@@ -272,6 +285,22 @@ LLM only for: fuzzy "describe" stats (grounded + number-checked), the rules-FAQ 
 steer-back, and the parse-only understanding fallback. **No private data ever reaches the LLM.**
 
 ## Local test harnesses
+**`scripts/ask/eval.mjs` — the ship gate. Run this, not the individual scripts, before committing.**
+Runs `wide_test` then `real_chat_test`, one exit code. Non-zero = do not ship (see Update workflow).
+
+**`scripts/ask/real_chat_test.mjs` — built from a REAL user session, not invented cases.** This is
+the suite that matters: `wide_test` sat at 99/99 while this one caught 6 live failures (the "group
+i" pronoun bug, a how-to phrasing gated behind login, a typo that replayed the previous answer
+verbatim, a 57-row table for a one-name question, an unnamed "which group" answer, a trivia count
+answered with the point-value FAQ). Target: 17/17.
+
+**`scripts/ask/audit_probe.mjs out.json` — 82-question adversarial sweep across every domain.**
+Exploratory, not graded (yet) — print question→route→answer and read it. This found the worst bug
+of the whole v29 pass: `answerCrew`'s number-grounding was a token-membership test ("does this digit
+appear ANYWHERE in the facts?"), so "how many red cards in the tournament?" answered **"0"** (truth:
+13) because every player stat-card contains "0 yellow, 0 red". Anything wrong here graduates into a
+new `real_chat_test` case before you call a change done.
+
 `scripts/ask/bot_test.mjs` POSTs a 200-question set (by topic × complexity) and grades ROUTING
 (private intents are anon-gated, so answer-correctness isn't graded there). Run after any change:
 ```bash

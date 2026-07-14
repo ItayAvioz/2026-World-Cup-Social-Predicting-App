@@ -1,13 +1,23 @@
 # Ask Bot v29 — implementation-ready plan
 
 **Target:** a functional, independent, reliable, high-quality bot.
-**Measured on** DEV EF v48 (v28 rule table), 2026-07-14:
 
-| Suite | What it is | Score |
-|---|---|---|
-| `wide_test.mjs` | 99 cases **I invented** | 99/99 ✅ |
-| `real_chat_test.mjs` | 17 cases **a real user typed** | **11/17** ❌ |
-| `audit_probe.mjs` | 82-question adversarial sweep, every domain | **~60/82 (1 in 4 wrong)** ❌ |
+## STATUS (2026-07-15): Phases 1-4 SHIPPED. Phases 5-9 NOT started.
+
+**Live: DEV EF v53.** `node scripts/ask/eval.mjs` → wide_test 99/99, real_chat_test **17/17**
+(was 11/17 pre-ship). What actually shipped is phases 1-4 from **PART 2**'s build-order table
+(with honest ⚠️ markers where the gate was met by a targeted fix rather than the general
+mechanism) — **not** the general S4/S5/S7/S9 architecture in **PART 1**. See PART 2's per-phase
+status column for exactly what's done vs still to build, **PART 3** for real before/after
+examples, and `memory/ask-bot-dev.md` for the live changelog.
+
+Baseline this plan was written against — DEV EF v48 (v28 rule table), 2026-07-14:
+
+| Suite | What it is | Score then | Score now (v53) |
+|---|---|---|---|
+| `wide_test.mjs` | 99 cases **I invented** | 99/99 ✅ | 99/99 ✅ |
+| `real_chat_test.mjs` | 17 cases **a real user typed** | **11/17** ❌ | **17/17** ✅ |
+| `audit_probe.mjs` | 82-question adversarial sweep, every domain | **~60/82 (1 in 4 wrong)** ❌ | not re-scored (exploratory, not graded — spot-checked live post-ship; the flagship "0 red cards" case confirmed fixed, see **PART 3**) |
 
 **The green synthetic suite hid a 25% failure rate.** All gates below measure on the real suites;
 `wide_test` is demoted to a no-regression net.
@@ -253,27 +263,61 @@ Rule: **"If a date or number is not in FACTS, say you don't know."** Enforced by
 Ordered by **truth-risk**, not elegance. A bot that routes perfectly and still says *"0 red cards"*
 is worse than one that routes badly and admits it doesn't know.
 
-| # | Phase | Touches | Gate |
-|---|---|---|---|
-| **1** | **V0 outbound guard** — single choke point for all 4 LLM calls; throws on private-shaped payload | ~30 lines, no routing | CI test: prediction in payload ⇒ throws |
-| **2** | **FACTS block + V4** — today's date in every prompt; numbers rendered from rows; aggregates → SQL; **kill RAG's licence to count** | `answerCrew`, `RULES_PROMPT` | zero un-grounded numbers/dates in `audit_probe` |
-| **3** | **S1 courtesy + S7 authorize + V6** — auth binds to the tool | new stage + a map | `thanks!`, `how to play`, `who can i pick` all answer without login |
-| **4** | **S8 coverage** — trivia tools (count/window/today/**my score**), `teams` registry, top-scorer candidates | new tools | trivia probes all correct |
-| **5** | **V1 + V2 + V5 + S9 shape renderer** | render + validate | shape/repeat classes = 0 |
-| **6** | **S5 typed registry** — wc_group vs friend_group vs pronoun | resolver | `in how much group i can be?` → "3 groups" |
-| **7** | **S4 understand-first + S6 clarify** — LLM as parser; S3 demoted to fast path + outage net | router | `real_chat_test` 17/17 |
-| **8** | **eval.mjs gate** — 3 suites, one exit code; **deploy blocked on regression** | script | nothing regresses silently |
-| **9** | **Telemetry + learning loop** — `ask_log`: `validation_fail`, `expected_shape`, `rows_count`. Weekly: correct routes → new embedding examples; failures → new eval cases; 👍/👎 in the UI. **Curated, never auto-fed.** | migration + UI | suite grows weekly |
+| # | Phase | Touches | Gate | Status (2026-07-15) |
+|---|---|---|---|---|
+| **1** | **V0 outbound guard** — single choke point for all 4 LLM calls; throws on private-shaped payload | ~30 lines, no routing | private token in payload ⇒ throws | ✅ **SHIPPED** — `assertPublicPayload`, all 4 sites |
+| **2** | **FACTS block + V4** — today's date in every prompt; numbers rendered from rows; aggregates → SQL; **kill RAG's licence to count** | `answerCrew`, `RULES_PROMPT` | zero un-grounded numbers/dates in `audit_probe` | ✅ **SHIPPED** — `factsBlock()`; `cardsTotal`/`triviaInfo('count')` route to SQL, never RAG; per-card substring check replaces the token-membership one. "0 red cards" → "13 red cards" confirmed live |
+| **3** | **S1 courtesy + S7 authorize + V6** — auth binds to the tool | new stage + a map | `thanks!`, `how to play`, `who can i pick` all answer without login | ⚠️ **PARTIAL** — courtesy route ✅ shipped; the 3 example questions ✅ all fixed and confirmed live; but via *targeted regex fixes* (broadened `howto_is_rules`, new `top_scorer_candidates` rule), not the general tool-bound auth map S7 describes. A future misroute into a private tool can still demand a login |
+| **4** | **S8 coverage** — trivia tools (count/window/today/**my score**), `teams` registry, top-scorer candidates | new tools | trivia probes all correct | ✅ **SHIPPED** — `triviaInfo`/`myTriviaScore`/`topScorerCandidates`; `tournamentGroupTable` also re-sourced from `teams.group_name` (not full S5, but the concrete data-cleanliness win) |
+| **5** | **V1 + V2 + V5 + S9 shape renderer** | render + validate | shape/repeat classes = 0 | ⚠️ **PARTIAL** — V1 (repeat guard) ✅ fully shipped, logs to `ask_log.validation_fail`. V2/V5/S9 NOT a general renderer — only the two reported cases got targeted fixes: `tournamentGroupTable(..., 'first'\|'last')` and `myBestGroup`. A new "answered the tool, not the question" bug in an untouched area is not caught |
+| **6** | **S5 typed registry** — wc_group vs friend_group vs pronoun | resolver | `in how much group i can be?` → "3 groups" | ⚠️ **GATE MET, MECHANISM DIFFERENT** — the example question now correctly answers "3 groups" (confirmed live), but via an *asymmetric regex* (letter 'i' requires a strong cue, other letters get a broader one) rather than a typed entity resolver. Cheaper, narrower, and still fundamentally guessing from strings — the next pronoun-shaped collision (if letter 'i' ever needs a broad cue too) will need its own patch |
+| **7** | **S4 understand-first + S6 clarify** — LLM as parser; S3 demoted to fast path + outage net | router | `real_chat_test` 17/17 | ❌ **NOT STARTED** — `real_chat_test` reached 17/17 through targeted fixes to individual rules (phases 3/4/5/6 above), not by promoting the LLM to a primary parser. The routing architecture is still v28's `ROUTE_RULES` chain, unchanged in structure |
+| **8** | **eval.mjs gate** — 3 suites, one exit code; **deploy blocked on regression** | script | nothing regresses silently | ✅ **SHIPPED** (2 of 3) — `scripts/ask/eval.mjs` runs wide_test + real_chat_test, one exit code. `audit_probe` deliberately left exploratory/ungraded, per its own docstring — not yet a blocking gate |
+| **9** | **Telemetry + learning loop** — `ask_log`: `validation_fail`, `expected_shape`, `rows_count`. Weekly: correct routes → new embedding examples; failures → new eval cases; 👍/👎 in the UI. **Curated, never auto-fed.** | migration + UI | suite grows weekly | ⚠️ **PARTIAL** — migration `20260714000001_ask_log_validation_telemetry.sql` ✅ shipped, columns exist; only `validation_fail` is actually populated (by V1). No weekly mining process, no 👍/👎 UI — both still manual/未built |
 
-**Phases 1–3 stop the bot being confidently wrong and touch no routing.** They can ship this week.
+**What "phases 1-4 shipped" actually means:** every phase above that touches routing did so through
+**scoped, targeted fixes to the reported failures** — not the general mechanisms (typed registry,
+tool-bound auth map, shape renderer, LLM-as-parser) that PART 1's pipeline describes. The gates were
+met; the *general* infrastructure that would make the NEXT similar bug cheap to fix was not built.
+That is phases 5-9's remaining job, and PART 3 below has the concrete before/after evidence.
 
-### Definition of done
-`audit_probe ≥ 80/82` · `real_chat_test 17/17` · `wide_test 99/99` · every answer carries a `route`
-· **zero un-grounded numbers or dates** · V0 green in CI.
+### Definition of done (original) vs. actual (2026-07-15)
+Original: `audit_probe ≥ 80/82` · `real_chat_test 17/17` · `wide_test 99/99` · every answer carries
+a `route` · zero un-grounded numbers/dates · V0 green in CI.
+**Actual:** `real_chat_test` **17/17** ✅ · `wide_test` **99/99** ✅ · every answer already carried a
+`route` since v28 ✅ · V0 shipped but has no CI (no test runner in this repo — verified manually:
+feeding it a payload containing `points_earned` throws) ⚠️ · `audit_probe` not re-scored to a number
+(exploratory) — see PART 3 for the specific before/after answers that were re-verified live.
 
 ---
 
-# PART 3 — DECISIONS & NON-GOALS
+# PART 3 — REAL EXAMPLES: BEFORE (EF v48) → AFTER (EF v53)
+
+All verified live against the deployed DEV function, not just in test assertions.
+
+| Question | v48 (before) | v53 (after) |
+|---|---|---|
+| `how many red cards in the tournament?` | *"There have been 0 red cards"* (truth: 13) | *"There have been 13 red cards in the tournament so far."* |
+| `is there a trivia question today?` | *"it's currently before June 11"* (today was Jul 14) | *"Yes — today's trivia question is open now, until Jul 15, 19:00 UTC (22:00 Israel)."* |
+| `thanks!` | *"Please sign in — I can only look up your personal data..."* | *"You're welcome! Ask me anything else about the tournament or the app."* |
+| `how to play this game?` | *"Please sign in..."* | a full grounded how-to-play answer, no login required |
+| `who can i pick as top scorer?` | *"Please sign in..."* | *"You can pick any player from the full tournament squads... Search by name or team in the Picks tab."* |
+| `in how much group i can be?` | dumps the **World Cup Group I** standings table | *"You can be in up to 3 groups (created + joined combined)."* |
+| `is group c finished?` | *"Please sign in..."* | correctly shows the (clean, 4-team) Group C table |
+| `who finished 1 in group a?` | a **57-row** table (DEV club test games polluting `games.group_name='A'`) | a clean **4-row** table (sourced from `teams.group_name`) |
+| `in which of my groups i have the best streak?` | a combined rate, naming no group | *"You're doing best in Alpha Wolves: Exact 67% (2/3)..."* |
+| `which group am i doing best in?` | dumped both groups' full stats | *"You're doing best in Alpha Wolves: #1 of 1 (global #40)."* |
+| `where i can see game stat?` | dumped the caller's group standings | *"You can see game stats by tapping on any game in the Match Page..."* |
+| `what is the nexg game?` (after an unrelated red-cards question) | replayed the **previous answer** (a red-card list) verbatim | correctly answers with the actual next fixture |
+
+**Still open (confirmed, not fixed this pass — honest gaps):**
+- `which team scored the most goals?` → answers a per-game **average**, labelled as such ("5.0 goals per game"). Defensible (truthful, labelled) but may not match user intent for a "total" question — deferred, not a lie.
+- `how many yellow cards did argentina get?` → still answers with games played, not cards. `teamStat`'s dim-resolution for a team-scoped card count is a separate, deeper bug than the tournament-wide aggregate this pass fixed — not touched.
+- `why?` (conversational elaboration after an answer) → still the generic off-topic brush-off.
+
+---
+
+# PART 4 — DECISIONS & NON-GOALS
 
 ## The public/private line — DECIDED 2026-07-14 (do not re-open)
 

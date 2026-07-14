@@ -62,11 +62,17 @@ const T = [
   ['nav', 'simple', 'anon', 'how do i bet on games here?', ['!sign in']],
   ['nav', 'medium', 'anon', 'How do I see and react to the AI roast for my group?', ['AI', '!focus on the']],
   ['time', 'medium', 'anon', 'when is the final?', ['Final is Netherlands vs England', '!1-0']],
-  ['time', 'hard', 'anon', 'When was the semi final played?', ['Netherlands vs Portugal', '!1-0']],
+  // v29: these 3 cases are TIME-SENSITIVE (DEV kickoffs are fixed real 2026 calendar
+  // timestamps, and enough real wall-clock time passes across a long session that games
+  // genuinely finish mid-session — Netherlands beat Portugal in the SF, so "last game" and
+  // "Portugal's next game" legitimately moved on). Recalibrated 2026-07-14 21:xx UTC against
+  // live-verified current answers — if these fail again later, check whether it's a real
+  // regression or just the clock having moved past ANOTHER kickoff before re-asserting.
+  ['time', 'hard', 'anon', 'When was the semi final played?', ['Netherlands', 'Portugal', "!isn't set yet"]],
   ['time', 'medium', 'anon', 'When do the semi finals take place?', ['Netherlands', "!isn't set yet"]],
   ['time', 'hard', 'anon', 'wen is teh finall', ['Netherlands', '!Semi-Final']],
-  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['Argentina 2-1 Colombia', '!Name both teams']],
-  ['time', 'hard', 'anon', 'and portugal?', ['Portugal', 'Semi-Final'], ['when do england play next']],
+  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['Netherlands 1-0 Portugal', '!Name both teams']],
+  ['time', 'hard', 'anon', 'and portugal?', ['Portugal', 'Argentina', '!3-2'], ['when do england play next']],
   ['stats', 'medium', 'anon', 'Which team commits the most fouls per game?', ['fouls', '!have been played']],
   ['stats', 'hard', 'anon', 'How many goals has Manchester City scored in total, and how many have they conceded?', ['Manchester City have scored', 'conceded', '!Fulham']],
   ['stats', 'hard', 'anon', 'Compare Liverpool and Everton - who has better tournament stats?', ['Liverpool:', 'Everton:', "!couldn't find"]],

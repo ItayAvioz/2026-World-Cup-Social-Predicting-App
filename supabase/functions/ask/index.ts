@@ -1,4 +1,38 @@
-// ask — in-app AI bot (DEV ONLY) — v27 coverage + conversation round
+// ask — in-app AI bot (DEV ONLY) — v29 phases 1-4: stop lying, un-gate public, coverage, shape
+// v29 (2026-07-14, scoped subset of docs/PLAN_ASK_BOT_V29.md — NOT the full understand-first
+//   rewrite, see the plan doc for what's deliberately deferred and why):
+//   P0 STOP LYING: V0 outbound-payload guard (assertPublicPayload) on all 4 LLM call sites —
+//     the privacy boundary was true by convention, now it THROWS on a private-shaped token.
+//     FACTS block (today's real date, computed per-request) injected into the rules LLM +
+//     answerCrew — RULES_PROMPT had no clock (told a user trivia "hasn't started, it's before
+//     June 11" on 2026-07-14). answerCrew's number-grounding was a token-membership test
+//     ("does this digit appear ANYWHERE in the facts?" — every player card has "0 red", so
+//     "there have been 0 red cards" [truth: 13] always passed) — replaced with a per-card
+//     substring check, and aggregates (cardsTotal, triviaInfo 'count') now route to SQL and
+//     never reach RAG at all: RAG describes, SQL counts.
+//   P1 UN-GATE PUBLIC: new `courtesy` route (thanks/ok/cool -> reply, no auth/data/LLM —
+//     before this a stray "thanks!" hit a misclassified private intent and demanded a login).
+//     howto_is_rules regex gained bare "how to <verb>" (had no modal verb, so "how to play
+//     this game?" fell through to NEED_LOGIN). trivia_info split rulesFAQ's swallow-everything
+//     trivia line (any "how many...trivia" answered the POINT VALUE) into count/window/today.
+//   P2 COVERAGE: trivia (triviaInfo, myTriviaScore), top_scorer_candidates — 3 domains the UI
+//     ships with literally zero tools before now, which is WHY the bot guessed on them.
+//   P3 SHAPE (targeted, not the general renderer): tournamentGroupTable re-sourced from
+//     `teams.group_name` (clean, 4/group) instead of `games.group_name` (DEV also tags 52 club
+//     test games as group 'A' — a 57-row table for a one-name question); `only:'first'|'last'`
+//     answers "who finished 1st" with one row. wc_group_table's cue-word match is asymmetric:
+//     letter 'i' (near-certain to be the PRONOUN "I", not Group I) requires a STRONG explicit
+//     cue; every other letter got a BROADER cue set (was missing "finished"/"status"/"over").
+//     myBestGroup (new) answers "which of my groups..." by naming the actual best group,
+//     computed per-group — myRates/myFocus with target=null used to combine ALL groups into
+//     one number and name none of them.
+//   V1 (repeat guard, in `done()`): a byte-identical answer to a DIFFERENT low-confidence
+//     question is refused and re-asked as a clarify — this is the general form of the "nexg"
+//     bug (a typo silently replayed the previous turn's answer verbatim).
+//   Full audit, the 3 test suites (wide_test/real_chat_test/audit_probe), and the deferred
+//   remainder (typed entity resolver, LLM-as-primary-parser, generalized shape/validation
+//   engine, eval.mjs gate, learning loop) are in docs/PLAN_ASK_BOT_V29.md.
+// ----------------------------------------------------------------------------
 // v27 COVERAGE: 4 whole data domains added — ODDS (game Bet365 + champion William Hill),
 //   KNOCKOUT-BRACKET game (my picks + fn_knockout_points + fold-in FAQ), AI ROAST (latest
 //   summary + timing FAQ), TOURNAMENT GROUPS A-L (computed standings; single letters are
@@ -227,6 +261,32 @@ function guessIntent(q: string): string {
 // v26: a failed query must surface as a retry message — never read as an empty result
 // ("You have no exact scores yet" on a DB blip was a confident lie).
 function must<T>(r: { data: T; error: any }): T { if (r.error) throw new Error('db: ' + r.error.message); return r.data }
+
+// v29 V0: the outbound-payload guard. The privacy boundary ("only question text + the
+// caller's OWN group/member names + public stat cards ever reach the LLM") was true by
+// CONVENTION — nothing enforced it, so a future tool could pass a prediction into answerCrew
+// and nobody would notice until it leaked. Every openai.chat.completions.create call site
+// must run its outbound strings through this first. It THROWS (never silently strips) so a
+// violation fails loudly into ask_log instead of quietly shipping.
+const PRIVATE_TOKEN = /\b(points_earned|pred_home|pred_away|prediction_id|champion_pick|top_scorer_pick|knockout_pick|is_auto|user_id|group_members|auth\.uid|email)\b/i
+function assertPublicPayload(where: string, ...parts: string[]): void {
+  const blob = parts.join(' ')
+  if (PRIVATE_TOKEN.test(blob)) {
+    // console.error first: some call sites wrap this in a try/catch that swallows the throw
+    // (existing error handling for network/parse failures) — the violation must still be
+    // visible in EF logs even when the throw itself gets caught upstream.
+    console.error(JSON.stringify({ llm_guard_violation: true, where }))
+    throw new Error(`llm-guard: private-shaped token blocked before reaching the LLM (${where})`)
+  }
+}
+// v29: RULES_PROMPT (and the RAG writer) had NO CLOCK — on 2026-07-14 the bot told a user
+// trivia "hasn't started yet, it's before June 11" (five weeks stale). Computed fresh per
+// request (not a module-level const) so a long-lived EF instance never serves a stale date.
+function factsBlock(): string {
+  const il = new Date(Date.now() + 3 * 3600_000)  // Israel = UTC+3 for the whole tournament window
+  const today = `${il.getUTCFullYear()}-${String(il.getUTCMonth() + 1).padStart(2, '0')}-${String(il.getUTCDate()).padStart(2, '0')}`
+  return `\n\nFACTS (authoritative — never state a date or number that is not here or in the data given to you):\n- Today's date is ${today} (Israel time).`
+}
 
 // ---- guardrails -------------------------------------------------------------
 function preGuard(q: string): { ok: boolean; msg?: string } {
@@ -620,22 +680,42 @@ async function championOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
 }
 // v27: TOURNAMENT groups A-L ("group D standings") — computed from games.group_name.
 // These collided with FRIEND-group boards before (wrong-tool answers).
-async function tournamentGroupTable(sb: Sb, letter: string): Promise<string> {
-  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, kick_off_time').eq('group_name', letter.toUpperCase()).eq('phase', 'group')
+// v29: sourced from `teams.group_name` (clean, exactly 4 teams per WC group) instead of
+// `games.group_name` — on DEV the games table ALSO tags 52 unrelated club test games as
+// group 'A' (dev test-data corpus, left in place on purpose — see memory
+// dev-data-scope-decision.md), so the old query returned a 57-row table for a 4-team group.
+// This is the durable fix that memory prescribed: join to `teams`, never filter by a raw
+// `games` column. `only` answers "who finished 1st/last" with one row instead of the table.
+async function tournamentGroupTable(sb: Sb, letter: string, only?: 'first' | 'last'): Promise<string> {
+  const L = letter.toUpperCase()
+  const { data: teamRows } = await sb.from('teams').select('name').eq('group_name', L).not('is_tbd', 'is', true)
+  const teamNames = (teamRows ?? []).map((t: any) => t.name as string)
+  if (!teamNames.length) return `I don't have games for World Cup Group ${L}.`
+  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, kick_off_time').in('team_home', teamNames).in('team_away', teamNames).eq('phase', 'group')
   const rows = (data ?? []) as any[]
-  if (!rows.length) return `I don't have games for World Cup Group ${letter.toUpperCase()}.`
   const table = new Map<string, { p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number }>()
-  const T = (t: string) => { if (!table.has(t)) table.set(t, { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }); return table.get(t)! }
+  for (const t of teamNames) table.set(t, { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 })
   const now = new Date()
   for (const g of rows) {
-    T(g.team_home); T(g.team_away)
     if (g.score_home === null || new Date(g.kick_off_time) > now) continue
-    const h = T(g.team_home), a = T(g.team_away)
+    const h = table.get(g.team_home), a = table.get(g.team_away)
+    if (!h || !a) continue
     h.p++; a.p++; h.gf += g.score_home; h.ga += g.score_away; a.gf += g.score_away; a.ga += g.score_home
     if (g.score_home > g.score_away) { h.w++; h.pts += 3; a.l++ } else if (g.score_home < g.score_away) { a.w++; a.pts += 3; h.l++ } else { h.d++; a.d++; h.pts++; a.pts++ }
   }
   const ranked = [...table.entries()].sort((x, y) => y[1].pts - x[1].pts || (y[1].gf - y[1].ga) - (x[1].gf - x[1].ga) || y[1].gf - x[1].gf)
-  return `World Cup Group ${letter.toUpperCase()}:\n` + ranked.map(([t, s], i) => `${i + 1}. ${t} — ${s.pts} pts (${s.w}W ${s.d}D ${s.l}L, ${s.gf}-${s.ga})`).join('\n')
+  const rowText = (s: any) => `${s.pts} pts (${s.w}W ${s.d}D ${s.l}L, ${s.gf}-${s.ga})`
+  if (only === 'first') {
+    const top = ranked[0][1].pts, leaders = ranked.filter(([, s]) => s.pts === top)
+    if (leaders.length === 1) { const [t, s] = leaders[0]; return `${t} is currently 1st in World Cup Group ${L}: ${rowText(s)}` }
+    return `Tied for 1st in World Cup Group ${L}: ` + leaders.map(([t, s]) => `${t} (${rowText(s)})`).join(', ')
+  }
+  if (only === 'last') {
+    const bottom = ranked[ranked.length - 1][1].pts, trailers = ranked.filter(([, s]) => s.pts === bottom)
+    if (trailers.length === 1) { const [t, s] = trailers[0]; return `${t} is currently last in World Cup Group ${L}: ${rowText(s)}` }
+    return `Tied for last in World Cup Group ${L}: ` + trailers.map(([t, s]) => `${t} (${rowText(s)})`).join(', ')
+  }
+  return `World Cup Group ${L}:\n` + ranked.map(([t, s], i) => `${i + 1}. ${t} — ${rowText(s)}`).join('\n')
 }
 // v27: recent form — last N finished games as a W/D/L strip ("how is Argentina doing?",
 // "last 5 games"). 90-min result shown; * marks games decided after ET/pens.
@@ -652,6 +732,68 @@ async function recentForm(sb: Sb, team: string, n: number): Promise<string> {
   }
   const ls = rows.map(line)
   return `${team} — last ${rows.length} game${rows.length === 1 ? '' : 's'} (most recent first): ${ls.map((l) => l.res).join(' ')}\n` + ls.map((l) => '• ' + l.txt).join('\n') + (ls.some((l) => l.res.includes('*')) ? '\n(* decided after extra time/penalties — 90-min result shown)' : '')
+}
+
+// v29: trivia coverage — total question count, open window, "is there one today", and the
+// caller's own trivia score. Previously NONE of this had a tool: the bot guessed a hardcoded
+// date range in prose ("starts June 11") that was already stale (the real seed's earliest
+// live question is 2026-05-25), and a rulesFAQ line that answered the POINT VALUE regardless
+// of what was actually asked. Everything here is queried live — never a memorized date.
+async function triviaInfo(sb: Sb, kind: 'count' | 'today' | 'window'): Promise<string> {
+  // v29 fix (found live): 'window' needs no DB data at all — check it BEFORE the query so it
+  // never depends on trivia_questions being readable.
+  if (kind === 'window') return 'Each trivia question is open for 40 seconds, and you get one shot to answer it — no retries. Miss it and it counts as wrong.'
+  // v29 fix (found live): trivia_questions RLS is `authenticated` + `available_from <= now()`
+  // ONLY — an anon caller (or a question about ALL 40-ish questions, most still locked) gets
+  // ZERO rows via the public/user client. The count/window/today FACTS here (never the actual
+  // question text or options) are meant to be public, so this reads via the SERVICE-role
+  // client — same privilege tier already used for reindex, nothing new is exposed.
+  // '[TEST' rows are dev scaffolding, never real tournament questions — matched by PREFIX,
+  // not a bare "test" substring (which also matches "fastest", a real question's own word).
+  const { data } = await sb.from('trivia_questions').select('available_from, available_until').not('question_text', 'like', '[TEST%').order('available_from', { ascending: true })
+  const rows = (data ?? []) as any[]
+  if (!rows.length) return "I don't have the trivia schedule yet."
+  if (kind === 'count') return `There ${rows.length === 1 ? 'is' : 'are'} ${rows.length} trivia questions in total — one per day, each open for 40 seconds with one shot to answer.`
+  const now = new Date()
+  const open = rows.find((r) => new Date(r.available_from as string) <= now && now < new Date(r.available_until as string))
+  if (open) return `Yes — today's trivia question is open now, until ${fmtKO(open.available_until as string)}.`
+  const next = rows.find((r) => new Date(r.available_from as string) > now)
+  if (next) return `Not right now — the next trivia question opens ${fmtKO(next.available_from as string)}.`
+  return `No — the trivia window has closed (the last question closed ${fmtKO(rows[rows.length - 1].available_until as string)}).`
+}
+async function myTriviaScore(sbUser: Sb, me: string): Promise<string> {
+  const rows = (must(await sbUser.from('trivia_answers').select('is_correct, points_earned').eq('user_id', me)) ?? []) as any[]
+  if (!rows.length) return "You haven't answered any trivia questions yet."
+  const correct = rows.filter((r) => r.is_correct).length
+  const points = rows.reduce((s, r) => s + (r.points_earned ?? 0), 0)
+  return `You've answered ${rows.length} trivia question${rows.length === 1 ? '' : 's'}, ${correct} correct. Trivia points are banked silently and only appear on the leaderboard after the last question closes — you have ${points} pt${points === 1 ? '' : 's'} waiting.`
+}
+
+// v29: tournament-wide card totals. This used to have NO deterministic path — "how many red
+// cards in the tournament?" fell through to the RAG crew, which fabricated "there have been
+// 0 red cards" (truth: 13) because its old grounding check only asked "does this digit appear
+// ANYWHERE in the facts?", and every player card contains "0 yellow, 0 red". A SUM() must
+// never reach a similarity search: RAG describes, SQL counts.
+async function cardsTotal(sb: Sb, color: 'red' | 'yellow' | 'both'): Promise<string> {
+  const rows = (must(await sb.from('game_team_stats').select('red_cards, yellow_cards')) ?? []) as any[]
+  const red = rows.reduce((s, r) => s + (r.red_cards ?? 0), 0)
+  const yellow = rows.reduce((s, r) => s + (r.yellow_cards ?? 0), 0)
+  if (color === 'red') return `There have been ${red} red card${red === 1 ? '' : 's'} in the tournament so far.`
+  if (color === 'yellow') return `There have been ${yellow} yellow card${yellow === 1 ? '' : 's'} in the tournament so far.`
+  return `There have been ${yellow} yellow card${yellow === 1 ? '' : 's'} and ${red} red card${red === 1 ? '' : 's'} in the tournament so far.`
+}
+
+// v29: public top-scorer PICK CANDIDATES — "who can I pick as top scorer?" had no tool at
+// all and used to fall into the private my_data path, which refused anonymous/misrouted
+// callers ("Please sign in") for what is genuinely public information.
+async function topScorerCandidates(sb: Sb, team: string | null): Promise<string> {
+  if (team) {
+    const rows = (must(await sb.from('top_scorer_candidates').select('name').eq('is_active', true).eq('team_name', team).order('name', { ascending: true }).limit(40)) ?? []) as any[]
+    if (!rows.length) return `I don't have top-scorer candidates listed for ${team}.`
+    return `Top-scorer candidates for ${team}: ` + rows.map((r) => r.name).join(', ') + '.'
+  }
+  const { count } = await sb.from('top_scorer_candidates').select('id', { count: 'exact', head: true }).eq('is_active', true)
+  return `You can pick any player from the full tournament squads as your Top Scorer${count ? ` — ${count} candidates across all 48 teams` : ''}. Search by name or team in the Picks tab.`
 }
 
 // v23: list / count the finished games that went to penalties or extra time (from the
@@ -801,8 +943,10 @@ async function groupMeta(sbUser: Sb, meId: string, scope: Grp[], q: string): Pro
 // of the parsed spec stays 100% deterministic (execUnderstood -> SQL + templates).
 async function llmUnderstand(openai: OpenAI, question: string, groupNames: string[], memberNames: string[], partial?: string): Promise<any | null> {
   try {
+    const sys = `Parse a WorldCup-predictions-app question into JSON with fields: asks (one of: member_prediction, group_board, group_meta, my_stats, schedule, game_stat, leaderboard, other), group (a group name mentioned, else null), member (a person/username mentioned, else null), teams (array of football team names mentioned, else []), game_ref ("last"|"final"|null), stat ("exact"|"rank"|"points"|"picks"|null). The asker's groups: ${groupNames.join(', ') || '(none)'}. Their group-mates' usernames: ${memberNames.join(', ') || '(none)'}. Map typos/nicknames to those known names when clearly intended; if a mentioned group is NOT in the list, still return it verbatim.${partial ? ` A deterministic parser already found: ${partial} — keep those unless the question clearly overrides them.` : ''} Output ONLY the JSON object.`
+    assertPublicPayload('llmUnderstand', sys, question)  // v29 V0: names only, never DB rows
     const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0, seed: 7, max_tokens: 160, response_format: { type: 'json_object' }, messages: [
-      { role: 'system', content: `Parse a WorldCup-predictions-app question into JSON with fields: asks (one of: member_prediction, group_board, group_meta, my_stats, schedule, game_stat, leaderboard, other), group (a group name mentioned, else null), member (a person/username mentioned, else null), teams (array of football team names mentioned, else []), game_ref ("last"|"final"|null), stat ("exact"|"rank"|"points"|"picks"|null). The asker's groups: ${groupNames.join(', ') || '(none)'}. Their group-mates' usernames: ${memberNames.join(', ') || '(none)'}. Map typos/nicknames to those known names when clearly intended; if a mentioned group is NOT in the list, still return it verbatim.${partial ? ` A deterministic parser already found: ${partial} — keep those unless the question clearly overrides them.` : ''} Output ONLY the JSON object.` },
+      { role: 'system', content: sys },
       { role: 'user', content: question },
     ] })
     return JSON.parse(res.choices[0]?.message?.content ?? 'null')
@@ -905,23 +1049,58 @@ async function myBracket(sbUser: Sb, me: string): Promise<string> {
 }
 // v27: exact% / hit% / streak — the "My Stats" numbers the intent examples promised but
 // no tool implemented (they used to fall to a generic summary).
-async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null): Promise<string> {
+// v29: the actual rate computation is extracted into `ratesFor` (per single group id, or
+// null = combined across all groups) so `myBestGroup` below can call it once per group and
+// compare — myRates itself is now a one-line wrapper.
+async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | null): Promise<{ total: number; exact: number; hit: number; streak: number; hot: boolean } | null> {
   let pq = sbUser.from('predictions').select('game_id, group_id, points_earned').eq('user_id', me)
-  if (target) pq = pq.eq('group_id', target.id)
+  if (groupId) pq = pq.eq('group_id', groupId)
   const preds = (must(await pq) ?? []) as any[]
-  if (!preds.length) return 'You have no scored predictions yet.'
+  if (!preds.length) return null
   const ids = [...new Set(preds.map((r) => r.game_id as string))]
   const games = ((await sbPublic.from('games').select('id, kick_off_time, score_home').in('id', ids)).data ?? []) as any[]
   const now = new Date()
   const finished = new Map(games.filter((g) => g.score_home !== null && new Date(g.kick_off_time) <= now).map((g) => [g.id, g.kick_off_time as string]))
   const scored = preds.filter((p) => finished.has(p.game_id))
-  if (!scored.length) return 'You have no scored predictions yet.'
+  if (!scored.length) return null
   const total = scored.length, exact = scored.filter((p) => p.points_earned === 3).length, hit = scored.filter((p) => (p.points_earned ?? 0) > 0).length
   const ordered = [...scored].sort((a, b) => String(finished.get(b.game_id)).localeCompare(String(finished.get(a.game_id))))
   const hot = (ordered[0]?.points_earned ?? 0) > 0
   let streak = 0
   for (const p of ordered) { const h = (p.points_earned ?? 0) > 0; if (h === hot) streak++; else break }
-  return `${target ? target.name + ' — ' : ''}Exact ${Math.round((exact / total) * 100)}% (${exact}/${total}) · Hit ${Math.round((hit / total) * 100)}% (${hit}/${total}) · ${hot ? '🔥 Hot' : '🧊 Cold'} streak: ${streak} scored game${streak === 1 ? '' : 's'} ${hot ? 'in the points' : 'without points'}.`
+  return { total, exact, hit, streak, hot }
+}
+function fmtRates(label: string, r: { total: number; exact: number; hit: number; streak: number; hot: boolean }): string {
+  return `${label}Exact ${Math.round((r.exact / r.total) * 100)}% (${r.exact}/${r.total}) · Hit ${Math.round((r.hit / r.total) * 100)}% (${r.hit}/${r.total}) · ${r.hot ? '🔥 Hot' : '🧊 Cold'} streak: ${r.streak} scored game${r.streak === 1 ? '' : 's'} ${r.hot ? 'in the points' : 'without points'}.`
+}
+async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null): Promise<string> {
+  const r = await ratesFor(sbPublic, sbUser, me, target ? target.id : null)
+  if (!r) return 'You have no scored predictions yet.'
+  return fmtRates(target ? target.name + ' — ' : '', r)
+}
+// v29: "in which of my groups do I have the best streak?" used to call myRates with
+// target=null, which combines ALL groups into one rate and names none of them — the exact
+// bug reported. This computes each group's rate separately and names the best one. `by:'rank'`
+// answers a "which group am I doing best in" framing using leaderboard position instead.
+async function myBestGroup(sbUser: Sb, sbPublic: Sb, me: string, all: Grp[], by: 'rate' | 'rank'): Promise<string> {
+  if (!all.length) return `You're not in any group yet.`
+  if (all.length === 1) return by === 'rate' ? await myRates(sbPublic, sbUser, me, all, all[0]) : await myFocus(sbUser, me, all, all[0], 'rank')
+  if (by === 'rank') {
+    const rows = await Promise.all(all.map(async (g) => {
+      const r = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]
+      const mine = r.find((x) => x.user_id === me)
+      return mine ? { g, rank: mine.group_rank as number, of: r.length, global: mine.global_rank as number } : null
+    }))
+    const withData = rows.filter((r): r is NonNullable<typeof r> => !!r)
+    if (!withData.length) return `You don't have a ranking in any group yet.`
+    const best = withData.reduce((a, b) => b.rank < a.rank ? b : a)
+    return `You're doing best in ${best.g.name}: #${best.rank} of ${best.of} (global #${best.global}).`
+  }
+  const per = await Promise.all(all.map(async (g) => ({ g, r: await ratesFor(sbPublic, sbUser, me, g.id) })))
+  const withData = per.filter((p): p is { g: Grp; r: NonNullable<typeof p.r> } => !!p.r)
+  if (!withData.length) return 'You have no scored predictions yet in any group.'
+  const best = withData.reduce((a, b) => (b.r.exact / b.r.total) > (a.r.exact / a.r.total) ? b : a)
+  return fmtRates(`You're doing best in ${best.g.name}: `, best.r)
 }
 // v27: REVERSE pick lookup — "who picked France as champion in my group?" used to return
 // the CALLER's own picks. Post-lock picks are public leaderboard data.
@@ -1034,14 +1213,27 @@ function rulesFAQ(q: string): string | null {
   // v24: leaderboard tie-break rule ("how are ties broken if two players have the same points?")
   if (/(tie|ties|tied|tie.?break(er)?)\b[\s\S]{0,40}(broken|break|rank|leaderboard|points|decided)|(same|equal) (number of )?points[\s\S]{0,30}(rank|leaderboard|tie|break)|how (is|are) (the )?rank(ing)?s? (decided|determined)/.test(s)) return 'Leaderboard ties are broken by the number of exact scorelines. Same points AND same exact count = the same shared rank (the numbering then skips). There is no further tiebreaker.'
   if (/road to final|where.*bracket|find.*bracket|bracket.*(where|located)/.test(s)) return 'The knockout bracket game — \"Road to Final\" — is in the Picks tab. Open Picks and tap \"Road to Final\".'
-  if (/trivia.*(point|worth|how many)|how many.*trivia/.test(s)) return 'Each daily trivia question is worth 1 point. Trivia points stay hidden and all land after the last question (~July 21).'
+  // v29: this line answers the POINT VALUE only. It used to also swallow "how many trivia
+  // questions are there in total?" (a COUNT question) via a bare `how many.*trivia`
+  // alternative — that's why the bot answered "worth 1 point" to a question about the total
+  // number of questions. Count/window/today now have their own deterministic tool
+  // (`triviaInfo`, ROUTE_RULES `trivia_info`) — this must exclude those phrasings.
+  // v29 fix (found live): the exclusion was too broad — bare `\bquestions?\b` also matches
+  // the SINGULAR "question" in "how many points is a trivia QUESTION worth?", which is a
+  // point-value question, not a count question. Narrowed to the same count-shaped pattern
+  // the ROUTE_RULES `trivia_info` rule itself uses, so the two never disagree about scope.
+  if (/trivia/.test(s) && /(point|worth)/.test(s) && !/how (many|much)\b[\s\S]{0,20}\btrivia\b[\s\S]{0,20}\bquestions?\b|trivia questions?\b[\s\S]{0,15}\b(total|overall|are there)\b/.test(s)) return 'Each daily trivia question is worth 1 point. Trivia points stay hidden and all land after the last question (~July 21).'
   // v24: when points appear on the leaderboard (bracket fold-in etc.) — must beat the bare "leaderboard" keyword
   if (/\bpoints? (count|fold|appear|land|show)\b/.test(s) && !/\b(my|i|me)\b/.test(s)) return 'When points appear: prediction points count as soon as each game finishes. Champion + Top Scorer points land when the Final is decided (~July 19). Knockout-bracket points fold into the leaderboard from July 20, and trivia points all land after the last trivia question (~July 21).'
   if (/(pick|champion|top scorer).*(lock|deadline|close)|when.*(pick|champion).*lock/.test(s)) return 'Champion and Top Scorer picks lock on June 11, 22:00 Israel time — permanently.'
   if (/bracket.*(lock|deadline|close)|when.*bracket.*lock/.test(s)) return 'The knockout bracket locks on July 4, 20:00 Israel time.'
   // v20: cap questions ONLY ("can/allowed/max") — "how many members in Demo" is DATA -> groupMeta
   if (/how many (members|people|players) can|(max|min)(imum)?[\s\S]{0,16}(member|player|people|group size)|group.*(hold|allow)s?.*(member|player|people)|(members|players|people) (allowed|per)[\s\S]{0,20}group|(member|group size) (limit|cap)/.test(s)) return 'A group can have up to 12 members (including the captain). There is no minimum — a group starts with just its captain, though the nightly AI roast only runs for groups of 3+ members.'
-  if (/how many groups can|groups can i (be|join)|max(imum)?( number of)? groups|group (limit|cap)\b/.test(s)) return 'You can be in up to 3 groups (created + joined combined).'
+  // v29: added a word-order-agnostic form — "in how much group i can be [a member]?" (broken
+  // grammar, but a real user phrasing) has "group"→"can"→"be" in that order, not the
+  // "groups can i be" order the old regex required. Without this it fell through to the
+  // WC-group-table rule, whose bare `\bin\b` cue used to misread the PRONOUN "i" as Group I.
+  if (/how many groups can|groups can i (be|join)|max(imum)?( number of)? groups|group (limit|cap)\b|\bgroups?\b[\s\S]{0,20}\bcan\b[\s\S]{0,10}\bbe\b/.test(s)) return 'You can be in up to 3 groups (created + joined combined).'
   if (/leave.*group|delete.*group|remove.*(member|myself)/.test(s)) return "You can't leave or delete a group, and members are permanent — contact the admin if something needs changing."
   if (/auto.?predict|forget.*(predict|prediction)|miss.*(predict|prediction|deadline)|random score|is it (random|data)/.test(s)) return "If you miss the deadline, the app auto-fills a prediction for you. It's not purely random — it leans toward the least-popular result (so you're not just copying the crowd), then fills in a scoreline for that outcome. Auto-predictions score exactly like manual ones."
   // v27: roast timing / inactive members / first-person bracket fold-in — new coverage FAQs
@@ -1065,14 +1257,24 @@ async function searchStats(sb: Sb, qvec: number[] | null, teams: string[]): Prom
 async function answerCrew(openai: OpenAI, question: string, cards: { content: string }[]): Promise<{ answer: string; attempts: number; score: number }> {
   if (!cards.length) return { answer: '', attempts: 0, score: 0 }
   const facts = cards.map((c) => '- ' + c.content).join('\n')
+  // v29 V4: RAG DESCRIBES, SQL COUNTS. This path retrieves per-entity stat cards — it must
+  // never be asked to aggregate ("how many red cards in the TOURNAMENT" is a COUNT(*), and is
+  // now caught deterministically before it ever reaches here — see the `cards_total` route).
+  // The old instruction only said "never invent numbers"; that let a model report a stray "0"
+  // copied from an unrelated card's "0 red" clause as if it answered a totals question.
+  const sys = `You answer WorldCup app questions using ONLY the FACTS below. Be concise, friendly, accurate. Every number you state MUST be a single per-entity value copied verbatim from ONE fact line about the exact entity the question asks about — never a sum, count, or total across multiple lines, and never a number you calculated yourself. Do NOT rank or claim "the most/best" — that is handled elsewhere. If the question asks for a total/sum/count across many entities, set grounded=false — you cannot answer it from these facts. Return JSON {"answer":"...","grounded":true|false} where grounded=false means the facts do not cover the question.\n\nFACTS:\n${facts}${factsBlock()}`
+  assertPublicPayload('answerCrew', sys, question)  // v29 V0: facts here are PUBLIC stat cards only
   const w = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 320, response_format: { type: 'json_object' }, messages: [
-    { role: 'system', content: `You answer WorldCup app questions using ONLY the FACTS below. Be concise, friendly, accurate. Never invent numbers. Do NOT rank or claim "the most/best" — that is handled elsewhere. Return JSON {"answer":"...","grounded":true|false} where grounded=false means the facts do not cover the question.\n\nFACTS:\n${facts}` },
+    { role: 'system', content: sys },
     { role: 'user', content: question },
   ] })
   let text = '', grounded = false
   try { const p = JSON.parse(w.choices[0]?.message?.content ?? '{}'); text = String(p.answer ?? '').trim(); grounded = p.grounded !== false } catch { /* fall through to fallback */ }
-  const factNums = new Set(facts.match(/\d+(?:\.\d+)?/g) ?? []); factNums.add('2026')
-  const ok = grounded && !!text && (text.match(/\d+(?:\.\d+)?/g) ?? []).every((n) => factNums.has(n))
+  // v29 V4: a number must appear in the SAME single card, not merely somewhere across the
+  // whole concatenated fact set — the old set-membership check is why "0 red cards" passed
+  // (every player card contains "0 yellow, 0 red", so a bare "0" was always in scope).
+  const nums = text.match(/\d+(?:\.\d+)?/g) ?? []
+  const ok = grounded && !!text && nums.every((n) => n === '2026' || cards.some((c) => c.content.includes(n)))
   return { answer: ok ? text : '', attempts: 1, score: ok ? 10 : 0 }
 }
 
@@ -1153,6 +1355,12 @@ const REGISTRY: Tool[] = [
         const member = await mentionsMate()
         if (member) return { answer: await memberPrediction(c.sbUser, me, member, await resolveGameRef(c.sbPublic, c.question, c.spec.teams, c.spec.phase)) }
       }
+      // v29: "in which of my groups..." / "which group am I doing best in" names NO group when
+      // dispatched to myRates/myFocus with target=null (they combine all groups into one
+      // number) — this was the D2 bug reported live. Detect the "which/what group" framing
+      // FIRST and answer with the actual best-performing group, named.
+      if (!target && /\b(which|what)\b[\s\S]{0,15}\bgroups?\b/.test(ql) && /\b(best|doing best|winning|leading|top|ahead)\b/.test(ql))
+        return { answer: await myBestGroup(c.sbUser, c.sbPublic, me, scope, /percent|%|hit ?rate|streak|\bhot\b|\bcold\b|exact/.test(ql) ? 'rate' : 'rank') }
       // v27: exact% / hit% / streak — computed, no longer a generic summary
       if (/percent|%|hit ?rate|streak|\bhot\b|\bcold\b/.test(ql)) return { answer: await myRates(c.sbPublic, c.sbUser, me, scope, target) }
       if (/exact|spot.?on|nail|precise|on the (nose|dot)/.test(ql) && !/percent|%/.test(ql)) return { answer: await myExact(c.sbPublic, c.sbUser, me, scope, target) }
@@ -1235,18 +1443,64 @@ const ROUTE_RULES: Rule[] = [
   // v24: "how/where do I …" is a HOW-TO (navigation) question -> the rules path, never a login
   // gate or a data dump ("how do i bet on games here?" answered NEED_LOGIN for anon users).
   // Side-effect only: reclassifies the intent, then falls through to the rest of the table.
+  // v29: added bare "how to <verb>" — "how to play this game?" has no modal verb (do/does/
+  // can/could/should) between "how" and "i/we/you", so the old regex never matched it, and
+  // it fell all the way through to a misclassified private intent ("Please sign in"). Also
+  // added the PRONOUN-FIRST word order — "where I can see game stat?" puts "i" BEFORE "can"
+  // (casual grammar), which the old modal-first-only pattern also missed, for the same failure.
   { id: 'howto_is_rules', run: async (c) => {
-    if (/\b(how|where) (do|does|can|could|should) (i|we|you)\b/.test(c.qlow) && !/how (many|much)\b/.test(c.qlow)
+    if ((/\b(how|where) (do|does|can|could|should) (i|we|you)\b/.test(c.qlow) || /\b(how|where) (i|we|you) (do|does|can|could|should)\b/.test(c.qlow) || /\bhow to\b/.test(c.qlow)) && !/how (many|much)\b/.test(c.qlow)
         && /predict|bet|pick|choose|guess|play|join|create|invite|share|react|answer|see|find|watch|check|change|edit|update|use|make|open/.test(c.qlow)) c.spec.intent = 'rules'
     return null } },
 
   // v27: TOURNAMENT groups A-L ("group D standings", "who is in group C") — must run
   // before the global-leaderboard cue and the friend-group tools (it collided with both).
+  // v29: letter 'i' is overwhelmingly more likely to be the PRONOUN "I" than World Cup Group I
+  // ("in how much group i can be?") — no regex can truly tell them apart (the real fix is the
+  // full v29 typed-entity resolver, not yet built), so 'i' alone requires a STRONG, explicit
+  // table cue; every other letter keeps the broader cue set (now also catching "is group C
+  // finished?", which had no matching cue word before and fell through to a private-group
+  // misroute). "who finished 1st/last" answers ONE row instead of dumping the whole table.
   { id: 'wc_group_table', run: async (c) => {
     const tg = c.qlow.match(/\bgroup ([a-l])\b/)
-    if (tg && /standing|table|teams|who|top|leader|qualif|games|fixtures|points|\bin\b/.test(c.qlow) && !/\b(my|our|friend)\b/.test(c.qlow))
-      return hit(await tournamentGroupTable(c.sbPublic, tg[1]))
+    if (!tg) return null
+    const letter = tg[1]
+    const strongCue = /standing|table|top of|qualif|\bteams?\b/.test(c.qlow)
+    const broadCue = /standing|table|teams|who|top|leader|qualif|games|fixtures|points|finish(ed)?|status|\bover\b|\bdone\b|complete|conclude|started?|begun|\bin\b/.test(c.qlow)
+    const cue = letter === 'i' ? strongCue : broadCue
+    if (!cue || /\b(my|our|friend)\b/.test(c.qlow)) return null
+    // v29 fix (found live): "who finished 1 in group d?" uses the bare numeral "1", not the
+    // ordinal "1st" — the original regex required the ordinal suffix and missed it, so the
+    // question still got the full table (harmless now that the table is only 4 rows, but not
+    // the single-row answer this was meant to give).
+    const first = /who (finished|is|was|came) (1st|first|1|top|number one|the winner)\b|who'?s (first|top|winning) in\b/.test(c.qlow)
+    const last = /who (finished|is|was|came) (last|bottom)\b/.test(c.qlow)
+    return hit(await tournamentGroupTable(c.sbPublic, letter, first ? 'first' : last ? 'last' : undefined))
+  } },
+
+  // v29: trivia — count/window/today are PUBLIC; my score is PRIVATE. Previously NONE of
+  // this had a tool: rulesFAQ's trivia line answered the POINT VALUE regardless of what was
+  // asked ("how many trivia questions are there in total?" -> "worth 1 point"), and the
+  // rules LLM had no clock to answer "is there one today" correctly.
+  { id: 'trivia_info', run: async (c) => {
+    if (!/\btrivia\b/.test(c.qlow)) return null
+    if (/\b(my|i'?ve|have i|did i)\b/.test(c.qlow) && /(score|point|correct|right|answer)/.test(c.qlow)) {
+      const uid = await c.me(); if (!uid) return null
+      return hit(await myTriviaScore(c.sbUser, uid), { route: 'my_trivia_score' })
+    }
+    if (/how (many|much)\b[\s\S]{0,20}\btrivia\b[\s\S]{0,20}\b(question|total|overall)|trivia questions?\b[\s\S]{0,15}\b(total|overall|are there)/.test(c.qlow) && !/point|worth/.test(c.qlow))
+      return hit(await triviaInfo(c.sbService, 'count'), { route: 'trivia_count' })
+    if (/how long\b[\s\S]{0,20}\btrivia\b|trivia\b[\s\S]{0,20}(seconds|window|open for|how long)/.test(c.qlow))
+      return hit(await triviaInfo(c.sbService, 'window'), { route: 'trivia_window' })
+    if (/\b(today|tonight|right now|currently)\b[\s\S]{0,20}\btrivia\b|\btrivia\b[\s\S]{0,20}\b(today|tonight|now)\b|is there .*trivia|next trivia|when.*(next|is the).*trivia/.test(c.qlow))
+      return hit(await triviaInfo(c.sbService, 'today'), { route: 'trivia_today' })
     return null } },
+
+  // v29: public top-scorer PICK CANDIDATES ("who can I pick as top scorer?") had no tool at
+  // all — it used to fall into the private my_data path and refuse anonymous callers.
+  { id: 'top_scorer_candidates', run: async (c) => {
+    if (!(/top scorer|golden boot/.test(c.qlow) && /(candidate|option|choice|who can i pick|which players?|who is eligible)/.test(c.qlow))) return null
+    return hit(await topScorerCandidates(c.sbPublic, c.spec.teams[0] ?? null), { route: 'top_scorer_candidates' }) } },
 
   // v27: ODDS — game odds (Bet365) / champion outright odds (William Hill).
   { id: 'odds', run: async (c) => {
@@ -1421,6 +1675,19 @@ const ROUTE_RULES: Rule[] = [
   { id: 'compare_teams', run: async (c) =>
     c.spec.op === 'compare' && c.spec.teams.length >= 2 ? hit(await compareTeams(c.sbPublic, c.spec.teams[0], c.spec.teams[1])) : null },
 
+  // v29: tournament-wide card TOTALS ("how many red cards in the tournament?") are a SUM(),
+  // never a similarity search — this used to have no deterministic path and fell all the way
+  // through to the RAG crew, which fabricated "there have been 0 red cards" (truth: 13).
+  // Must sit above `counts`, which has no branch for a team-less card aggregate either.
+  { id: 'cards_total', run: async (c) => {
+    // "how many PLAYERS got a red card" is a count of PEOPLE (existing `counts`/playerCount
+    // branch below) — this rule is a card-EVENT sum only, and must defer to that one.
+    if (c.spec.teams.length || c.firstPerson || /\bplayers?\b/.test(c.qlow)) return null
+    const wantRed = /\bred\b/.test(c.qlow), wantYellow = /\byellow\b/.test(c.qlow)
+    if (!(wantRed || wantYellow) || !/\bcards?\b/.test(c.qlow)) return null
+    if (!/how (many|much)\b|\btotal\b|\boverall\b|in the tournament\b|\bcount\b/.test(c.qlow)) return null
+    return hit(await cardsTotal(c.sbPublic, wantRed && wantYellow ? 'both' : wantRed ? 'red' : 'yellow'), { route: 'cards_total' }) } },
+
   // P0/P1: aggregate & per-entity counts
   { id: 'counts', run: async (c) => {
     if (!(c.spec.op === 'count' || c.agg !== 'none')) return null
@@ -1452,6 +1719,10 @@ const ROUTE_RULES: Rule[] = [
 // spec for compound clause 2) — structured borrowing beats text re-parsing.
 async function routeQuestion(question: string, history: string[], d: RouteDeps, prev?: { teams?: string[]; dim?: string | null }): Promise<RouteOut> {
   const { openai, sbPublic, sbUser, sbService, me, names } = d
+  // v29 S1: pure courtesy — never touches data, auth, or the LLM. Before this, a stray
+  // "thanks!" landed on a misclassified private intent and demanded a login.
+  if (/^\s*(thanks?( you)?( (so|very) much)?|ok(ay)?|cool|nice|got it|great|sounds good|perfect|bye|goodbye)\s*[!.]*\s*$/i.test(question))
+    return { answer: "You're welcome! Ask me anything else about the tournament or the app.", pub: { intent: 'courtesy' }, extra: { llm_used: false, route: 'courtesy' } }
   // P1: a definitive rules FACT wins before the embedding classifier can misroute it to a data
   // intent (e.g. "how many points is the top scorer worth"). The exact-score FAQ regex is scoped
   // to require "points", so first-person personal counts ("how many exact scores do I have") fall
@@ -1490,7 +1761,18 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   if (intent === 'who_scored' && detectPredicate(question)) intent = 'group_history'  // "who PREDICTED..." vs "who SCORED..."
   const spec: Spec = { intent, confidence: Number(cls.confidence.toFixed(3)), margin: Number(cls.margin.toFixed(3)), second: cls.second, op, dim, teams, date: resolveDate(question), phase, predicate: detectPredicate(question) }
   const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim, ...(degraded ? { degraded: true } : {}) }
-  const done = (answer: string, extra: Record<string, unknown> = {}): RouteOut => ({ answer: answer || "Sorry, I couldn't find an answer.", pub: pubSpec, extra })
+  // v29 V1: a WEAKLY-classified question must never silently reuse the PREVIOUS turn's answer
+  // verbatim — a typo ("nexg") once replayed a red-card list for a schedule question because
+  // the borrow logic filled the gap from lastAnswer. Scoped to low-confidence classifications
+  // only, so two confident re-phrasings of the SAME question (which SHOULD share an answer,
+  // e.g. "who's the top scorer" asked twice) are never falsely flagged as a repeat bug.
+  const done = (answer: string, extra: Record<string, unknown> = {}): RouteOut => {
+    const ans = answer || "Sorry, I couldn't find an answer."
+    const prevQ = history.length ? history[history.length - 1]?.trim().toLowerCase() : ''
+    if (d.lastAnswer && ans === d.lastAnswer && prevQ && prevQ !== question.trim().toLowerCase() && (spec.confidence < CLARIFY_CONF || spec.intent === 'off_topic'))
+      return { answer: "I'm not confident I understood that — could you rephrase it?", pub: pubSpec, extra: { llm_used: false, route: 'repeat_guard' } }
+    return { answer: ans, pub: pubSpec, extra }
+  }
   console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length }))
   const qlow = question.toLowerCase()
   const firstPerson = /\b(i|i'm|im|my|mine|me|myself)\b/i.test(qlow)
@@ -1536,7 +1818,12 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
       if (qlow.replace(/[^a-zא-׿ ]/g, ' ').trim().split(/\s+/).filter(Boolean).length <= 2 && spec.teams.length === 0 && !spec.phase && !spec.date)
         return done('Could you give me a bit more? e.g. "what was the score of Argentina vs Colombia?" or "when is the next game?"', { llm_used: false, clarify: true })
       try {
-        const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: RULES_PROMPT }, { role: 'user', content: question }] })
+        // v29: FACTS (incl. today's date) computed fresh per-request — RULES_PROMPT alone had
+        // no clock, so it once told a user trivia "hasn't started, it's before June 11" on a
+        // date five weeks past that.
+        const sys = RULES_PROMPT + factsBlock()
+        assertPublicPayload('rulesLLM', sys, question)
+        const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: sys }, { role: 'user', content: question }] })
         return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'rules_llm' })
       } catch { return done("I'm having trouble reaching my language model right now — try again in a minute, or ask me a data question (schedule, scores, standings) which I can answer directly.", { llm_used: false, degraded: true }) }
     }
@@ -1569,7 +1856,9 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
 
     // off_topic -> short LLM steer-back
     try {
-      const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: 'You are the WorldCup 2026 app assistant. The user asked something off-topic. Briefly and warmly say you focus on the app/tournament, then invite an on-topic question. 1-2 sentences.' }, { role: 'user', content: question }] })
+      const sys = 'You are the WorldCup 2026 app assistant. The user asked something off-topic. Briefly and warmly say you focus on the app/tournament, then invite an on-topic question. 1-2 sentences.'
+      assertPublicPayload('offTopic', sys, question)
+      const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: sys }, { role: 'user', content: question }] })
       return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'off_topic' })
     } catch { return done('I focus on the tournament and the app — ask me about the schedule, scores, standings or the rules!', { llm_used: false, degraded: true }) }
 }
@@ -1635,7 +1924,11 @@ serve(async (req) => {
     // answer, latency. Without this, user complaints were undebuggable after EF log expiry.
     const finish = async (payload: Record<string, unknown>, answer: string) => {
       try {
-        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route: (payload.route as string) ?? null, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0 })
+        // v29 P9: validation_fail records when a deterministic check rejected the FIRST answer
+        // and this is the fallback that shipped instead — today only V1 (`repeat_guard`) writes
+        // one; expected_shape/rows_count are reserved for the full validation-layer pass.
+        const route = (payload.route as string) ?? null
+        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0, validation_fail: route === 'repeat_guard' ? 'repeat' : null })
       } catch { /* logging must never break the answer */ }
       return json({ ...payload, answer })
     }
