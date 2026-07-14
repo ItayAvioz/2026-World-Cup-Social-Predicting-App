@@ -31,35 +31,31 @@ Anything not in this table should **refuse or clarify** — never substitute a n
 | **Refuses** | other groups' data (incl. near-miss names like `test3` vs `TestA`), pre-kickoff predictions, non-2026 years, unknown teams, untracked stats (attendance/referee/venue/city/weather/throw-ins/VAR) | deterministic guards |
 | **Clarifies** | bare superlatives with no metric, 1–2-word fragments, genuinely ambiguous intents | clarify band → LLM understanding fallback |
 
-## Deploy (⚠️ read this before touching the EF)
-`index.ts` is ~148KB. The MCP `deploy_edge_function` tool takes the source as an **inline string
-argument**, so the whole file must fit inside ONE tool call — and 148KB does not. **A truncated
-deploy silently ships a fragment with no `serve()` handler and the function 504s on every request.**
-That has happened; do not let it happen again.
-
-**The deploy procedure:**
+## Deploy
+**Use the CLI. One command, from disk:**
 ```bash
-node scripts/ask/build.cjs        # -> supabase/functions/ask/_build/index.ts (~120KB, comments stripped)
+npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
+node scripts/ask/wide_test.mjs        # must print 99/99 PASS
 ```
-Then deploy **`_build/index.ts`** (not `index.ts`) via MCP `deploy_edge_function`
-(`project_id: ftryuvfdihmhlzvbpfeu`, `verify_jwt: true`), pasting the bundle VERBATIM in a single call.
-Then verify — this step is not optional:
-```bash
-# fetch the deployed source (get_edge_function saves its large result to a file), then:
-node scripts/ask/verify_deploy.mjs <path-to-saved-get_edge_function-result>
-# must print: EXACT (modulo trailing newline): true
-```
-The invariant is **`deployed === build(index.ts)`**. Comments live in the source; only the deployed
-bundle is slimmed. `build.cjs` strips whole-line `//` comments only — never a `//` inside a string
-or regex.
+`verify_jwt` stays `true` (there is no `supabase/config.toml`, and the CLI default matches the live
+setting — don't add one without checking). **DEV project only** — never pass the PROD ref
+(`asugxlvgcmkxspzokydk`).
 
-> **Better long-term fix:** with a `SUPABASE_ACCESS_TOKEN` in the env,
-> `npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu` reads `index.ts` straight
-> from disk — no size limit, byte-exact by construction, and the build step becomes unnecessary.
-> The CLI is installed; it just needs `supabase login` (browser flow) or a token.
-> Splitting `index.ts` into modules does NOT help: the deploy call still carries every file's content.
-> Current: DEV runs EF **version 47** = the **v27** code. Verified 2026-07-14: deployed == the local
-> build artifact byte-for-byte (119,563 chars) via `scripts/ask/verify_deploy.mjs`.
+If the CLI says `Access token not provided`, run `npx supabase login` once (browser flow).
+
+> ### ⚠️ Do NOT deploy this EF via the MCP `deploy_edge_function` tool
+> That tool takes the source as an **inline string argument**, so the whole file must fit in ONE tool
+> call. `index.ts` is ~151KB and does not fit. **A truncated deploy silently ships a fragment with no
+> `serve()` handler, and the function then 504s on every request.** That happened twice (once for
+> ~2 hours), both times via subagents. Splitting `index.ts` into modules does NOT help — the call
+> still carries every file's content.
+>
+> There used to be a `scripts/ask/build.cjs` + `verify_deploy.mjs` workaround (strip comments to
+> squeeze a ~120KB bundle into one call, then byte-diff the result). **Both are deleted.** The v28
+> rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
+> Don't resurrect them; `supabase login` is the fix.
+>
+> Current: DEV runs EF **version 48** = the **v28** code, deployed from disk 2026-07-14.
 > **Wide test: 99/99 PASS.** `reindex_dims` has been run (10 dims / 48 examples, incl. the new
 > `offsides` + `shots`).
 >
@@ -191,9 +187,8 @@ or regex.
 > `groupStandings` likewise group-scopable. Re-embed after changing `INTENT_EXAMPLES` /
 > `DIM_EXAMPLES` / stat-card text (see below); code-only changes like v15/v18/v19 need no reindex.
 >
-> Deploy path that actually works here: the **Supabase MCP `deploy_edge_function`** tool (its own
-> auth — no CLI login/token needed), pinned to `project_id: ftryuvfdihmhlzvbpfeu`. The CLI path
-> (`npx supabase functions deploy`) needs `SUPABASE_ACCESS_TOKEN`, which this shell doesn't have.
+> (Deploy path: see **Deploy** at the top — the CLI, from disk. The MCP `deploy_edge_function`
+> tool must NOT be used for this EF; the file no longer fits in one tool call.)
 
 ## Apply migrations (idempotent — already applied on DEV)
 ```bash
