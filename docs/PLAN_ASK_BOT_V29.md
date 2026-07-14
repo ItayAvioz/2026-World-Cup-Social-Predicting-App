@@ -237,10 +237,22 @@ is worse than one that routes badly and admits it doesn't know.
 
 # PART 3 — DECISIONS & NON-GOALS
 
-**Open (yours, not mine):** `what is dani's champion pick?` returns his picks labelled `[Demo]`,
-`[Kanta Bayam]` — groups the caller isn't in. Picks are public post-lock **by design**, but we
-*refuse* the Demo leaderboard in the same breath. The pick is public; **is the group-membership
-label?**
+## The public/private line — DECIDED 2026-07-14 (do not re-open)
+
+**PUBLIC — the bot may answer for ANY user, including group labels:**
+champion pick · top scorer pick · group names · global leaderboard rank & points ·
+all tournament data (fixtures, scores, scorers, team/player stats, odds, bracket status).
+
+So `what is dani's champion pick?` → *"[Demo] champion Netherlands · [Kanta Bayam] champion Spain"*
+is **correct, not a leak.** Picks are public after the `2026-06-11T19:00:00Z` lock by design, the
+global leaderboard is public by design, and the group label rides along with them.
+
+**PRIVATE — refuse, always:**
+- **predictions before that game's kickoff** (any user, including yourself in another group)
+- **any group the caller is not a member of** — its leaderboard, its members, its predictions
+
+The distinction is *not* "whose data is it" but **"is this field already public in the app UI?"**
+If a logged-out user can see it on a screen, the bot may say it.
 
 **Not doing:**
 - **Not** sending all data to the LLM. It breaks the privacy promise, doesn't fit (5,623 predictions
