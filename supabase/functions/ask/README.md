@@ -214,6 +214,54 @@ poisonable across users). The table still exists but is unused.
 - `reindex_dims` — re-embed `DIM_EXAMPLES` → `dim_examples`
 - `reindex_kb` — rebuild stat-cards from `team_tournament_stats` + `player_tournament_stats` (paginated past the 1000-row cap) → `kb_embeddings`
 
+## Update workflow — ship any change to this EF
+
+The one sequence every change follows, in order. Skipping a step is how DEV went down for 2h
+(truncated deploy) and how a 25%-wrong bot shipped behind a green 99/99 suite (no real-chat gate).
+
+```
+1. EDIT           supabase/functions/ask/index.ts   (the ONLY source of truth — see above)
+2. TYPE-CHECK      npx deno@2 check --node-modules-dir=auto supabase/functions/ask/index.ts
+                   → compare the error COUNT to HEAD (`git stash` trick below); it must not grow.
+                   Pre-existing SupabaseClient generic noise is normal — 226 as of v48.
+3. DEPLOY to DEV   npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
+                   ⚠️ CLI only, from disk. NEVER the MCP deploy_edge_function tool for this EF —
+                   see "Do NOT deploy via MCP" above. NEVER a different project-ref.
+4. REINDEX?        Only if this change edited INTENT_EXAMPLES / DIM_EXAMPLES / kb stat-card text —
+                   see "Reindex" above. Skip for pure code/logic changes (v24/v25/v26/v28 needed none).
+5. VALIDATE        run in this order — each is a DIFFERENT question, don't skip to the last one:
+     a. node scripts/ask/wide_test.mjs          # 99 cases I wrote — regression net, must stay 99/99
+     b. node scripts/ask/real_chat_test.mjs     # cases a REAL USER typed — the actual gate, must be 17/17
+     c. node scripts/ask/audit_probe.mjs out.json  # 82-question adversarial sweep, EVERY domain —
+        exploratory, NOT auto-graded yet (P7 will unify all three into one eval.mjs exit code).
+        Read the printed answers yourself; anything wrong graduates into a new real_chat_test case
+        BEFORE you consider the change done — that is how the suite grows (see PLAN §Learning loop).
+6. SPOT-CHECK      ask_log for the questions you just changed behavior for:
+     select question, route, answer, created_at from ask_log
+     where created_at > now() - interval '10 minutes' order by created_at desc;
+   Confirm the `route` is what you intended — every answer carries one since v28.
+7. GATE            (a) fails → fix in index.ts, go to 2. Never ship on a wide_test-only pass.
+                   (b) fails → the bug is real even if (a) is green; wide_test alone is NOT a gate.
+8. COMMIT           one commit, description of WHY not what (see CLAUDE.md). Include the new
+                   EF version number (from `list_edge_functions`) and the score line, e.g.
+                   "DEV EF v49, real_chat 17/17, wide 99/99".
+9. DOCS + MEMORY    update this README's changelog block + `memory/ask-bot-dev.md` +
+                   `memory/MEMORY.md` — live version number, what changed, what still needs reindex.
+                   A future session trusts these; a stale version number sends it chasing v47 bugs
+                   that were fixed in v49.
+10. PUSH            git push origin feature/ask-bot-dev. NEVER touch PROD — this EF is DEV-only
+                   until after the tournament (see docs/PLAN_PROD_CUTOVER.md).
+```
+
+**Never delegate step 3 to a subagent.** Two did it wrong in the past and corrupted the live
+function for ~2 hours (see the deploy-hazard note above). The CLI removed the SIZE risk; it did not
+remove the "someone else ran it and I didn't watch the version number change" risk.
+
+**Never call step 5(a) alone "done".** `wide_test` passing 99/99 while `real_chat_test` sat at
+11/17 is the exact failure this workflow exists to prevent — a synthetic suite I wrote can be green
+while ~1 in 4 real questions are wrong. `real_chat_test` (and eventually `audit_probe`, once P7 grades
+it) are the suites that matter; `wide_test` only proves you didn't regress something already fixed.
+
 ## Architecture (one line)
 `preGuard+rateLimit → splitCompound → [embed once | keyword-only if OpenAI is down] → QuerySpec
 {intent[E] · op · dim[E] · entities · confidence} + structured borrowing (prev_spec / last_answer) →
