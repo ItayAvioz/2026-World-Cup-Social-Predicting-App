@@ -22,9 +22,11 @@ const OUT = path.join(OUT_DIR, 'index.ts')
 
 const src = fs.readFileSync(SRC, 'utf8').replace(/\r\n/g, '\n')
 
-// Drop only WHOLE-LINE `//` comments. Trailing comments after code are left alone: a `//`
-// inside a string/regex on a code line must never be touched (e.g. URLs, `shoot.?out`).
-const kept = src.split('\n').filter((l) => !l.trim().startsWith('//'))
+// Drop only WHOLE-LINE `//` comments, and blank lines. Trailing comments after code are left
+// alone: a `//` inside a string/regex on a code line must never be touched (e.g. URLs,
+// `shoot.?out`). Blank-line stripping is what keeps us under the deploy-call ceiling — the
+// v28 rule table pushed the comments-only bundle to ~121.6K, i.e. over it.
+const kept = src.split('\n').filter((l) => { const t = l.trim(); return t !== '' && !t.startsWith('//') })
 const out = kept.join('\n')
 
 fs.mkdirSync(OUT_DIR, { recursive: true })
