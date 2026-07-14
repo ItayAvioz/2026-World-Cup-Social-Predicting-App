@@ -57,7 +57,7 @@
   <rect x="40" y="468" width="620" height="52" rx="8" fill="#151a30" stroke="#5566aa"/>
   <circle cx="66" cy="494" r="14" fill="#2d6cdf"/><text x="66" y="499" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">7</text>
   <text x="92" y="489" fill="#fff" font-size="14.5" font-weight="600">Extract entities  [D]</text>
-  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group's name, group-MATE names, "last/next game"</text>
+  <text x="92" y="509" fill="#9fb6e0" font-size="12.5">teams (aliases+typos), dates, phase, your OWN group, group-MATEs, "last/next game" + prev turn's spec/answer</text>
 
   <!-- 8 -->
   <rect x="40" y="526" width="620" height="52" rx="8" fill="#1c1330" stroke="#8a5cd8"/>
@@ -75,7 +75,7 @@
   <rect x="40" y="642" width="620" height="58" rx="8" fill="#0f1c33" stroke="#2d6cdf" stroke-width="2"/>
   <circle cx="66" cy="671" r="14" fill="#2d6cdf"/><text x="66" y="676" fill="#fff" font-size="13" text-anchor="middle" font-weight="700">10</text>
   <text x="92" y="664" fill="#fff" font-size="14.5" font-weight="600">Override routes  [D]  →  SQL → template</text>
-  <text x="92" y="684" fill="#9fb6e0" font-size="12.5">exact answers by shape, not intent (last/next game, ET/pens list, box-score/count/rank/compare…)</text>
+  <text x="92" y="684" fill="#9fb6e0" font-size="12.5">answers by SHAPE, not intent (last/next game, odds, WC group, form, ET/pens, box-score, rank…) + guards</text>
   <text x="92" y="699" fill="#6fe0a0" font-size="11.5">most questions EXIT here — 0 LLM · guards: unknown team, non-2026 year, untracked stat, follow-up "and X?"</text>
 
   <!-- 11 -->
@@ -119,9 +119,10 @@
     <text x="716" y="266" fill="#eaeaea" font-weight="600">avgGoalsPerGame</text><text x="860" y="266" fill="#9a9a9a">tournament-wide average goals</text>
     <text x="716" y="290" fill="#eaeaea" font-weight="600">tournamentProgress</text><text x="860" y="290" fill="#9a9a9a">games played / remaining / total goals</text>
     <text x="716" y="314" fill="#eaeaea" font-weight="600">statLeaderboard</text><text x="860" y="314" fill="#9a9a9a">rank leaders (top scorer, best defense…), tie-aware</text>
-    <text x="716" y="338" fill="#eaeaea" font-weight="600">compareTeams</text><text x="860" y="338" fill="#9a9a9a">head-to-head form &amp; averages for two teams</text>
+    <text x="716" y="338" fill="#eaeaea" font-weight="600">compareTeams / recentForm</text><text x="880" y="338" fill="#9a9a9a">two teams head-to-head · last-N form strip</text>
     <text x="716" y="362" fill="#eaeaea" font-weight="600">bracketStatus</text><text x="860" y="362" fill="#9a9a9a">is a team still in / knocked out / champion</text>
     <text x="716" y="386" fill="#eaeaea" font-weight="600">globalStandings / userPicksPublic</text><text x="960" y="386" fill="#9a9a9a">global board · a user's public picks</text>
+    <text x="716" y="406" fill="#eaeaea" font-weight="600">gameOdds / championOdds / wcGroupTable</text><text x="1000" y="406" fill="#9a9a9a">odds · WC groups A–L</text>
   </g>
 
   <!-- group B: registry / intent tools -->
@@ -130,10 +131,11 @@
   <g font-size="12.5">
     <text x="716" y="474" fill="#eaeaea" font-weight="600">lookupGame / scheduleList</text><text x="940" y="474" fill="#9a9a9a">next game, fixtures, a round</text>
     <text x="716" y="498" fill="#eaeaea" font-weight="600">whoScored</text><text x="940" y="498" fill="#9a9a9a">goalscorers in a match (+ET/pens)</text>
-    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myContext</text><text x="940" y="522" fill="#9a9a9a">exact scores (+which games) · rank · picks · pts</text>
+    <text x="716" y="522" fill="#7fd0a0" font-weight="600">myExact / myFocus / myRates / myBracket</text><text x="980" y="522" fill="#9a9a9a">exacts · rank/pts/picks · Exact% · bracket</text>
     <text x="716" y="546" fill="#7fd0a0" font-weight="600">groupStandings / memberPrediction / groupMeta</text><text x="1010" y="546" fill="#9a9a9a">table · a mate's pick · members</text>
-    <text x="716" y="570" fill="#eaeaea" font-weight="600">rulesFAQ</text><text x="940" y="570" fill="#9a9a9a">scoring / locks / limits — canned [D]</text>
-    <text x="716" y="594" fill="#e0b48a" font-weight="600">rules LLM (cached)</text><text x="940" y="594" fill="#9a9a9a">other "how does the app work" [L]</text>
+    <text x="716" y="566" fill="#7fd0a0" font-weight="600">whoPicked / dayPoints / latestRoast</text><text x="980" y="566" fill="#9a9a9a">who picked X · a match-day · the roast</text>
+    <text x="716" y="586" fill="#eaeaea" font-weight="600">rulesFAQ</text><text x="940" y="586" fill="#9a9a9a">scoring / locks / limits — canned [D]</text>
+    <text x="716" y="606" fill="#e0b48a" font-weight="600">rules LLM (grounded)</text><text x="940" y="606" fill="#9a9a9a">other "how does the app work" [L]</text>
     <text x="716" y="612" fill="#7fbf7f" font-size="11.5">green = private, JWT→RLS, template only — never to an LLM</text>
   </g>
 
@@ -142,7 +144,7 @@
   <text x="716" y="656" fill="#f0c090" font-size="13.5" font-weight="700">STAGE 12 · the only LLM answer path [L]</text>
   <g font-size="12.5">
     <text x="716" y="682" fill="#eaeaea" font-weight="600">searchStats (RAG)</text><text x="940" y="682" fill="#c9a884">fetch public stat-cards by vector [E]</text>
-    <text x="716" y="706" fill="#eaeaea" font-weight="600">answerCrew</text><text x="940" y="706" fill="#c9a884">Writer [L] ⇄ Judge [L], grounded, ≤2 tries</text>
+    <text x="716" y="706" fill="#eaeaea" font-weight="600">answerCrew</text><text x="940" y="706" fill="#c9a884">1 grounded call + deterministic number-check</text>
     <text x="716" y="730" fill="#eaeaea" font-weight="600">off-topic reply</text><text x="940" y="730" fill="#c9a884">short polite steer-back [L]</text>
     <text x="716" y="756" fill="#c9a06a" font-size="11.5">LLM only ever sees: the question + static rules + PUBLIC stats.</text>
     <text x="716" y="772" fill="#c9a06a" font-size="11.5">No predictions, picks or ranks ever reach it.</text>
@@ -154,7 +156,7 @@
   <g font-size="12">
     <text x="716" y="840" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbPublic</tspan> anon → public reads (stats, schedule, scorers)</text>
     <text x="716" y="860" fill="#cfcfcf"><tspan fill="#7fd0a0" font-weight="600">sbUser</tspan> caller JWT → RLS gates all private data</text>
-    <text x="716" y="880" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbService</tspan> service-role → cache / reindex writes only</text>
+    <text x="716" y="880" fill="#cfcfcf"><tspan fill="#fff" font-weight="600">sbService</tspan> service-role → ask_log / reindex writes only</text>
   </g>
 
   <!-- ================= CAPABILITY BAND: what it answers & who sees what ================= -->

@@ -38,19 +38,24 @@ export default function AskBot() {
     const question = (q ?? input).trim()
     if (!question || loading) return
     setInput('')
-    // P3: send the last 2 user turns as context so follow-ups ("and Spain?", "the avg of all games") resolve.
-    const history = msgs.filter((m) => m.role === 'user').slice(-2).map((m) => m.text)
+    // P3/v27: send the last 3 user turns + the last bot ANSWER + the last resolved spec —
+    // the EF borrows entities structurally ("how many goals does HE have?" works).
+    const history = msgs.filter((m) => m.role === 'user').slice(-3).map((m) => m.text)
+    const lastBot = [...msgs].reverse().find((m) => m.role === 'bot' && m.spec)
+    const body = { question, history }
+    if (lastBot?.text) body.last_answer = lastBot.text
+    if (lastBot?.spec) body.prev_spec = { teams: lastBot.spec.teams ?? [], dim: lastBot.spec.dim ?? null }
     setMsgs((m) => [...m, { role: 'user', text: question }])
     setLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('ask', { body: { question, history } })
+      const { data, error } = await supabase.functions.invoke('ask', { body })
       if (error) throw error
       const meta = [
         data?.spec?.intent,
-        data?.cached ? 'cached' : data?.llm_used ? 'llm' : 'instant',
+        data?.llm_used ? 'llm' : 'instant',
         data?.retrieved ? `${data.retrieved} cards` : null,
       ].filter(Boolean).join(' · ')
-      setMsgs((m) => [...m, { role: 'bot', text: data?.answer ?? 'No answer.', meta }])
+      setMsgs((m) => [...m, { role: 'bot', text: data?.answer ?? 'No answer.', meta, spec: data?.spec }])
     } catch (e) {
       setMsgs((m) => [...m, { role: 'bot', text: 'Something went wrong: ' + (e?.message ?? e), meta: 'error' }])
     } finally {

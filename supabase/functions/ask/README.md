@@ -7,10 +7,29 @@ live data questions (schedule, scorers, stats, standings, counts, per-game box s
 ## Source of truth = this repo
 - **`index.ts`** — the whole Edge Function (routing spine + all tools). Local file is authoritative.
 - **DB migrations** (`supabase/migrations-dev/`, all `-- target: dev-only`):
-  - `20260705120000_chatbot_kb_and_cache.sql` — `kb_embeddings`/`match_kb` (RAG) + `qa_cache`/`match_cache` (semantic cache)
+  - `20260705120000_chatbot_kb_and_cache.sql` — `kb_embeddings`/`match_kb` (RAG) + `qa_cache`/`match_cache` (⚠️ the cache is NO LONGER USED as of v26 — see below)
   - `20260706000000_chatbot_intent_embeddings.sql` — `intent_examples`/`match_intent` (intent classifier)
   - `20260706100000_chatbot_dim_examples.sql` — `dim_examples`/`match_dim` (stat-dimension classifier)
-- **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded, sends last 2 turns as `history`) + mounted in `src/components/Layout.jsx`.
+  - `20260713000001_ask_log.sql` — **`ask_log`** (question → route → answer → latency; RLS on, service-role only)
+- **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded; sends the last **3** user turns as `history` **plus** `last_answer` and `prev_spec` for structured/answer-aware follow-ups) + mounted in `src/components/Layout.jsx`.
+
+## Coverage matrix (what the bot answers, refuses, or clarifies)
+Anything not in this table should **refuse or clarify** — never substitute a nearby answer.
+
+| Domain | Answers | Tools |
+|---|---|---|
+| Schedule | next/last game (per team, per phase), fixture lists by date/phase, tournament progress, "when is the last game" (future) | `lookupGame` `scheduleList` `tournamentProgress` |
+| Results | score, scorers, ET/pens, box score, single stat per game, ET/pens game lists | `whoScored` `gameDetail` `gameStats` `gameStatSingle` `etPensList` |
+| Team stats | leaders per dim (goals/assists/cards/defense/possession/corners/fouls/offsides/shots), compare, per-team totals, recent form / last-N, bracket status | `statLeaderboard` `compareTeams` `teamStat` `recentForm` `bracketStatus` |
+| Player stats | per-player totals, player counts ("how many players got a red card") | `resolvePlayer`+`playerStat` `playerCount` |
+| Odds | game odds (Bet365), champion outright odds (William Hill) | `gameOddsAnswer` `championOddsAnswer` |
+| WC groups A–L | computed group tables | `tournamentGroupTable` |
+| My data | rank, points, picks, exact scores (+which games), exact%/hit%/streak, my bracket, points from a match-day | `myFocus` `myExact` `myRates` `myBracket` `dayPoints` |
+| Group data | standings, members/captain, group predictions per game, a mate's prediction, who picked X, latest AI roast | `groupStandings` `groupMeta` `groupHistory` `memberPrediction` `whoPicked` `latestRoast` |
+| Global | global leaderboard, another user's (public, post-lock) picks | `globalStandings` `userPicksPublic` |
+| Rules/how-to | scoring, deadlines, caps, bracket rules, tie-breaks, fold-in dates, navigation, roast timing, inactive members, self-service locks | `rulesFAQ` → grounded RULES LLM |
+| **Refuses** | other groups' data (incl. near-miss names like `test3` vs `TestA`), pre-kickoff predictions, non-2026 years, unknown teams, untracked stats (attendance/referee/venue/city/weather/throw-ins/VAR) | deterministic guards |
+| **Clarifies** | bare superlatives with no metric, 1–2-word fragments, genuinely ambiguous intents | clarify band → LLM understanding fallback |
 
 ## Deployed vs local
 Deploy via the **Supabase MCP `deploy_edge_function`** tool (own auth, no token needed),
@@ -19,9 +38,57 @@ Deploy via the **Supabase MCP `deploy_edge_function`** tool (own auth, no token 
 (`npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu`) also works but needs
 `SUPABASE_ACCESS_TOKEN`, which this shell doesn't have. After deploying, diff `get_edge_function`
 against the local file (expect CRLF→LF + trailing-newline normalization only).
-> Current: DEV runs **v25** and the local file **matches it** (verified 2026-07-13 via
+> Current: DEV runs **v27** and the local file **matches it** (verified 2026-07-14 via
 > `get_edge_function` diff — identical modulo CRLF→LF normalization + trailing newline; the local
-> file is CRLF on this Windows checkout, the deploy stores LF). Wide test **75/75**.
+> file is CRLF on this Windows checkout, the deploy stores LF).
+>
+> **v27 (coverage + conversation). ⚠️ needs `reindex_dims` (DIM_EXAMPLES changed).**
+> Four whole data domains the UI ships but the bot had NO tools for: **odds** (game Bet365 +
+> champion William Hill), the **knockout-bracket game** (`myBracket` → `fn_knockout_points`, with
+> the pre-Jul-20 fold-in caveat stated), the **AI roast** (`latestRoast` + timing FAQ), and
+> **tournament groups A–L** (`tournamentGroupTable`; a single letter A–L is never treated as a
+> friend-group name, which used to collide with the friend-group board). Plus: reverse pick lookup
+> (`whoPicked` — "who picked France in my group?" used to return YOUR OWN picks); match-day-scoped
+> points (`dayPoints`, on the 07:30-UTC match-day boundary the rest of the app uses); `recentForm`
+> (last-N W/D/L strip → form/trend/"is X improving"); `myRates` (Exact% / Hit% / Hot-Cold streak —
+> trained intent examples existed with no implementing tool); kickoffs now show **Israel time** and
+> today/tomorrow resolve on the **Israel day**; venue/city/time-zone joins the untracked-stat guard;
+> new `offsides` + `shots` stat dims. **RULES corrected** — it claimed auto-predict is "random"
+> while the app (and the bot's own FAQ) is **contrarian**; added inactive-member semantics, the
+> June-11 self-service locks, post-lock pick visibility, the top-scorer tie rule, bracket
+> visibility, and roast timing.
+> **Conversation:** the client now echoes `prev_spec` (last resolved teams/dim) + `last_answer` +
+> 3 user turns. Borrowing prefers the ECHOED spec over re-parsing prior question text; entities
+> also resolve from the last ANSWER, so "who is the top scorer?" → "how many goals does **he**
+> have?" works. Compound clause 2 receives clause 1's RESOLVED spec. `llmUnderstand` gained public
+> asks (schedule / game_stat / leaderboard) and now runs for ANON users too (private asks still
+> require login), and it receives the partial deterministic parse so it only fills the gaps.
+>
+> **v26 (trust + resilience; from a 6-agent audit → 60+ findings). Code-only, NO reindex.**
+> TRUST: group typo-matching NEVER substitutes a distinct name — digit-bearing tokens are excluded
+> from the lev pass, so `test3` (a real group the caller is NOT in) is refused instead of silently
+> resolving to their `TestA` (**a privacy near-leak**); "`<Name>` leaderboard" (without the literal
+> word "group") now reaches the group tools instead of dumping the GLOBAL board; "when is the LAST
+> game (of the tournament/phase)" is a FUTURE schedule question (it answered a played QF); the
+> pick-value FAQs no longer swallow stat questions ("how many goals does the top scorer have?" →
+> "…worth 10 points"); a superlative inside a count question answers the leader, not tournament
+> totals; the box score now appends the shared ET/pens line; `etPensList` includes friendlies
+> (labeled) — it answered "no games have gone to penalties" while a 4-3 shootout sat in the flags;
+> compound split rejects verb-less tails and a clause-2 clarify can no longer pollute a good
+> clause-1 answer; new `gameStatSingle` + `playerCount`; `bracketStatus` ignores future-kickoff rows
+> (it declared a champion days before the final).
+> RESILIENCE/SECURITY: an OpenAI outage no longer kills the deterministic routes (embed/classify in
+> try/catch → keyword-only degraded mode; 12s client timeout — the SDK default was **10 minutes**);
+> DB errors now throw via `must()` instead of reading as confident empty answers ("You have no exact
+> scores yet" on a blip); the catch-all returns a friendly degraded message, never raw internals;
+> **`ask_log`** records every question → route → answer → latency; rate-limit keyed per **user+IP**
+> (every signed-out visitor shared ONE bucket); history items are length-capped + preGuarded;
+> **reindex modes now require the service-role key** (the public anon key could delete + re-embed
+> whole tables and spend OpenAI money); the **cross-user `qa_cache` was REMOVED** (an injected
+> "rules question" could get its LLM answer cached and served to OTHER users at ≥0.93 similarity);
+> `answerCrew` is now ONE structured call + a **deterministic** grounding check (every number in the
+> answer must appear in the facts) + an evidence gate (zero cards ⇒ no LLM call at all) — the old
+> LLM judge silently PASSED answers whenever its JSON failed to parse.
 >
 > **v24/v25 (workflow-probe fixes, code-only, NO reindex):** a 54-agent workflow probed the bot
 > with 107 questions across 10 topics × difficulty, graded answers against DB ground truth and
@@ -114,27 +181,31 @@ npx supabase db push --project-ref ftryuvfdihmhlzvbpfeu   # or run each file via
 ```
 
 ## Reindex (after editing examples or stat-card text)
-The embeddings live in DB tables; regenerate them via the EF's reindex modes (service-role internally).
-Use the DEV anon/publishable key as bearer:
+The embeddings live in DB tables; regenerate them via the EF's reindex modes.
+⚠️ **v26+: reindex requires the SERVICE-ROLE key** as bearer — the public anon key is rejected (403).
+It deletes and re-embeds whole tables, so it must not be reachable by anyone holding the anon key.
 ```bash
-KEY=sb_publishable_hNTtICDrKMNgAclh28BhrQ_bHTeeFB9
+SR=<SUPABASE_SERVICE_ROLE_KEY for ftryuvfdihmhlzvbpfeu>   # Supabase dashboard → Settings → API
 URL=https://ftryuvfdihmhlzvbpfeu.supabase.co/functions/v1/ask
 for M in reindex_intents reindex_dims reindex_kb; do
-  curl -s -X POST "$URL" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+  curl -s -X POST "$URL" -H "apikey: $SR" -H "Authorization: Bearer $SR" \
     -H "Content-Type: application/json" -d "{\"mode\":\"$M\"}"; echo
 done
-# clear stale cached answers after changing the rules prompt / rules-FAQ:
-#   DELETE FROM public.qa_cache;   (SQL editor)
 ```
+No cache flush is needed any more — the `qa_cache` answer cache was removed in v26 (it was
+poisonable across users). The table still exists but is unused.
 - `reindex_intents` — re-embed `INTENT_EXAMPLES` → `intent_examples`
 - `reindex_dims` — re-embed `DIM_EXAMPLES` → `dim_examples`
 - `reindex_kb` — rebuild stat-cards from `team_tournament_stats` + `player_tournament_stats` (paginated past the 1000-row cap) → `kb_embeddings`
 
 ## Architecture (one line)
-`preGuard+rateLimit → embed once → QuerySpec {intent[E] · op · dim[E] · entities · confidence} →
-deterministic SQL tool (schedule / scorers / game-detail / game-stats / leaderboards / aggregates /
-compare / bracket / global / my-data) OR fuzzy RAG+crew [L] → template → log + rules-only cache`.
-LLM only for fuzzy "describe" stats, the rules-FAQ fallback, and off-topic steer-back.
+`preGuard+rateLimit → splitCompound → [embed once | keyword-only if OpenAI is down] → QuerySpec
+{intent[E] · op · dim[E] · entities · confidence} + structured borrowing (prev_spec / last_answer) →
+deterministic SQL tool (schedule / scorers / game-detail / game-stats / odds / WC-groups / form /
+leaderboards / aggregates / compare / bracket / global / my-data / group-data) OR fuzzy RAG + ONE
+grounded LLM call → template → ask_log`.
+LLM only for: fuzzy "describe" stats (grounded + number-checked), the rules-FAQ fallback, off-topic
+steer-back, and the parse-only understanding fallback. **No private data ever reaches the LLM.**
 
 ## Local test harnesses
 `scripts/ask/bot_test.mjs` POSTs a 200-question set (by topic × complexity) and grades ROUTING
@@ -149,10 +220,13 @@ e2e user `bot_e2e_test` (bot.e2e.test.wc2026@gmail.com — groups **Alpha Wolves
 **Beta Sharks** 1 exact / 2 preds + mate `bot_e2e_mate` with a visible Portugal-USA pred 0-1 and an
 RLS-hidden pre-kickoff final pred 2-0, known picks) and asserts expected substrings in the ANSWER,
 including negative `!substring` scoping/leak checks (e.g. the mate's hidden 2-0 must NEVER appear).
-75 questions across areas × complexity incl. privacy-refusal, last/next-game, time-tense,
-how-to, member-compare and workflow-probe regression cases. v25 = 75/75.
-Rows may carry an optional 6th element: prior-turn questions sent as `history` (reproduces
-follow-up borrowing bugs — the v23 nextgame case replays the exact live two-turn failure).
+**~100 questions** across areas × complexity incl. privacy-refusal (the `test3`-vs-`TestA`
+near-leak), last/next-game time-direction, time-tense, how-to, member-compare, workflow-probe
+regressions, and the v26/v27 additions (odds, WC groups, form, bracket, roast, who-picked, rates).
+Rows may carry an optional 6th element: prior-turn questions. These are **replayed like the real
+client** — the prior turn is actually asked first and its `answer` + resolved `spec` are echoed back
+on the follow-up (`last_answer` / `prev_spec`), which is what makes answer-referencing follow-ups
+("who is the top scorer?" → "how many goals does **he** have?") testable.
 (One expectation is deliberately loose: colloquial group questions may be read by the LLM
 fallback as the group board OR your own standing — both are valid answers.)
 ```bash

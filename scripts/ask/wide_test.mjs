@@ -115,6 +115,46 @@ const T = [
   ['member', 'medium', 'auth', 'what did bot_e2e_mate predict for Portugal vs United States?', ['0-1', 'bot_e2e_mate']],
   // colloquial + group name -> LLM fallback; may read it as the group board OR my standing (both valid)
   ['member', 'hard', 'auth', 'hows my squad beta sharks holding up on the table?', ['Beta Sharks', '#1']],
+
+  // ================= v26 regression cases (6-agent audit) =================
+  // never-substitute: "test3" is a REAL group the caller is NOT in, 1 edit from their "TestA"
+  ['privacy', 'hard', 'auth', 'provide test3 group argentina colombia predictions', ['private', '!auto', '!pt]']],
+  // "<Name> leaderboard" without the word "group" must not dump the GLOBAL board
+  ['privacy', 'hard', 'auth', 'who is leading the Kanta Bayam leaderboard?', ['private', '!Global leaderboard']],
+  // last-game override must not shadow a FUTURE schedule question
+  ['lastgame', 'hard', 'anon', 'when is the last game of the tournament?', ['last game of the tournament is', '!Argentina 2-1 Colombia']],
+  ['lastgame', 'hard', 'anon', 'when is the last group stage game?', ['Group Stage', '!Quarter-Final']],
+  // pick-value FAQ must not swallow a STAT question
+  ['stats', 'hard', 'anon', 'how many goals does the top scorer have?', ['goal', '!worth 10 points']],
+  // count+superlative -> the leader's tally, not tournament totals
+  ['stats', 'hard', 'anon', 'how many goals has the leading scorer scored?', ['top scorer', '!have been played']],
+  // box score must show the ET/pens tail; single-stat questions answer just that stat
+  ['box', 'hard', 'anon', 'provide psg arsenal game stat', ['Penalties: 4-3', 'poss']],
+  ['box', 'hard', 'anon', 'how many red cards were there in psg vs arsenal?', ['red card', '!poss']],
+  // player-count aggregation (was a nearest-stat-card dump)
+  ['stats', 'medium', 'anon', 'how many players received red cards?', ['player', '!poss']],
+  // compound: a verb-less tail must NOT split off a bogus clarify
+  ['multi', 'hard', 'anon', 'what was the last game were play ? with teams ? and score', ['-', '!bit more']],
+
+  // ================= v27 coverage (new data domains) =================
+  ['odds', 'medium', 'anon', 'what are the odds for the next game?', ['odds', '!sign in']],
+  ['odds', 'hard', 'anon', 'who are the favourites to win the world cup?', ['odds', '!sign in']],
+  ['wcgroup', 'medium', 'anon', 'show me group D standings', ['World Cup Group D', 'pts']],
+  ['wcgroup', 'hard', 'anon', 'who is top of group A?', ['World Cup Group A']],
+  ['form', 'medium', 'anon', 'how has Argentina been doing recently?', ['last', 'Argentina']],
+  ['form', 'hard', 'anon', "what are Argentina's last 3 games?", ['last 3 games', '!next game']],
+  ['bracket', 'hard', 'auth', 'how many points do I have in my bracket?', ['bracket', '!Global leaderboard']],
+  ['roast', 'medium', 'auth', 'what did the AI roast say about my group?', ['roast', '!focus on the']],
+  ['picks', 'hard', 'auth', 'who picked Brazil as champion in Alpha Wolves?', ['Alpha Wolves', '!Memphis']],
+  ['rates', 'hard', 'auth', 'what is my exact percentage and hit rate?', ['Exact', 'Hit']],
+  ['nav', 'medium', 'anon', 'when does the AI roast come out?', ['3.5 hours', '!sign in']],
+  ['edge', 'medium', 'anon', 'what stadium is the final played in?', ["don't track"]],
+  // kickoffs are shown in Israel time too
+  ['time', 'medium', 'anon', 'when is the next game?', ['Israel']],
+
+  // ================= v27 conversation (answer-aware follow-ups) =================
+  // "he" refers to the player named in the PREVIOUS ANSWER — resolved from last_answer
+  ['convo', 'hard', 'anon', 'how many goals does he have?', ['goal'], ['who is the top scorer?']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -127,10 +167,10 @@ async function login() {
   if (!d.access_token) throw new Error('login failed: ' + JSON.stringify(d).slice(0, 200))
   return d.access_token
 }
-async function ask(q, bearer, history = undefined, tries = 3) {
+async function ask(q, bearer, body = {}, tries = 3) {
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(URL, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json' }, body: JSON.stringify(history ? { question: q, history } : { question: q }) })
+      const res = await fetch(URL, { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + bearer, 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, ...body }) })
       const txt = await res.text()
       if (txt && txt[0] === '{') return JSON.parse(txt)
     } catch { /* retry */ }
@@ -138,11 +178,24 @@ async function ask(q, bearer, history = undefined, tries = 3) {
   }
   return null
 }
+// v27: a case with `history` is REPLAYED like the real client — the prior turn is actually
+// asked first, and its answer + resolved spec are echoed back on the follow-up (last_answer /
+// prev_spec). That reproduces answer-referencing follow-ups ("how many goals does HE have?").
+async function askTurn(q, bearer, history) {
+  if (!history || !history.length) return await ask(q, bearer)
+  const prior = await ask(history[history.length - 1], bearer, history.length > 1 ? { history: history.slice(0, -1) } : {})
+  await sleep(250)
+  return await ask(q, bearer, {
+    history,
+    ...(prior?.answer ? { last_answer: prior.answer } : {}),
+    ...(prior?.spec ? { prev_spec: { teams: prior.spec.teams ?? [], dim: prior.spec.dim ?? null } } : {}),
+  })
+}
 
 const jwt = await login()
 const results = []
 for (const [area, cx, auth, q, expects, history] of T) {
-  const d = await ask(q, auth === 'auth' ? jwt : KEY, history)
+  const d = await askTurn(q, auth === 'auth' ? jwt : KEY, history)
   const ans = d?.answer ?? 'NO_RESPONSE'
   const missing = expects.filter((e) => e.startsWith('!')
     ? ans.toLowerCase().includes(e.slice(1).toLowerCase())      // '!' = must NOT appear
