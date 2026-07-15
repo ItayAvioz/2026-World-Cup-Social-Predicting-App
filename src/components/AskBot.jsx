@@ -40,8 +40,13 @@ export default function AskBot() {
     setInput('')
     // P3/v27: send the last 3 user turns + the last bot ANSWER + the last resolved spec —
     // the EF borrows entities structurally ("how many goals does HE have?" works).
+    // v30: take the LITERAL last bot message — filtering on `m.spec` presence meant a bot
+    // reply that happened to arrive without a resolved spec got silently skipped, and the
+    // NEXT question would echo a STALE answer from an earlier turn as last_answer/prev_spec
+    // instead of the true most recent one. `prev_spec` below already no-ops when spec is
+    // missing, so dropping the filter only ever makes last_answer more accurate, never less.
     const history = msgs.filter((m) => m.role === 'user').slice(-3).map((m) => m.text)
-    const lastBot = [...msgs].reverse().find((m) => m.role === 'bot' && m.spec)
+    const lastBot = [...msgs].reverse().find((m) => m.role === 'bot')
     const body = { question, history }
     if (lastBot?.text) body.last_answer = lastBot.text
     if (lastBot?.spec) body.prev_spec = { teams: lastBot.spec.teams ?? [], dim: lastBot.spec.dim ?? null }

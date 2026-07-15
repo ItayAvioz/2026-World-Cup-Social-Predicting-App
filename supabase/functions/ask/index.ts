@@ -191,8 +191,9 @@ USING THE APP (navigation — where things live):
   final score). Also here: the "Road to Final" bracket game.
 - AI TAB: the nightly roast — one funny/social summary per group (groups of 3+ members), plus that day's
   standings and total standings. React with emojis or share to the group chat.
-- TRIVIA: the Trivia tab in the bottom nav. One question per day at 22:00 Israel (from June 11).
-  40 seconds, one shot, no retries — miss it and it counts as wrong.
+- TRIVIA: the Trivia tab in the bottom nav. One question per day at 22:00 Israel (from June 11),
+  staying open for a full 24-hour window (22:00 Israel to 22:00 Israel the next day) before the
+  next one replaces it. Once opened: 40 seconds, one shot, no retries — miss it and it counts as wrong.
 - The "i" (How to Play) button in the top bar opens the full rules and the tournament schedule any time.
 To make a PREDICTION: open the game (or use a Dashboard/Groups card) and enter a scoreline before kickoff.
 To make PICKS: go to the Picks tab. To predict the bracket: Picks tab -> "Road to Final".
@@ -434,13 +435,22 @@ async function classifyDim(sb: Sb, q: string, qvec: number[]): Promise<string | 
   return r && r.similarity >= 0.46 ? r.dim : null
 }
 function dimToMetric(dim: string | null, q: string): string | null {
-  const team = /\bteam\b|\bside\b/.test(q.toLowerCase())
+  const ql = q.toLowerCase()
+  // v30: a GAME-scoped superlative ("which game had the most red cards?") must win over the
+  // player/team default — this used to have no game-level route at all, so it silently fell
+  // to the player leaderboard (e.g. answered a tied PLAYER list for a question about a GAME).
+  // Scoped to the 4 dims actually aggregable per-game (game_team_stats cards/corners + games
+  // goals) — see gameGoalsLeaderboard/gameCardLeaderboard below.
+  const gameWord = /\bgame\b|\bmatch\b/.test(ql)
+  const team = /\bteam\b|\bside\b/.test(ql)
   switch (dim) {
     case 'assists': return 'assists'; case 'defense': return 'defense'; case 'possession': return 'possession'
-    case 'corners': return 'corners'; case 'fouls': return 'fouls'; case 'red': return 'redP'
-    case 'yellow': return team ? 'teamYellow' : 'yellowP'; case 'cards': return team ? 'teamYellow' : 'cardsP'
+    case 'corners': return gameWord ? 'cornersGame' : 'corners'; case 'fouls': return 'fouls'
+    case 'red': return gameWord ? 'redGame' : 'redP'
+    case 'yellow': return gameWord ? 'yellowGame' : (team ? 'teamYellow' : 'yellowP')
+    case 'cards': return team ? 'teamYellow' : 'cardsP'
     case 'offsides': return 'offsidesT'; case 'shots': return 'shotsT'
-    case 'goals_or_attack': return team ? 'attack' : 'goals'; default: return null
+    case 'goals_or_attack': return gameWord ? 'goalsGame' : (team ? 'attack' : 'goals'); default: return null
   }
 }
 
@@ -516,23 +526,94 @@ const STATLB: Record<string, any> = {
   yellowP: { level: 'player', col: 'total_yellow_cards', noun: 'yellow cards', sup: 'most-booked player' },
   redP: { level: 'player', col: 'total_red_cards', noun: 'red cards', sup: 'player with the most red cards' },
   cardsP: { level: 'player', col: 'total_yellow_cards', compute: (r: any) => r.total_yellow_cards + r.total_red_cards, noun: 'cards', sup: 'most-carded player' },
-  attack: { level: 'team', col: 'avg_goals_scored', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the best attack, scoring ${(+v).toFixed(1)} goals per game.` },
-  defense: { level: 'team', col: 'avg_goals_conceded', dir: 'asc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the best defense, conceding ${(+v).toFixed(1)} goals per game.` },
-  possession: { level: 'team', col: 'avg_possession', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the most possession, ${(+v).toFixed(1)}% per game.` },
-  corners: { level: 'team', col: 'avg_corners', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'win' : 'wins'} the most corners, ${(+v).toFixed(1)} per game.` },
-  fouls: { level: 'team', col: 'avg_fouls', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'commit' : 'commits'} the most fouls, ${(+v).toFixed(1)} per game.` },
-  teamYellow: { level: 'team', col: 'avg_yellow_cards', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'pick' : 'picks'} up the most cards, ${(+v).toFixed(1)} yellow per game.` },
-  offsidesT: { level: 'team', col: 'avg_offsides', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'are' : 'is'} caught offside the most, ${(+v).toFixed(1)} per game.` },
-  shotsT: { level: 'team', col: 'avg_shots_total', dir: 'desc', fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'take' : 'takes'} the most shots, ${(+v).toFixed(1)} per game.` },
+  // v30: `dir` is the DEFAULT pole ("most goals" for attack, "fewest conceded" for defense —
+  // hence dir:'asc' there). `fmtInv` is the OPPOSITE pole's wording, used only when the question
+  // uses an explicit opposite-polarity word (see detectPolarity) — this used to be a fixed
+  // direction regardless of what was asked: "which team conceded the MOST" silently answered
+  // with the BEST defense (fewest conceded), and "least possession"/"fewest fouls" both
+  // returned the MOST. Default (no explicit polarity word) is UNCHANGED — zero regression risk.
+  attack: { level: 'team', col: 'avg_goals_scored', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the best attack, scoring ${(+v).toFixed(1)} goals per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the weakest attack, scoring just ${(+v).toFixed(1)} goals per game.` },
+  defense: { level: 'team', col: 'avg_goals_conceded', dir: 'asc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the best defense, conceding ${(+v).toFixed(1)} goals per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} conceded the most goals, ${(+v).toFixed(1)} per game.` },
+  possession: { level: 'team', col: 'avg_possession', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the most possession, ${(+v).toFixed(1)}% per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'have' : 'has'} the least possession, ${(+v).toFixed(1)}% per game.` },
+  corners: { level: 'team', col: 'avg_corners', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'win' : 'wins'} the most corners, ${(+v).toFixed(1)} per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'win' : 'wins'} the fewest corners, ${(+v).toFixed(1)} per game.` },
+  fouls: { level: 'team', col: 'avg_fouls', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'commit' : 'commits'} the most fouls, ${(+v).toFixed(1)} per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'commit' : 'commits'} the fewest fouls, ${(+v).toFixed(1)} per game.` },
+  teamYellow: { level: 'team', col: 'avg_yellow_cards', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'pick' : 'picks'} up the most cards, ${(+v).toFixed(1)} yellow per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'pick' : 'picks'} up the fewest cards, ${(+v).toFixed(1)} yellow per game.` },
+  offsidesT: { level: 'team', col: 'avg_offsides', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'are' : 'is'} caught offside the most, ${(+v).toFixed(1)} per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'are' : 'is'} caught offside the least, ${(+v).toFixed(1)} per game.` },
+  shotsT: { level: 'team', col: 'avg_shots_total', dir: 'desc',
+    fmt: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'take' : 'takes'} the most shots, ${(+v).toFixed(1)} per game.`,
+    fmtInv: (n: string, v: number, c: number) => `${n} ${c > 1 ? 'take' : 'takes'} the fewest shots, ${(+v).toFixed(1)} per game.` },
 }
-async function statLeaderboard(sb: Sb, key: string): Promise<string> {
+// v30: explicit LITERAL quantity words override the dim's default direction ("best"/"worst"
+// stay dim-semantic and are left alone — dim SELECTION already encodes their pole correctly,
+// e.g. "leaky defense" already maps to dim='defense' with the correct asc default). Confirmed
+// live bugs: "which team conceded the MOST" (defense, default=asc) answered best defense;
+// "LEAST possession" and "FEWEST fouls" (both default=desc) answered the most of each.
+function detectPolarity(q: string): 'asc' | 'desc' | null {
+  const s = q.toLowerCase()
+  if (/\b(least|fewest|lowest|smallest|minimum|bottom)\b/.test(s)) return 'asc'
+  if (/\b(most|highest|greatest|maximum|top)\b/.test(s)) return 'desc'
+  return null
+}
+// v30: GAME-scoped card/corner totals — group game_team_stats by game_id (home+away combined)
+// and return the game(s) at the max. Was previously unreachable: no STATLB level:'game' existed.
+const GAME_STAT: Record<string, { col: string; label: string }> = {
+  redGame: { col: 'red_cards', label: 'red cards' },
+  yellowGame: { col: 'yellow_cards', label: 'yellow cards' },
+  cornersGame: { col: 'corners', label: 'corners' },
+}
+async function gameCardLeaderboard(sb: Sb, key: string): Promise<string> {
+  const M = GAME_STAT[key]
+  const rows = (must(await sb.from('game_team_stats').select(`game_id, ${M.col}`)) ?? []) as any[]
+  const byGame = new Map<string, number>()
+  for (const r of rows) byGame.set(r.game_id as string, (byGame.get(r.game_id as string) ?? 0) + ((r as any)[M.col] ?? 0))
+  if (!byGame.size) return `No ${M.label} data is available yet.`
+  const max = Math.max(...byGame.values())
+  if (max === 0) return `No game has had any ${M.label} yet.`
+  const ids = [...byGame.entries()].filter(([, v]) => v === max).map(([id]) => id)
+  const games = ((await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const fmt = (g: any) => `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})`
+  if (games.length === 1) return `${fmt(games[0])} had the most ${M.label}: ${max}.`
+  return `${games.length} games are tied for the most ${M.label} (${max} each): ` + games.map(fmt).join(', ') + '.'
+}
+// v30: GAME-scoped goal totals — combined score across both teams, from `games` directly
+// (simpler and more authoritative than summing game_team_stats for this one dim).
+async function gameGoalsLeaderboard(sb: Sb): Promise<string> {
+  const rows = (must(await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').not('score_home', 'is', null)) ?? []) as any[]
+  if (!rows.length) return 'No completed games are available yet.'
+  const total = (g: any) => (g.score_home as number) + (g.score_away as number)
+  const max = Math.max(...rows.map(total))
+  const top = rows.filter((g) => total(g) === max)
+  const fmt = (g: any) => `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})`
+  if (top.length === 1) return `${fmt(top[0])} had the most goals: ${max}.`
+  return `${top.length} games are tied for the most goals (${max} each): ` + top.map(fmt).join(', ') + '.'
+}
+async function statLeaderboard(sb: Sb, key: string, question?: string): Promise<string> {
+  if (key === 'goalsGame') return await gameGoalsLeaderboard(sb)
+  if (key === 'redGame' || key === 'yellowGame' || key === 'cornersGame') return await gameCardLeaderboard(sb, key)
   const M = STATLB[key]; if (!M) return 'I could not work out which stat you mean.'
+  const pol = question ? detectPolarity(question) : null
   if (M.level === 'team') {
+    const dir = pol ?? M.dir
+    const fmt = pol && pol !== M.dir && M.fmtInv ? M.fmtInv : M.fmt
     const { data } = await sb.from('team_tournament_stats').select(`team, ${M.col}, games_played`).gt('games_played', 0)
     if (!data || !data.length) return 'No team stats are available yet.'
-    const rows = [...data].sort((a: any, b: any) => M.dir === 'asc' ? a[M.col] - b[M.col] : b[M.col] - a[M.col])
+    const rows = [...data].sort((a: any, b: any) => dir === 'asc' ? a[M.col] - b[M.col] : b[M.col] - a[M.col])
     const ext = rows[0][M.col]; const lead = rows.filter((r: any) => r[M.col] === ext)
-    return M.fmt(lead.map((r: any) => r.team).join(', '), ext, lead.length)
+    return fmt(lead.map((r: any) => r.team).join(', '), ext, lead.length)
   }
   const { data } = await sb.from('player_tournament_stats').select('player_name, team, total_goals, total_assists, total_yellow_cards, total_red_cards, games_played').gt('games_played', 0).order(M.col, { ascending: false }).limit(200)
   if (!data || !data.length) return 'No player stats are available yet.'
@@ -742,7 +823,12 @@ async function recentForm(sb: Sb, team: string, n: number): Promise<string> {
 async function triviaInfo(sb: Sb, kind: 'count' | 'today' | 'window'): Promise<string> {
   // v29 fix (found live): 'window' needs no DB data at all — check it BEFORE the query so it
   // never depends on trivia_questions being readable.
-  if (kind === 'window') return 'Each trivia question is open for 40 seconds, and you get one shot to answer it — no retries. Miss it and it counts as wrong.'
+  // v30: this used to state ONLY the 40-second answer countdown — never the separate fact that
+  // each day's question stays OPEN for a full 24h (22:00 Israel to 22:00 Israel the next day)
+  // before the next one replaces it. Verified: available_until - available_from = exactly 1
+  // day on every trivia_questions row, and the app's own Trivia.jsx UI already states "24h
+  // window" — the bot just never had the fact.
+  if (kind === 'window') return "Each day's trivia question opens at 22:00 Israel time and stays open for 24 hours, until 22:00 Israel the next day. But once you open it, you only get 40 seconds to answer — one shot, no retries, miss it and it counts as wrong."
   // v29 fix (found live): trivia_questions RLS is `authenticated` + `available_from <= now()`
   // ONLY — an anon caller (or a question about ALL 40-ish questions, most still locked) gets
   // ZERO rows via the public/user client. The count/window/today FACTS here (never the actual
@@ -813,6 +899,33 @@ async function etPensList(sb: Sb, q: string): Promise<string> {
   const extra = fr.length ? `\nFriendlies too:\n` + fr.map(fmt).join('\n') : ''
   if (/how many|how much|number of|\bcount\b/.test(s)) return `${wc.length} World Cup game${wc.length === 1 ? ' has' : 's have'} gone to ${label} so far:\n${wc.map(fmt).join('\n')}${extra}`
   return `World Cup games that went to ${label}:\n${wc.map(fmt).join('\n')}${extra}`
+}
+
+// v30: a penalty KICK in REGULAR TIME (scored or missed) is a different fact from a penalty
+// SHOOTOUT — "how many games had a penalty in regular time / 90 min?" used to fall into
+// etPensList's went_to_penalties (shootout) flag and answer about shootouts instead. game_events
+// already distinguishes them: a scored in-play penalty is event_type='goal' with detail
+// containing "Penalty"; a missed one is event_type='missed_penalty'. Shootout kicks are
+// pen_shootout_scored/pen_shootout_missed — never counted here. Same phase!=='friendly'
+// WC-scoping convention as etPensList above (deliberate DEV club-test-data left as-is).
+async function regulationPenaltyList(sb: Sb): Promise<string> {
+  const [scoredQ, missedQ] = await Promise.all([
+    sb.from('game_events').select('game_id').eq('event_type', 'goal').ilike('detail', '%Penalty%'),
+    sb.from('game_events').select('game_id').eq('event_type', 'missed_penalty'),
+  ])
+  const scored = (scoredQ.data ?? []) as any[], missed = (missedQ.data ?? []) as any[]
+  if (!scored.length && !missed.length) return 'No games have had a penalty kick in regular time (90 min) yet.'
+  const ids = [...new Set([...scored.map((r) => r.game_id as string), ...missed.map((r) => r.game_id as string)])]
+  const games = ((await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const gmap = new Map(games.map((g) => [g.id, g]))
+  const wcIds = ids.filter((id) => gmap.get(id) && gmap.get(id)!.phase !== 'friendly')
+  if (!wcIds.length) return 'No World Cup games have had a penalty kick in regular time (90 min) yet.'
+  const fmt = (id: string) => {
+    const g = gmap.get(id)!
+    const sc = scored.filter((r) => r.game_id === id).length, ms = missed.filter((r) => r.game_id === id).length
+    return `• ${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase}) — ${sc} scored${ms ? `, ${ms} missed` : ''}`
+  }
+  return `${wcIds.length} World Cup game${wcIds.length === 1 ? ' has' : 's have'} had a penalty kick in regular time (90 min, not a shootout):\n` + wcIds.map(fmt).join('\n')
 }
 
 // private (RLS via user JWT)
@@ -1052,7 +1165,7 @@ async function myBracket(sbUser: Sb, me: string): Promise<string> {
 // v29: the actual rate computation is extracted into `ratesFor` (per single group id, or
 // null = combined across all groups) so `myBestGroup` below can call it once per group and
 // compare — myRates itself is now a one-line wrapper.
-async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | null): Promise<{ total: number; exact: number; hit: number; streak: number; hot: boolean } | null> {
+async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | null): Promise<{ total: number; exact: number; hit: number; streak: number; hot: boolean; bestHot: number; bestCold: number } | null> {
   let pq = sbUser.from('predictions').select('game_id, group_id, points_earned').eq('user_id', me)
   if (groupId) pq = pq.eq('group_id', groupId)
   const preds = (must(await pq) ?? []) as any[]
@@ -1068,15 +1181,37 @@ async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | 
   const hot = (ordered[0]?.points_earned ?? 0) > 0
   let streak = 0
   for (const p of ordered) { const h = (p.points_earned ?? 0) > 0; if (h === hot) streak++; else break }
-  return { total, exact, hit, streak, hot }
+  // v30: LONGEST historical run of each kind — "my best positive/hot streak" used to always
+  // answer with `streak`/`hot` above (the CURRENT trailing run, i.e. whatever state the user's
+  // MOST RECENT game happened to be in), which is a cold streak whenever that game was a miss,
+  // regardless of what the question actually asked for. Confirmed live: "what is my best
+  // positive streak?" answered "Cold streak: 33 scored games without points."
+  let bestHot = 0, bestCold = 0, run = 0, runHot: boolean | null = null
+  for (const p of ordered) {
+    const h = (p.points_earned ?? 0) > 0
+    run = h === runHot ? run + 1 : 1
+    runHot = h
+    if (h) bestHot = Math.max(bestHot, run); else bestCold = Math.max(bestCold, run)
+  }
+  return { total, exact, hit, streak, hot, bestHot, bestCold }
 }
-function fmtRates(label: string, r: { total: number; exact: number; hit: number; streak: number; hot: boolean }): string {
-  return `${label}Exact ${Math.round((r.exact / r.total) * 100)}% (${r.exact}/${r.total}) · Hit ${Math.round((r.hit / r.total) * 100)}% (${r.hit}/${r.total}) · ${r.hot ? '🔥 Hot' : '🧊 Cold'} streak: ${r.streak} scored game${r.streak === 1 ? '' : 's'} ${r.hot ? 'in the points' : 'without points'}.`
+function fmtRates(label: string, r: { total: number; exact: number; hit: number; streak: number; hot: boolean; bestHot: number; bestCold: number }, want: 'current' | 'hot' | 'cold' = 'current'): string {
+  const base = `${label}Exact ${Math.round((r.exact / r.total) * 100)}% (${r.exact}/${r.total}) · Hit ${Math.round((r.hit / r.total) * 100)}% (${r.hit}/${r.total})`
+  if (want === 'hot') return `${base} · 🔥 Best hot streak: ${r.bestHot} scored game${r.bestHot === 1 ? '' : 's'} in a row with points.`
+  if (want === 'cold') return `${base} · 🧊 Worst cold streak: ${r.bestCold} scored game${r.bestCold === 1 ? '' : 's'} in a row without points.`
+  return `${base} · ${r.hot ? '🔥 Hot' : '🧊 Cold'} streak: ${r.streak} scored game${r.streak === 1 ? '' : 's'} ${r.hot ? 'in the points' : 'without points'}.`
 }
-async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null): Promise<string> {
+// v30: `want` reads the actual streak DIRECTION asked for ("positive/hot/winning" vs
+// "negative/cold/losing streak") — default 'current' preserves today's bare-"streak" behavior.
+function streakWant(ql: string): 'current' | 'hot' | 'cold' {
+  if (/positive|hot streak|winning streak/.test(ql)) return 'hot'
+  if (/negative|cold streak|losing streak/.test(ql)) return 'cold'
+  return 'current'
+}
+async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null, want: 'current' | 'hot' | 'cold' = 'current'): Promise<string> {
   const r = await ratesFor(sbPublic, sbUser, me, target ? target.id : null)
   if (!r) return 'You have no scored predictions yet.'
-  return fmtRates(target ? target.name + ' — ' : '', r)
+  return fmtRates(target ? target.name + ' — ' : '', r, want)
 }
 // v29: "in which of my groups do I have the best streak?" used to call myRates with
 // target=null, which combines ALL groups into one rate and names none of them — the exact
@@ -1118,6 +1253,29 @@ async function whoPicked(sbUser: Sb, q: string, groups: Grp[], names: string[], 
     else blocks.push(`${g.name}: ` + rows.map((r) => `${r.username} → ${r.champion_team ?? '—'}`).join(', '))
   }
   return (wantScorer ? 'Top scorer picks:\n' : 'Champion picks:\n') + blocks.join('\n')
+}
+// v30: POPULARITY aggregate — "which team is most chosen for champion, and how much?" used to
+// fall through to the CALLER's own single pick (my_data's generic pick branch), or (a different
+// phrasing) get swallowed by the rulesFAQ point-value FAQ — neither ever counts anyone. This
+// tallies champion_team/top_scorer_player from the already-RLS-safe get_group_leaderboard rows
+// (same source whoPicked/myFocus already use) and reports the real leader + count per group.
+async function mostPopularPick(sbUser: Sb, groups: Grp[], target: Grp | null, wantScorer: boolean): Promise<string> {
+  if (!groups.length) return `You're not in any group yet.`
+  const blocks: string[] = []
+  for (const g of target ? [target] : groups) {
+    const rows = (must(await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })) ?? []) as any[]
+    const col = wantScorer ? 'top_scorer_player' : 'champion_team'
+    const picked = rows.filter((r) => r[col])
+    if (!picked.length) { blocks.push(`${g.name}: nobody has picked ${wantScorer ? 'a top scorer' : 'a champion'} yet.`); continue }
+    const tally = new Map<string, number>()
+    for (const r of picked) tally.set(r[col], (tally.get(r[col]) ?? 0) + 1)
+    const max = Math.max(...tally.values())
+    const leaders = [...tally.entries()].filter(([, n]) => n === max).map(([name]) => name)
+    const pct = Math.round((max / picked.length) * 100)
+    if (leaders.length === tally.size && max === 1) { blocks.push(`${g.name}: no standout — every pick is different, 1 of ${picked.length} member${picked.length === 1 ? '' : 's'} each.`); continue }
+    blocks.push(`${g.name}: ${leaders.join(' / ')} ${leaders.length > 1 ? 'are tied as the top picks' : 'is the top pick'}, ${max} of ${picked.length} member${picked.length === 1 ? '' : 's'} (${pct}%).`)
+  }
+  return blocks.join('\n')
 }
 // v27: match-day-scoped points ("how did my group do yesterday?") — the 07:30-UTC
 // match-day boundary the whole app uses (M110). offset 0 = current match-day, -1 = previous.
@@ -1204,9 +1362,13 @@ function rulesFAQ(q: string): string | null {
   // v23: champion AND top scorer asked together -> answer both (each FAQ line alone dropped half)
   // v26: pick-value FAQs must not swallow STAT questions — "how many goals does the top
   // scorer have?" is a leaderboard lookup, not the 10-point rule.
-  if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s) && !/goals?\b|assists?\b|scored\b/.test(s)) return 'The Champion and Top Scorer picks are worth 10 points each.'
-  if ((/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) && !/goals?\b|assists?\b|scored\b/.test(s)) return 'A correct Champion pick is worth 10 points.'
-  if ((/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) && !/goals?\b|assists?\b|scored\b|\bhave\b|\bhas\b/.test(s)) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
+  // v30: nor must they swallow a POPULARITY question — "how many people picked Brazil as
+  // champion?" used to be intercepted HERE (before intent classification even runs) and
+  // answered with the flat 10-point rule instead of ever reaching mostPopularPick().
+  const isPopularity = /most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick|who picked/.test(s)
+  if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'The Champion and Top Scorer picks are worth 10 points each.'
+  if ((/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'A correct Champion pick is worth 10 points.'
+  if ((/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) && !/goals?\b|assists?\b|scored\b|\bhave\b|\bhas\b/.test(s) && !isPopularity) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
   // v24: whole-round bonuses ("how many points for the round bonuses, per round?")
   if (/round bonus|bonus(es)? (for|per|of|in)|whole round|full round|entire round/.test(s)) return 'Knockout-bracket whole-round bonuses: QF +12, SF +10, Final +8, 3rd-4th +6 — on top of +2 for every team you correctly have reaching a round.'
   if (/(max|maximum|highest|most).*(bracket|road to final)|bracket.*(max|maximum|how many points|points can|worth)/.test(s)) return 'The knockout bracket game is worth up to 83 points in total (max).'
@@ -1362,10 +1524,16 @@ const REGISTRY: Tool[] = [
       if (!target && /\b(which|what)\b[\s\S]{0,15}\bgroups?\b/.test(ql) && /\b(best|doing best|winning|leading|top|ahead)\b/.test(ql))
         return { answer: await myBestGroup(c.sbUser, c.sbPublic, me, scope, /percent|%|hit ?rate|streak|\bhot\b|\bcold\b|exact/.test(ql) ? 'rate' : 'rank') }
       // v27: exact% / hit% / streak — computed, no longer a generic summary
-      if (/percent|%|hit ?rate|streak|\bhot\b|\bcold\b/.test(ql)) return { answer: await myRates(c.sbPublic, c.sbUser, me, scope, target) }
+      if (/percent|%|hit ?rate|streak|\bhot\b|\bcold\b/.test(ql)) return { answer: await myRates(c.sbPublic, c.sbUser, me, scope, target, streakWant(ql)) }
       if (/exact|spot.?on|nail|precise|on the (nose|dot)/.test(ql) && !/percent|%/.test(ql)) return { answer: await myExact(c.sbPublic, c.sbUser, me, scope, target) }
       if (/rank|place|position|standing|where am i/.test(ql)) return { answer: await myFocus(c.sbUser, me, scope, target, 'rank') }
       if (/pick|champion|top scorer|bet on/.test(ql)) {
+        // v30: POPULARITY question ("most chosen/picked/popular", "how many people picked X")
+        // is an AGGREGATE across everyone — must win over both the named-user lookup below and
+        // the own-pick fallback, which used to silently answer with the CALLER's own single
+        // pick (the exact bug reported: "which team is most chosen for champion?" -> your pick).
+        if (/most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick/.test(ql))
+          return { answer: await mostPopularPick(c.sbUser, scope, target, /top scorer|golden boot/.test(ql) && !/champion/.test(ql)) }
         // v24: "what is Dani's champion pick?" — another user's picks are PUBLIC after the June-11
         // lock (shown on the global leaderboard); answer from the public RPC, never your own picks.
         if (!/\b(i|my|me|mine|we|our)\b/.test(ql)) { const pub = await userPicksPublic(c.sbPublic, c.question); if (pub) return { answer: pub } }
@@ -1551,6 +1719,20 @@ const ROUTE_RULES: Rule[] = [
     const groups = await myGroups(c.sbUser, uid)
     return hit(await latestRoast(c.sbUser, groups, resolveGroupName(c.question, groups))) } },
 
+  // v30: POPULARITY aggregate — intent-agnostic (unlike my_data's own branch above, this fires
+  // regardless of what the classifier decided) so a NAMED team doesn't divert it into a stats/
+  // count path instead ("how many people picked Brazil as champion?" used to land on a stats
+  // count -> RAG, which admitted "I don't have stats to answer that yet" rather than counting).
+  { id: 'most_popular_pick', run: async (c) => {
+    if (!(/most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b/.test(c.qlow) && /champion|top scorer|golden boot/.test(c.qlow))) return null
+    const uid = await c.me(); if (!uid) return null
+    const groups = await myGroups(c.sbUser, uid); if (!groups.length) return null
+    // v30: a NAMED team ("how many people picked BRAZIL as champion?") is a per-team count,
+    // which whoPicked already answers precisely (usernames + a real count) — mostPopularPick
+    // is for the genuinely open "which team is the most popular pick" question (no team named).
+    if (c.spec.teams.length >= 1) return hit(await whoPicked(c.sbUser, c.question, groups, c.names, resolveGroupName(c.question, groups)), { route: 'most_popular_pick' })
+    return hit(await mostPopularPick(c.sbUser, groups, resolveGroupName(c.question, groups), /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)), { route: 'most_popular_pick' }) } },
+
   { id: 'who_picked', run: async (c) => {
     if (!(/who (picked|chose|took|selected|bet on|went (with|for))\b/.test(c.qlow) && /champion|top scorer|golden boot|winner|\bpick/.test(c.qlow) || (/who (picked|chose|took|selected|bet on)\b/.test(c.qlow) && c.spec.teams.length === 1))) return null
     const uid = await c.me(); if (!uid) return null
@@ -1645,6 +1827,13 @@ const ROUTE_RULES: Rule[] = [
 
   // v23: "which games went to penalties / extra time?" — deterministic list from the
   // went_to_* flags (used to fall into the upcoming-fixtures list or tournament progress).
+  // v30: "regular time"/"90 min"/"regulation" qualifiers mean an in-play penalty KICK, never a
+  // shootout — must win over et_pens_list, which only knows the went_to_penalties (shootout)
+  // flag and used to answer shootout data for this completely different question.
+  { id: 'regulation_penalty', run: async (c) =>
+    /penalt/i.test(c.qlow) && /\b(regular|normal|90'?|90 ?min|regulation)\b/i.test(c.qlow) && !/shoot.?out|extra time/i.test(c.qlow)
+      ? hit(await regulationPenaltyList(c.sbPublic), { route: 'regulation_penalty' }) : null },
+
   { id: 'et_pens_list', run: async (c) =>
     /penalt|shoot.?out|extra time/i.test(c.qlow) && c.spec.teams.length < 2 && !/what happens|affects?|\brules?\b|predictions?|scoring|points/.test(c.qlow) && (/\b(which|what|list|show|any|how many|how much)\b[\s\S]{0,30}\b(games?|matches)\b/.test(c.qlow) || /\bgames? (that |which )?(went|go(es)?|gone)\b/.test(c.qlow))
       ? hit(await etPensList(c.sbPublic, c.question)) : null },
@@ -1670,7 +1859,7 @@ const ROUTE_RULES: Rule[] = [
   // P0: ranking / leaderboard — v24: runs BEFORE the count/agg rule ("which team commits the
   // most fouls per game?" — "per game" set agg=avg and the count rule grabbed it).
   { id: 'stat_leaderboard', run: async (c) =>
-    c.spec.op === 'rank' && dimToMetric(c.spec.dim, c.question) ? hit(await statLeaderboard(c.sbPublic, dimToMetric(c.spec.dim, c.question)!)) : null },
+    c.spec.op === 'rank' && dimToMetric(c.spec.dim, c.question) ? hit(await statLeaderboard(c.sbPublic, dimToMetric(c.spec.dim, c.question)!, c.question)) : null },
 
   { id: 'compare_teams', run: async (c) =>
     c.spec.op === 'compare' && c.spec.teams.length >= 2 ? hit(await compareTeams(c.sbPublic, c.spec.teams[0], c.spec.teams[1])) : null },
@@ -1695,7 +1884,7 @@ const ROUTE_RULES: Rule[] = [
     const wantsGames = /\bgames?\b|\bmatch(es)?\b|played|remain|left|fixtures?/.test(c.qlow) && !/goal|assist|card|per (game|match)/.test(c.qlow)
     // v26: "how many goals has the LEADING scorer scored?" — a superlative entity inside a
     // count question is a rank answer, not tournament totals.
-    if (/\b(top|leading|best)\b[\s\S]{0,16}\b(scorer|goalscorer|player)\b/.test(c.qlow) && metric && !c.firstPerson) return hit(await statLeaderboard(c.sbPublic, metric), { route: 'stat_leader' })
+    if (/\b(top|leading|best)\b[\s\S]{0,16}\b(scorer|goalscorer|player)\b/.test(c.qlow) && metric && !c.firstPerson) return hit(await statLeaderboard(c.sbPublic, metric, c.question), { route: 'stat_leader' })
     // v26: "how many PLAYERS got a red card / scored?" — count players, never a stat-card dump.
     if (/\bplayers?\b/.test(c.qlow) && /red|yellow|card|goal|assist|scor/.test(c.qlow) && !wantsGames && !c.firstPerson)
       return hit(await playerCount(c.sbPublic, c.spec.dim ?? (c.qlow.includes('red') ? 'red' : c.qlow.includes('yellow') ? 'yellow' : /card|book/.test(c.qlow) ? 'cards' : /assist/.test(c.qlow) ? 'assists' : 'goals')), { route: 'player_count' })

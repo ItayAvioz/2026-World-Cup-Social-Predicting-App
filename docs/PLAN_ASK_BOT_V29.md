@@ -2,25 +2,35 @@
 
 **Target:** a functional, independent, reliable, high-quality bot.
 
-## STATUS (2026-07-15): Phases 1-4 SHIPPED. Phases 5-9 NOT started.
+## STATUS (2026-07-15): Phases 1-4 SHIPPED (v29). Deep-audit fixes SHIPPED (v30). Phases 5-9 NOT started.
 
-**Live: DEV EF v53.** `node scripts/ask/eval.mjs` → wide_test 99/99, real_chat_test **17/17**
-(was 11/17 pre-ship). What actually shipped is phases 1-4 from **PART 2**'s build-order table
-(with honest ⚠️ markers where the gate was met by a targeted fix rather than the general
-mechanism) — **not** the general S4/S5/S7/S9 architecture in **PART 1**. See PART 2's per-phase
-status column for exactly what's done vs still to build, **PART 3** for real before/after
-examples, and `memory/ask-bot-dev.md` for the live changelog.
+**Live: DEV EF v57.** `node scripts/ask/eval.mjs` → wide_test **110/110**, real_chat_test **22/22**
+(v29 shipped 99/99 + 17/17; v30 added 11 + 5 regression cases for 6 newly-confirmed bugs, all
+green, zero regressions). What actually shipped is phases 1-4 from **PART 2**'s build-order table
+plus the v30 deep-audit fixes in **PART 3** — **not** the general S4/S5/S7/S9 architecture in
+**PART 1**. See PART 2's per-phase status column for exactly what's done vs still to build,
+**PART 3** for real before/after examples (both v29 and v30), and `memory/ask-bot-dev.md` for the
+live changelog.
+
+**v30 (2026-07-15) — a second audit pass, triggered by the human user still finding real bugs
+after v29 shipped.** A workflow (multi-agent, live-reproduce + verify) ran the 6 newly-reported
+failures plus a 5-dimension adversarial sweep, but hit the account's monthly spend limit partway
+through (5/6 named bugs done + verified; the sweep never ran). The remaining critical item plus a
+personal sweep were completed directly (no subagents) — which itself surfaced 3 MORE confirmed
+bugs beyond the 6 named, including a previously-unknown **direction/polarity** bug (see PART 3).
+6 fixes shipped; 1 investigated and found NOT to have the hypothesized backend mechanism (see
+PART 3 "Still open" — reported honestly rather than shipping a fix that wouldn't have mattered).
 
 Baseline this plan was written against — DEV EF v48 (v28 rule table), 2026-07-14:
 
-| Suite | What it is | Score then | Score now (v53) |
-|---|---|---|---|
-| `wide_test.mjs` | 99 cases **I invented** | 99/99 ✅ | 99/99 ✅ |
-| `real_chat_test.mjs` | 17 cases **a real user typed** | **11/17** ❌ | **17/17** ✅ |
-| `audit_probe.mjs` | 82-question adversarial sweep, every domain | **~60/82 (1 in 4 wrong)** ❌ | not re-scored (exploratory, not graded — spot-checked live post-ship; the flagship "0 red cards" case confirmed fixed, see **PART 3**) |
+| Suite | What it is | Score then (v48) | v29 (v53) | v30 (v57) |
+|---|---|---|---|---|
+| `wide_test.mjs` | cases **I invented** | 99/99 ✅ | 99/99 ✅ | 110/110 ✅ |
+| `real_chat_test.mjs` | cases **a real user typed** | **11/17** ❌ | **17/17** ✅ | **22/22** ✅ |
+| `audit_probe.mjs` | 82-question adversarial sweep, every domain | **~60/82 (1 in 4 wrong)** ❌ | not re-scored (exploratory, not graded) | not re-scored (the v30 workflow's own sweep is the closest re-run, but it never completed — see STATUS above) |
 
-**The green synthetic suite hid a 25% failure rate.** All gates below measure on the real suites;
-`wide_test` is demoted to a no-regression net.
+**The green synthetic suite hid a 25% failure rate — twice, at two different maturity levels.**
+All gates below measure on the real suites; `wide_test` is demoted to a no-regression net.
 
 **Core principle (never violated):** **SQL computes. The LLM parses and phrases. The LLM never counts,
 never invents a number, never sees private data.**
@@ -314,6 +324,47 @@ All verified live against the deployed DEV function, not just in test assertions
 - `which team scored the most goals?` → answers a per-game **average**, labelled as such ("5.0 goals per game"). Defensible (truthful, labelled) but may not match user intent for a "total" question — deferred, not a lie.
 - `how many yellow cards did argentina get?` → still answers with games played, not cards. `teamStat`'s dim-resolution for a team-scoped card count is a separate, deeper bug than the tournament-wide aggregate this pass fixed — not touched.
 - `why?` (conversational elaboration after an answer) → still the generic off-topic brush-off.
+
+## v30 — BEFORE (EF v53) → AFTER (EF v57), 2026-07-15
+
+Triggered by the human user still finding real bugs after v29 shipped. A workflow audit
+live-reproduced and root-caused 5 of 6 newly-reported bugs before hitting the account's monthly
+spend limit; the 6th (repeat-bleed) and a personal sweep were completed directly, surfacing 3 more
+confirmed bugs. All 6 below verified live against the deployed DEV function, not just assertions.
+
+| Question | v53 (before) | v57 (after) |
+|---|---|---|
+| `which game had the most red cards?` | *"12 players are tied for player with the most red cards..."* (a PLAYER list for a GAME question) | *"2 games are tied for the most red cards (2 each): Fulham 0-1 Bournemouth, Oviedo 0-0 Getafe."* — generalized to goals/yellow/corners too |
+| `which team conceded the most goals?` | *"...have the best defense, conceding 0.0 goals per game."* (answered the OPPOSITE pole) | *"FC Köln has conceded the most goals, 5.0 per game."* |
+| `which team has the least possession?` | *"...has the most possession, 75.0% per game."* | *"Blooming has the least possession, 26.0% per game."* |
+| `which team is the most chosen for champion? and how much?` | dumped the CALLER's own single pick per group | a real tally: e.g. *"Alpha Wolves: Brazil is the top pick, 3 of 8 members (37%)."* / *"no standout — every pick is different"* when true |
+| `what is my best positive streak in Alpha Wolves?` | *"🧊 Cold streak: 1 scored game without points."* (answered the CURRENT trailing streak regardless of direction asked) | *"🔥 Best hot streak: 2 scored games in a row with points."* |
+| `each question open to how much time?` (trivia) | *"Each trivia question is open for 40 seconds."* (only the answer countdown, never the 24h window) | *"Each day's trivia question opens at 22:00 Israel and stays open for 24 hours... Once you open it, you only get 40 seconds..."* |
+| `how much games were penalties score in regular time, 90 min?` | shootout data (*"No World Cup games have gone to penalties yet. Friendlies that did: ...Penalties: 4-3..."*) | *"14 World Cup games have had a penalty kick in regular time (90 min, not a shootout): ..."* with per-game scored/missed counts |
+
+**Still open (v30 — investigated, not fixed, reported honestly):**
+- **Repeat-bleed mechanism** — the human session showed an unrelated question ("explain on the
+  bracked competition") get back a stale answer from 2 turns earlier, tagged as a deterministic
+  (non-LLM) match. The originally-hypothesized backend mechanism (a prior turn's `op`/`dim`
+  leaking through the entity-borrow logic and hijacking `stat_leaderboard`) was **disproven by
+  code reading**: the dim-borrow only fires when the freshly-detected `op==='lookup'`, which is
+  mutually exclusive with `stat_leaderboard`'s `op==='rank'` requirement — that path cannot
+  actually produce the observed repeat. Direct live reproduction (feeding the EF the exact correct
+  prior turn, and separately the red-cards turn) both produced correct, non-repeated answers,
+  meaning the EF behaves correctly given accurate inputs. Best remaining suspect: a frontend state
+  bug in `AskBot.jsx` — `lastBot` (line 44) was hardened defensively (dropped a `.spec`-presence
+  filter that could skip the true last bot reply and send stale `last_answer`/`prev_spec` for the
+  NEXT turn), and this fix is committed, but it was not proven to be the exact trigger (would need
+  live browser/DevTools reproduction, not available from this CLI-only harness). **No backend
+  "fix" was shipped claiming to solve this** — shipping one would have been cosmetic.
+- **Polarity fix (family B) only verified on 3 of 8 team-level dims** (defense/possession/fouls,
+  the ones with live-confirmed bugs). The mechanism is generic (`detectPolarity` + per-dim
+  `fmtInv`) and was added to all 8 team dims (attack/corners/teamYellow/offsidesT/shotsT included),
+  but "least attack"/"fewest offsides"/etc. were not individually live-tested — should hold given
+  the shared mechanism, not empirically confirmed one-by-one.
+- **The 2 broad-sweep dimensions that never ran** (workflow spend limit): repeat/context-bleed
+  beyond the one named case, and a systematic rules-text-vs-live-DB fact audit (only 3 facts
+  spot-checked: group cap, pick deadline, games-remaining count — all correct, not exhaustive).
 
 ---
 

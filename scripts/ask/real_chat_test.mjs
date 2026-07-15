@@ -59,6 +59,23 @@ const T = [
   ['G3-boxscore', 'anon', 'provide arsenal psg game stat', ['poss']],
   ['G4-lastgame', 'anon', 'what was the last game finished?', ['-']],
   ['G5-roadtofinal', 'anon', 'where i can road to final?', ['picks']],
+
+  // ---- CLASS F: v30 deep-audit — 5 more VERIFIED live failures from the human's real
+  // session (2026-07-15), found by direct code+DB reproduction after the workflow audit
+  // hit a spend limit mid-run. See docs/PLAN_ASK_BOT_V29.md Part 3 for full root causes. ----
+  // "positive streak" used to always answer with the CURRENT trailing streak (cold, if your
+  // most recent scored game was a miss) regardless of what direction was asked for.
+  ['F1-positive-streak', 'auth', 'what is my best positive streak in Alpha Wolves?', ['Best hot streak', '!Cold streak']],
+  // "most chosen for champion" used to dump the CALLER's own single pick per group.
+  ['F2-most-chosen', 'auth', 'which team is the most chosen for champion? and how much?', ['Alpha Wolves', '!worth 10 points']],
+  // trivia's 24h open window was never stated anywhere — only the 40-second answer countdown.
+  ['F3-trivia-24h', 'anon', 'explain how the trivia works', ['24', 'hour']],
+  // a GAME-scoped card superlative used to answer with a PLAYER leaderboard.
+  ['F4-game-cards', 'anon', 'which game was with the highest red cards?', ['!tied for player']],
+  // "regular time / 90 min" penalties used to answer with SHOOTOUT data instead. (The correct
+  // answer legitimately says "...not a shootout" once, to clarify — guard on an actual
+  // shootout marker instead, same fix as wide_test.mjs's penalty case.)
+  ['F5-regulation-penalty', 'anon', 'how much games were penalties score in regular time?', ['regular time', '!gone to penalties']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

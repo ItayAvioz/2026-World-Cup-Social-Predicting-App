@@ -21,15 +21,16 @@ Anything not in this table should **refuse or clarify** — never substitute a n
 |---|---|---|
 | Schedule | next/last game (per team, per phase), fixture lists by date/phase, tournament progress, "when is the last game" (future) | `lookupGame` `scheduleList` `tournamentProgress` |
 | Results | score, scorers, ET/pens, box score, single stat per game, ET/pens game lists | `whoScored` `gameDetail` `gameStats` `gameStatSingle` `etPensList` |
-| Team stats | leaders per dim (goals/assists/cards/defense/possession/corners/fouls/offsides/shots), compare, per-team totals, recent form / last-N, bracket status | `statLeaderboard` `compareTeams` `teamStat` `recentForm` `bracketStatus` |
+| Team stats | leaders per dim (goals/assists/cards/defense/possession/corners/fouls/offsides/shots) — **direction-aware** (explicit "least/fewest/lowest" flips the default pole, e.g. "least possession" ≠ "most possession"), **game-scoped** variants for goals/red/yellow/corners ("which game had the most red cards?" answers a GAME, not a player), compare, per-team totals, recent form / last-N, bracket status | `statLeaderboard` `gameGoalsLeaderboard` `gameCardLeaderboard` `compareTeams` `teamStat` `recentForm` `bracketStatus` |
 | Player stats | per-player totals, player counts ("how many players got a red card") | `resolvePlayer`+`playerStat` `playerCount` |
 | Odds | game odds (Bet365), champion outright odds (William Hill) | `gameOddsAnswer` `championOddsAnswer` |
 | WC groups A–L | computed group tables (sourced from `teams.group_name` — clean 4/group), "who finished 1st/last" | `tournamentGroupTable` |
-| Trivia | total question count, open window, "is there one today", **my own trivia score** (private) | `triviaInfo` `myTriviaScore` |
+| Trivia | total question count, **the 24h open window** (a day's question stays open 22:00→22:00 Israel — separate from the 40s answer countdown), "is there one today", **my own trivia score** (private) | `triviaInfo` `myTriviaScore` |
 | Top scorer candidates | who's eligible to pick, per-team candidate list | `topScorerCandidates` |
 | Card totals | tournament-wide red/yellow card sums (a `SUM()`, never RAG) | `cardsTotal` |
-| My data | rank, points, picks, exact scores (+which games), exact%/hit%/streak, my bracket, points from a match-day, **best-performing group** ("which of my groups...") | `myFocus` `myExact` `myRates` `myBestGroup` `myBracket` `dayPoints` |
-| Group data | standings, members/captain, group predictions per game, a mate's prediction, who picked X, latest AI roast | `groupStandings` `groupMeta` `groupHistory` `memberPrediction` `whoPicked` `latestRoast` |
+| Regulation penalties | penalty kicks (scored or missed) awarded **in regular time (90 min)** — distinct from a penalty SHOOTOUT, which `etPensList` already covers | `regulationPenaltyList` |
+| My data | rank, points, picks, exact scores (+which games), exact%/hit%/streak, **best/longest hot or cold streak** (direction-aware — "positive/hot" vs "negative/cold" vs bare "streak"), my bracket, points from a match-day, best-performing group ("which of my groups...") | `myFocus` `myExact` `myRates` `ratesFor` `myBestGroup` `myBracket` `dayPoints` |
+| Group data | standings, members/captain, group predictions per game, a mate's prediction, who picked X, **the most popular champion/top-scorer pick** ("which team is most chosen for champion, and how much?" — a real tally across members, never the caller's own pick), latest AI roast | `groupStandings` `groupMeta` `groupHistory` `memberPrediction` `whoPicked` `mostPopularPick` `latestRoast` |
 | Global | global leaderboard, another user's (public, post-lock) picks | `globalStandings` `userPicksPublic` |
 | Rules/how-to | scoring, deadlines, caps, bracket rules, tie-breaks, fold-in dates, navigation, roast timing, inactive members, self-service locks | `rulesFAQ` → grounded RULES LLM (v29: FACTS block with today's real date) |
 | Courtesy | "thanks" / "ok" / "cool" — never touches data, auth, or the LLM | `courtesy` route |
@@ -47,7 +48,7 @@ already public in the app UI?", not "whose data is it" — don't harden picks/ra
 **Use the CLI. One command, from disk:**
 ```bash
 npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
-node scripts/ask/wide_test.mjs        # must print 99/99 PASS
+node scripts/ask/eval.mjs             # must print wide_test=PASS real_chat_test=PASS
 ```
 `verify_jwt` stays `true` (there is no `supabase/config.toml`, and the CLI default matches the live
 setting — don't add one without checking). **DEV project only** — never pass the PROD ref
@@ -67,11 +68,26 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 53** = **v29 phases 1-4** (docs/PLAN_ASK_BOT_V29.md — a scoped
-> subset, NOT the full understand-first rewrite), deployed from disk 2026-07-14.
-> **`node scripts/ask/eval.mjs` → wide_test 99/99, real_chat_test 17/17.** No reindex needed
-> (v29 phases 1-4 added tools/rules, not embedding examples — INTENT_EXAMPLES/DIM_EXAMPLES
-> unchanged).
+> Current: DEV runs EF **version 57** = **v30 deep-audit fixes** (docs/PLAN_ASK_BOT_V29.md Part 3 —
+> 6 fixes from a live-code-and-DB-verified audit, NOT the full understand-first rewrite), deployed
+> from disk 2026-07-15.
+> **`node scripts/ask/eval.mjs` → wide_test 110/110, real_chat_test 22/22.** No reindex needed
+> (v30 added tools/rules, not embedding examples — INTENT_EXAMPLES/DIM_EXAMPLES unchanged).
+> v30 fixed: (1) game-scoped stat superlatives ("which game had the most red cards?" answered a
+> PLAYER — now answers a game, generalized across goals/red/yellow/corners); (2) superlative
+> DIRECTION ("which team conceded the most?" answered the BEST defense, hardcoded `dir` ignored
+> the question's actual polarity — same latent bug existed for "least possession"/"fewest fouls");
+> (3) champion/top-scorer pick POPULARITY ("most chosen for champion?" answered the caller's own
+> single pick — no tool counted anyone); (4) streak DIRECTION ("my positive/hot streak" answered
+> whatever the CURRENT trailing streak happened to be, cold or not); (5) trivia's 24h open window
+> (only the 40s answer countdown was ever stated); (6) in-regulation penalty kicks conflated with
+> penalty SHOOTOUTS. Also hardened `AskBot.jsx`'s `lastBot` derivation (dropped a `.spec`-presence
+> filter that could skip the true last bot reply) — **frontend change committed, NOT yet deployed
+> to gh-pages** (that's a separate manual step). One finding from the audit — a possible
+> context-bleed mechanism — was investigated and the originally-hypothesized backend mechanism was
+> **disproven by code reading** (the dim-borrow path only fires on `op:'lookup'`, mutually
+> exclusive with the rule it was thought to hijack, which requires `op:'rank'`); no backend fix
+> shipped for it — see PLAN_ASK_BOT_V29.md Part 3 "Still open".
 >
 > **v27 (coverage + conversation). ⚠️ needs `reindex_dims` (DIM_EXAMPLES changed).**
 > Four whole data domains the UI ships but the bot had NO tools for: **odds** (game Bet365 +

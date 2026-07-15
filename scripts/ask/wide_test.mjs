@@ -161,6 +161,29 @@ const T = [
   // ================= v27 conversation (answer-aware follow-ups) =================
   // "he" refers to the player named in the PREVIOUS ANSWER — resolved from last_answer
   ['convo', 'hard', 'anon', 'how many goals does he have?', ['goal'], ['who is the top scorer?']],
+
+  // ================= v30: deep-audit fixes (game-level, polarity, popularity, streak, trivia 24h, regulation penalty) =================
+  // A: a GAME-scoped superlative must never answer with a PLAYER leaderboard.
+  ['gamelb', 'medium', 'anon', 'which game had the most red cards?', ['!tied for player', '!player with the most red cards']],
+  ['gamelb', 'medium', 'anon', 'which game had the most goals?', ['!top scorer']],
+  // B: explicit LEAST/FEWEST must flip the answer's direction, not silently return the default.
+  ['polarity', 'medium', 'anon', 'which team has the least possession?', ['least possession', '!most possession']],
+  ['polarity', 'medium', 'anon', 'which team commits the fewest fouls?', ['fewest fouls', '!most fouls']],
+  ['polarity', 'medium', 'anon', 'which team conceded the most goals?', ['conceded the most', '!best defense']],
+  // regression guard: default (no explicit polarity word) must be UNCHANGED
+  ['polarity', 'medium', 'anon', 'which team has the best defense?', ['best defense', 'conceding']],
+  // C: a POPULARITY question is an aggregate across everyone, never the caller's own single pick.
+  ['popularity', 'hard', 'auth', 'how many people picked Brazil as champion?', ['Alpha Wolves', '!worth 10 points']],
+  ['popularity', 'hard', 'auth', 'which champion pick is most popular in my groups?', ['Alpha Wolves', '!worth 10 points']],
+  // D: an explicit POSITIVE/HOT streak question must answer the longest scoring run, not
+  // whatever the CURRENT trailing state happens to be.
+  ['streak', 'hard', 'auth', 'what is my best positive streak in Alpha Wolves?', ['Best hot streak', '!Cold streak']],
+  // E: trivia's 24h open window is a separate fact from the 40-second answer countdown.
+  ['trivia', 'medium', 'anon', 'each question open to how much time?', ['24', 'hour']],
+  // F: "regular time / 90 min" penalties must never answer with SHOOTOUT data. (The correct
+  // answer legitimately contains the word "shootout" once, to clarify it's NOT one — guard on
+  // the actual shootout markers instead: an ET/pens scoreline or the went_to_penalties phrasing.)
+  ['penalty', 'medium', 'anon', 'how much games were penalties score in regular time, 90 min?', ['regular time', '!after extra time', '!gone to penalties']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
