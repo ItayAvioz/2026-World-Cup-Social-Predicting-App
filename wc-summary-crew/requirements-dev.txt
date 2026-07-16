@@ -1,0 +1,6 @@
+# Dev / test dependencies (not needed to run the service).
+#   pip install -r requirements-dev.txt
+#   pytest                      # unit + integration (no keys needed)
+#   RUN_E2E=1 ... pytest        # also the live e2e test (needs keys — see tests/test_e2e.py)
+-r requirements.txt
+pytest==9.0.3

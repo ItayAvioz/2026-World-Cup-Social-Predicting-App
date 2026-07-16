@@ -1,0 +1,12 @@
+# venv (per project convention: venv_<project_dir_name>)
+venv_wc-summary-crew/
+__pycache__/
+*.pyc
+
+# secrets — NEVER commit
+.env
+
+# local scratch
+*.log
+.DS_Store
+.pytest_cache/
