@@ -97,16 +97,23 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
     return <div className="rtf-match">{row(g.team_home)}{row(g.team_away)}</div>
   }
 
-  // Tappable R16/QF/SF node — pick the winner of the two candidates
+  // Tappable R16/QF/SF node — pick the winner of the two candidates.
+  // On an SF box the NON-selected candidate is the implicit 3rd-place pick (win-gated):
+  // colour it against the actual bronze winner so its +2 is visible, not silent.
   function PickCard({ node }) {
     const cands = nodeCandidates(node, byNode, picks)
     const sel = picks[node]
     const round = roundOfNode(node)
+    const isSf = NODES_BY_PHASE.sf.includes(node)
     return (
       <div className="rtf-match rtf-pred">
         {cands.map((team, i) => {
           const isSel = team && sel === team
-          const result = isSel ? teamResultClass(team, round) : ''
+          const isThird = isSf && !!sel && !!team && !isSel
+          const result = isSel ? teamResultClass(team, round)
+            : isThird ? winnerResultClass(team, true, actualBronzeWin, outOfBronze.has(team))
+            : ''
+          const showTick = isSel || (isThird && !!result)
           return (
             <button
               key={i}
@@ -117,7 +124,7 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
             >
               <Flag name={team} code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
+              {showTick && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </button>
           )
         })}
@@ -217,9 +224,11 @@ export default function KnockoutPredict({ games, userId, teamCodeMap, showToast 
       <details className="rtf-score-help">
         <summary>How scoring works · max {MAX_POINTS} pts</summary>
         <div className="rtf-score-help-body">
-          <p><b>+{PER_TEAM} pts</b> for every team you correctly send into a round (QF, SF, Final, 3rd/4th).</p>
+          <p><b>+{PER_TEAM} pts</b> for every team you correctly send into a round (QF, SF, Final).</p>
           <p><b>All-correct bonus</b> when every team in a round is right:
-            QF +{ROUND_BONUS.qf} · SF +{ROUND_BONUS.sf} · Final +{ROUND_BONUS.final} · 3rd/4th +{ROUND_BONUS.third}.</p>
+            QF +{ROUND_BONUS.qf} · SF +{ROUND_BONUS.sf} · Final +{ROUND_BONUS.final}.</p>
+          <p><b>3rd place +{PER_TEAM}</b> for the team that <b>wins</b> the 3rd-place play-off
+            (not just reaches it).</p>
           <p><b>Champion +{CHAMPION_POINTS}</b> for the correct Final winner ·
             <b> 3rd-place winner +{THIRD_WINNER_POINTS}</b> for the correct 3rd/4th winner.</p>
           <p>Once a round is played, your pick turns <span className="rtf-h rtf-h-green">green</span> if right,

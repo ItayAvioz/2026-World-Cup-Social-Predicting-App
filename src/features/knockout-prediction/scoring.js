@@ -2,7 +2,8 @@
 // Display only; the leaderboard uses the server function.
 import { ROUND_BONUS, ROUND_SIZE, PER_TEAM, CHAMPION_POINTS, THIRD_WINNER_POINTS } from './constants.js'
 
-const KO_PHASES = ['qf', 'sf', 'final', 'third']
+// Reach rounds only. 3rd place is scored separately (win-gated) — see computeKnockoutScore.
+const REACH_PHASES = ['qf', 'sf', 'final']
 
 const finishedGames = (games, phase) => (games || []).filter(g => g.phase === phase && g.knockout_winner)
 const loserOf = g => (g.team_home === g.knockout_winner ? g.team_away : g.team_home)
@@ -57,7 +58,7 @@ export function computeKnockoutScore(picksByRound, games) {
   const reached = knockoutReached(games)
   let total = 0
   const breakdown = {}
-  for (const round of KO_PHASES) {
+  for (const round of REACH_PHASES) {
     const picks = picksByRound[round] ?? []
     const act = reached[round]
     const hits = picks.filter(t => act.has(t)).length
@@ -66,6 +67,15 @@ export function computeKnockoutScore(picksByRound, games) {
     breakdown[round] = { hits, bonus, pts }
     total += pts
   }
+
+  // 3rd place — WIN-gated, not "reached". A `third` pick scores PER_TEAM only if that team
+  // actually WON the 3rd-place play-off (mirrors fn_knockout_points). The SF loser who merely
+  // reaches the bronze game earns nothing; no all-correct bonus (only one team can win).
+  const actualThird = actualWinner(games, 'third')
+  const thirdPicks  = picksByRound.third ?? []
+  const thirdHits   = actualThird && thirdPicks.includes(actualThird) ? 1 : 0
+  breakdown.third = { hits: thirdHits, bonus: 0, pts: PER_TEAM * thirdHits }
+  total += breakdown.third.pts
 
   // Single-team winner picks — judged against the actual game winner.
   const champTeam  = (picksByRound.champion ?? [])[0] ?? null

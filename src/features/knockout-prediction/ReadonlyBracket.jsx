@@ -74,20 +74,28 @@ export default function ReadonlyBracket({ picks, games, teamCodeMap }) {
   }
 
   // Static pick card — two candidates, the member's pick highlighted + coloured.
+  // On an SF box the NON-selected candidate is the member's implicit 3rd-place pick
+  // (see picksToRounds' `third` derivation). It's win-gated: colour it against the actual
+  // bronze winner (gold if it won 3rd place, red once it can't/didn't) so the +2 is visible.
   function PickCard({ node }) {
     const cands = nodeCandidates(node, byNode, picks)
     const sel = picks[node]
     const round = roundOfNode(node)
+    const isSf = NODES_BY_PHASE.sf.includes(node)
     return (
       <div className="rtf-match rtf-pred">
         {cands.map((team, i) => {
           const isSel = team && sel === team
-          const result = isSel ? teamResultClass(team, round) : ''
+          const isThird = isSf && !!sel && !!team && !isSel
+          const result = isSel ? teamResultClass(team, round)
+            : isThird ? winnerResultClass(team, actualBronzeWin, outOfBronze.has(team))
+            : ''
+          const showTick = isSel || (isThird && !!result)
           return (
             <div key={i} className={`rtf-pred-row rtf-pred-row--ro${isSel ? ' rtf-pred-row--sel' : ''}${result}`}>
               <Flag code={codeOf(team)} />
               <span className="rtf-m-name">{short(team)}</span>
-              {isSel && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
+              {showTick && <span className="rtf-pred-tick" aria-hidden="true">{result.includes('wrong') ? '✗' : '✓'}</span>}
             </div>
           )
         })}
