@@ -310,6 +310,37 @@ function splitCompound(q: string): string[] {
   if (!/\b(when|where|who|what|which|how|did|do|does|is|are|was|were|has|have|will|can|show|list|give|tell)\b/i.test(tail)) return [q]
   return [m[1].trim(), tail]
 }
+// ---- v31 D4: INPUT NORMALIZATION — one early pass fixing run-together compounds and
+// confirmed real typos BEFORE any regex/classifier sees the text. Every \b-anchored regex in
+// this file silently no-ops on "globalleaderboard" (no word boundary between the words), and
+// resolveTeams' Levenshtein pass structurally can't fix missing spaces (tokenization happens
+// first). NOT a spell-checker: every entry traces to a confirmed live failure (same discipline
+// as the test suites). Proper-noun typos stay with resolveTeams/TEAM_ALIASES — never here.
+// The RAW question still goes to preGuard and ask_log; only routing sees the normalized text.
+const COMPOUND_FIXES: [RegExp, string][] = [
+  [/\bgloballeaderboard\b/gi, 'global leaderboard'],
+  [/\bleaderbord\b/gi, 'leaderboard'],
+  [/\bwentto\b/gi, 'went to'],
+  [/\btopscorer\b/gi, 'top scorer'],
+  [/\bnextgame\b/gi, 'next game'],
+  [/\blastgame\b/gi, 'last game'],
+]
+const TYPO_FIXES: [RegExp, string][] = [
+  [/\bchossen\b/gi, 'chosen'],
+  [/\bchoosen\b/gi, 'chosen'],
+  [/\bavilable\b/gi, 'available'],
+  [/\bfroup\b/gi, 'group'],
+  [/\bmembrs\b/gi, 'members'],
+  // "teh" before a group-suffix word ("show teh global leaderbord") defeated groupRefCandidate's
+  // stoplist — "teh global" read as a candidate GROUP NAME and the global board demanded login.
+  [/\bteh\b/gi, 'the'],
+]
+function normalizeQuestion(raw: string): string {
+  let q = raw
+  for (const [re, rep] of COMPOUND_FIXES) q = q.replace(re, rep)
+  for (const [re, rep] of TYPO_FIXES) q = q.replace(re, rep)
+  return q
+}
 const RL = new Map<string, number[]>()
 function rateOk(key: string): boolean {
   const now = Date.now(), arr = (RL.get(key) ?? []).filter((t) => now - t < RATE_WIN)
@@ -338,7 +369,7 @@ async function classify(sb: Sb, qvec: number[]): Promise<{ intent: string; confi
 let _namesCache: { t: number; v: string[] } = { t: 0, v: [] }
 async function fetchTeamNames(sb: Sb): Promise<string[]> {
   if (_namesCache.v.length && Date.now() - _namesCache.t < 300_000) return _namesCache.v
-  const { data } = await sb.from('games').select('team_home, team_away').range(0, 999)
+  const data = must(await sb.from('games').select('team_home, team_away').range(0, 999)) as any[]
   const s = new Set<string>(); for (const g of data ?? []) { if (g.team_home) s.add(g.team_home as string); if (g.team_away) s.add(g.team_away as string) }
   s.delete('TBD'); const v = [...s]; if (v.length) _namesCache = { t: Date.now(), v }; return v
 }
@@ -498,7 +529,7 @@ async function tournamentProgress(sb: Sb, q: string): Promise<string> {
 async function findGame(sb: Sb, a: string, b: string) {
   // v26: one query for both orientations (was two sequential round-trips). Team names are
   // canonical DB values and contain no commas/parens, so the or() filter is safe.
-  const { data } = await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').or(`and(team_home.eq.${a},team_away.eq.${b}),and(team_home.eq.${b},team_away.eq.${a})`).order('kick_off_time', { ascending: false }).limit(1)
+  const data = must(await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').or(`and(team_home.eq.${a},team_away.eq.${b}),and(team_home.eq.${b},team_away.eq.${a})`).order('kick_off_time', { ascending: false }).limit(1)) as any[]
   return data?.[0]
 }
 // Shared: extra-time / penalties tail appended to any game summary.
@@ -584,7 +615,7 @@ async function gameCardLeaderboard(sb: Sb, key: string): Promise<string> {
   const max = Math.max(...byGame.values())
   if (max === 0) return `No game has had any ${M.label} yet.`
   const ids = [...byGame.entries()].filter(([, v]) => v === max).map(([id]) => id)
-  const games = ((await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const games = (must(await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)) ?? []) as any[]
   const fmt = (g: any) => `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})`
   if (games.length === 1) return `${fmt(games[0])} had the most ${M.label}: ${max}.`
   return `${games.length} games are tied for the most ${M.label} (${max} each): ` + games.map(fmt).join(', ') + '.'
@@ -609,13 +640,13 @@ async function statLeaderboard(sb: Sb, key: string, question?: string): Promise<
   if (M.level === 'team') {
     const dir = pol ?? M.dir
     const fmt = pol && pol !== M.dir && M.fmtInv ? M.fmtInv : M.fmt
-    const { data } = await sb.from('team_tournament_stats').select(`team, ${M.col}, games_played`).gt('games_played', 0)
+    const data = must(await sb.from('team_tournament_stats').select(`team, ${M.col}, games_played`).gt('games_played', 0)) as any[]
     if (!data || !data.length) return 'No team stats are available yet.'
     const rows = [...data].sort((a: any, b: any) => dir === 'asc' ? a[M.col] - b[M.col] : b[M.col] - a[M.col])
     const ext = rows[0][M.col]; const lead = rows.filter((r: any) => r[M.col] === ext)
     return fmt(lead.map((r: any) => r.team).join(', '), ext, lead.length)
   }
-  const { data } = await sb.from('player_tournament_stats').select('player_name, team, total_goals, total_assists, total_yellow_cards, total_red_cards, games_played').gt('games_played', 0).order(M.col, { ascending: false }).limit(200)
+  const data = must(await sb.from('player_tournament_stats').select('player_name, team, total_goals, total_assists, total_yellow_cards, total_red_cards, games_played').gt('games_played', 0).order(M.col, { ascending: false }).limit(200)) as any[]
   if (!data || !data.length) return 'No player stats are available yet.'
   const val = (r: any) => M.compute ? M.compute(r) : r[M.col]
   const rows = [...data].filter((r) => val(r) > 0).sort((a, b) => val(b) - val(a))
@@ -625,7 +656,7 @@ async function statLeaderboard(sb: Sb, key: string, question?: string): Promise<
   return `${lead.length} players are tied for ${M.sup} with ${ext} ${M.noun} each: ` + lead.map((p) => `${p.player_name} (${p.team})`).join(', ') + '.'
 }
 async function compareTeams(sb: Sb, a: string, b: string): Promise<string> {
-  const { data } = await sb.from('team_tournament_stats').select('team, games_played, wins, draws, losses, avg_goals_scored, avg_goals_conceded, avg_possession').in('team', [a, b])
+  const data = must(await sb.from('team_tournament_stats').select('team, games_played, wins, draws, losses, avg_goals_scored, avg_goals_conceded, avg_possession').in('team', [a, b])) as any[]
   const ra = (data ?? []).find((r) => r.team === a), rb = (data ?? []).find((r) => r.team === b)
   if (!ra || !rb) { const miss = !ra ? a : b; return `I don't have tournament stats for ${miss} yet.` }
   const line = (r: any) => `${r.team}: ${r.games_played} games (${r.wins}W ${r.draws}D ${r.losses}L), ${(+r.avg_goals_scored).toFixed(1)} scored / ${(+r.avg_goals_conceded).toFixed(1)} conceded per game, ${(+r.avg_possession).toFixed(0)}% possession`
@@ -643,7 +674,7 @@ async function bracketStatus(sb: Sb, team: string): Promise<string> {
 }
 // P0: aggregate — global average goals per game
 async function avgGoalsPerGame(sb: Sb): Promise<string> {
-  const { data } = await sb.from('games').select('score_home, score_away').neq('phase', 'friendly').neq('team_home', 'TBD').not('score_home', 'is', null)
+  const data = must(await sb.from('games').select('score_home, score_away').neq('phase', 'friendly').neq('team_home', 'TBD').not('score_home', 'is', null)) as any[]
   const rows = data ?? []; if (!rows.length) return 'No games have been completed yet.'
   const goals = rows.reduce((s, g) => s + (g.score_home as number) + (g.score_away as number), 0)
   return `Across ${rows.length} completed games, teams are averaging ${(goals / rows.length).toFixed(2)} goals per game (${goals} total).`
@@ -654,7 +685,7 @@ async function resolvePlayer(sb: Sb, q: string, teamNames: string[]): Promise<an
   const words = q.toLowerCase().replace(/[^a-z ]/g, ' ').split(' ').filter((w) => w.length >= 4 && !stop.has(w) && !teamNames.some((t) => t.toLowerCase().includes(w)))
   if (!words.length) return null
   const ors = words.map((w) => `player_name.ilike.%${w}%`).join(',')
-  const { data } = await sb.from('player_tournament_stats').select('player_name, team, total_goals, total_assists, total_yellow_cards, total_red_cards, games_played').or(ors).gt('games_played', 0).order('games_played', { ascending: false }).limit(10)
+  const data = must(await sb.from('player_tournament_stats').select('player_name, team, total_goals, total_assists, total_yellow_cards, total_red_cards, games_played').or(ors).gt('games_played', 0).order('games_played', { ascending: false }).limit(10)) as any[]
   if (!data || !data.length) return null
   const sc = (p: any) => words.filter((w) => (p.player_name as string).toLowerCase().includes(w)).length
   const best = [...data].sort((a, b) => sc(b) - sc(a) || b.total_goals - a.total_goals)[0]
@@ -666,11 +697,31 @@ function playerStat(p: any, dim: string | null): string {
   return `${p.player_name} (${p.team}) has ${p.total_goals} goal${p.total_goals === 1 ? '' : 's'} in ${p.games_played} games.`
 }
 // P1: per-team aggregate ("how many games has Brazil played", "how many goals has Brazil scored")
+// v31: per-team discipline/set-piece totals summed straight from game_team_stats — "how many
+// red cards does Manchester City have?" used to fall to the generic W/D/L line (a confidently
+// WRONG answer to a count question), found by the sql_oracle suite's ground-truth comparison.
+const TEAM_GTS_DIM: Record<string, { cols: string[]; noun: string }> = {
+  red: { cols: ['red_cards'], noun: 'red card' },
+  yellow: { cols: ['yellow_cards'], noun: 'yellow card' },
+  cards: { cols: ['yellow_cards', 'red_cards'], noun: 'card' },
+  corners: { cols: ['corners'], noun: 'corner' },
+  fouls: { cols: ['fouls'], noun: 'foul' },
+  offsides: { cols: ['offsides'], noun: 'offside' },
+  shots: { cols: ['shots_total'], noun: 'shot' },
+}
 async function teamStat(sb: Sb, team: string, dim: string | null): Promise<string> {
-  const { data } = await sb.from('team_tournament_stats').select('team, games_played, wins, draws, losses, avg_goals_scored, avg_goals_conceded').eq('team', team).limit(1)
+  const data = must(await sb.from('team_tournament_stats').select('team, games_played, wins, draws, losses, avg_goals_scored, avg_goals_conceded').eq('team', team).limit(1)) as any[]
   const r = (data ?? [])[0]
   if (r && (dim === 'goals_or_attack' || dim === 'goals')) return `${team} have scored about ${Math.round((r.avg_goals_scored as number) * (r.games_played as number))} goals in ${r.games_played} games (${(+r.avg_goals_scored).toFixed(1)} per game).`
   if (r && dim === 'defense') return `${team} have conceded about ${Math.round((r.avg_goals_conceded as number) * (r.games_played as number))} goals in ${r.games_played} games (${(+r.avg_goals_conceded).toFixed(1)} per game).`
+  if (dim && TEAM_GTS_DIM[dim]) {
+    const m = TEAM_GTS_DIM[dim]
+    const rows = (must(await sb.from('game_team_stats').select(m.cols.join(', ')).eq('team', team)) ?? []) as any[]
+    if (rows.length) {
+      const tot = rows.reduce((s, row) => s + m.cols.reduce((x, c) => x + (row[c] ?? 0), 0), 0)
+      return `${team} have ${tot} ${m.noun}${tot === 1 ? '' : 's'} in ${rows.length} game${rows.length === 1 ? '' : 's'}.`
+    }
+  }
   if (r) return `${team} have played ${r.games_played} games (${r.wins}W ${r.draws}D ${r.losses}L).`
   // fallback: count directly from games when the stats view has no row yet
   const { data: gs } = await sb.from('games').select('score_home').or(`team_home.eq.${team},team_away.eq.${team}`).neq('phase', 'friendly').not('score_home', 'is', null)
@@ -696,7 +747,7 @@ async function gameDetail(sb: Sb, a: string, b: string): Promise<string> {
 async function gameStats(sb: Sb, a: string, b: string): Promise<string> {
   const game = await findGame(sb, a, b)
   if (!game || game.score_home === null) return `I couldn't find a completed game between ${a} and ${b}.`
-  const { data } = await sb.from('game_team_stats').select('team, possession, shots_total, shots_on_target, corners, fouls, yellow_cards, red_cards, offsides, xg, passes_accuracy').eq('game_id', game.id)
+  const data = must(await sb.from('game_team_stats').select('team, possession, shots_total, shots_on_target, corners, fouls, yellow_cards, red_cards, offsides, xg, passes_accuracy').eq('game_id', game.id)) as any[]
   const rows = data ?? []
   const rh = rows.find((r) => r.team === game.team_home), ra = rows.find((r) => r.team === game.team_away)
   const head = `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away} (${PHASE[game.phase as string] ?? game.phase})`
@@ -709,7 +760,7 @@ async function gameStats(sb: Sb, a: string, b: string): Promise<string> {
 async function gameStatSingle(sb: Sb, a: string, b: string, dim: string): Promise<string> {
   const game = await findGame(sb, a, b)
   if (!game || game.score_home === null) return `I couldn't find a completed game between ${a} and ${b}.`
-  const { data } = await sb.from('game_team_stats').select('team, possession, shots_total, shots_on_target, corners, fouls, yellow_cards, red_cards, offsides, xg').eq('game_id', game.id)
+  const data = must(await sb.from('game_team_stats').select('team, possession, shots_total, shots_on_target, corners, fouls, yellow_cards, red_cards, offsides, xg').eq('game_id', game.id)) as any[]
   const rows = data ?? []
   const rh = rows.find((r) => r.team === game.team_home), ra = rows.find((r) => r.team === game.team_away)
   const head = `${game.team_home} ${game.score_home}-${game.score_away} ${game.team_away} (${PHASE[game.phase as string] ?? game.phase})`
@@ -753,7 +804,7 @@ async function gameOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
   return `${head} — ${o.source ?? 'Bet365'} odds: ${g.team_home} ${o.home_win} · Draw ${o.draw} · ${g.team_away} ${o.away_win}${o.over_2_5 != null ? ` · Over 2.5 ${o.over_2_5} / Under 2.5 ${o.under_2_5}` : ''}.`
 }
 async function championOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
-  const { data } = await sb.from('champion_odds').select('team_name, odds, bookmaker').order('odds', { ascending: true })
+  const data = must(await sb.from('champion_odds').select('team_name, odds, bookmaker').order('odds', { ascending: true })) as any[]
   const rows = (data ?? []) as any[]
   if (!rows.length) return 'No champion odds are available yet.'
   if (teams.length) { const r = rows.find((x) => x.team_name === teams[0]); return r ? `${r.team_name} are ${r.odds} to win the World Cup (${r.bookmaker}).` : `I don't have champion odds for ${teams[0]}.` }
@@ -772,7 +823,7 @@ async function tournamentGroupTable(sb: Sb, letter: string, only?: 'first' | 'la
   const { data: teamRows } = await sb.from('teams').select('name').eq('group_name', L).not('is_tbd', 'is', true)
   const teamNames = (teamRows ?? []).map((t: any) => t.name as string)
   if (!teamNames.length) return `I don't have games for World Cup Group ${L}.`
-  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, kick_off_time').in('team_home', teamNames).in('team_away', teamNames).eq('phase', 'group')
+  const data = must(await sb.from('games').select('team_home, team_away, score_home, score_away, kick_off_time').in('team_home', teamNames).in('team_away', teamNames).eq('phase', 'group')) as any[]
   const rows = (data ?? []) as any[]
   const table = new Map<string, { p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number }>()
   for (const t of teamNames) table.set(t, { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 })
@@ -801,7 +852,7 @@ async function tournamentGroupTable(sb: Sb, letter: string, only?: 'first' | 'la
 // v27: recent form — last N finished games as a W/D/L strip ("how is Argentina doing?",
 // "last 5 games"). 90-min result shown; * marks games decided after ET/pens.
 async function recentForm(sb: Sb, team: string, n: number): Promise<string> {
-  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, knockout_winner, went_to_extra_time, went_to_penalties').or(`team_home.eq.${team},team_away.eq.${team}`).not('score_home', 'is', null).neq('phase', 'friendly').lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: false }).limit(Math.max(1, Math.min(n, 10)))
+  const data = must(await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, knockout_winner, went_to_extra_time, went_to_penalties').or(`team_home.eq.${team},team_away.eq.${team}`).not('score_home', 'is', null).neq('phase', 'friendly').lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: false }).limit(Math.max(1, Math.min(n, 10)))) as any[]
   const rows = (data ?? []) as any[]
   if (!rows.length) return `I don't have any completed games for ${team} yet.`
   const line = (g: any) => {
@@ -836,7 +887,11 @@ async function triviaInfo(sb: Sb, kind: 'count' | 'today' | 'window'): Promise<s
   // client — same privilege tier already used for reindex, nothing new is exposed.
   // '[TEST' rows are dev scaffolding, never real tournament questions — matched by PREFIX,
   // not a bare "test" substring (which also matches "fastest", a real question's own word).
-  const { data } = await sb.from('trivia_questions').select('available_from, available_until').not('question_text', 'like', '[TEST%').order('available_from', { ascending: true })
+  // v31: ALSO scoped to the tournament window (Jun 11 – Jul 20) — two pre-tournament dry-run
+  // questions (May 25/27, no [TEST prefix) inflated "how many trivia questions in total?" to
+  // 42 (truth: 40). Found by the sql_oracle suite; the old '40'-substring test was a FALSE
+  // PASS (its '40' matched "40 seconds" in the same sentence).
+  const data = must(await sb.from('trivia_questions').select('available_from, available_until').not('question_text', 'like', '[TEST%').gte('question_date', '2026-06-11').lte('question_date', '2026-07-20').order('available_from', { ascending: true })) as any[]
   const rows = (data ?? []) as any[]
   if (!rows.length) return "I don't have the trivia schedule yet."
   if (kind === 'count') return `There ${rows.length === 1 ? 'is' : 'are'} ${rows.length} trivia questions in total — one per day, each open for 40 seconds with one shot to answer.`
@@ -890,7 +945,7 @@ async function etPensList(sb: Sb, q: string): Promise<string> {
   const col = wantPens ? 'went_to_penalties' : 'went_to_extra_time'
   // v26: friendlies are included but labeled — "which games went to pens" answered "none"
   // while the PSG-Arsenal friendly had a 4-3 shootout sitting right there in the flags.
-  const { data } = await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq(col, true).not('score_home', 'is', null).order('kick_off_time', { ascending: true })
+  const data = must(await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time, went_to_extra_time, went_to_penalties, et_score_home, et_score_away, penalty_score_home, penalty_score_away, knockout_winner').eq(col, true).not('score_home', 'is', null).order('kick_off_time', { ascending: true })) as any[]
   const rows = data ?? []
   const label = wantPens ? 'penalties' : 'extra time'
   const wc = rows.filter((g) => g.phase !== 'friendly'), fr = rows.filter((g) => g.phase === 'friendly')
@@ -913,10 +968,13 @@ async function regulationPenaltyList(sb: Sb): Promise<string> {
     sb.from('game_events').select('game_id').eq('event_type', 'goal').ilike('detail', '%Penalty%'),
     sb.from('game_events').select('game_id').eq('event_type', 'missed_penalty'),
   ])
-  const scored = (scoredQ.data ?? []) as any[], missed = (missedQ.data ?? []) as any[]
+  // v31: must()-wrapped — a query failure must surface as the retry message, never as the
+  // confident "No games have had a penalty kick" empty-state (the exact v26 bug class this
+  // file already named, reproduced verbatim in v30's newest code).
+  const scored = (must(scoredQ) ?? []) as any[], missed = (must(missedQ) ?? []) as any[]
   if (!scored.length && !missed.length) return 'No games have had a penalty kick in regular time (90 min) yet.'
   const ids = [...new Set([...scored.map((r) => r.game_id as string), ...missed.map((r) => r.game_id as string)])]
-  const games = ((await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const games = (must(await sb.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)) ?? []) as any[]
   const gmap = new Map(games.map((g) => [g.id, g]))
   const wcIds = ids.filter((id) => gmap.get(id) && gmap.get(id)!.phase !== 'friendly')
   if (!wcIds.length) return 'No World Cup games have had a penalty kick in regular time (90 min) yet.'
@@ -931,9 +989,9 @@ async function regulationPenaltyList(sb: Sb): Promise<string> {
 // private (RLS via user JWT)
 type Grp = { id: string; name: string }
 async function myGroups(sbUser: Sb, me: string) {
-  const gm = must(await sbUser.from('group_members').select('group_id').eq('user_id', me)) ?? []
+  const gm = must(await sbUser.from('group_members').select('group_id').eq('user_id', me)) as any[] ?? []
   const ids = gm.map((r) => r.group_id as string); if (!ids.length) return [] as Grp[]
-  const gr = (await sbUser.from('groups').select('id, name').in('id', ids)).data ?? []; return gr.map((g) => ({ id: g.id as string, name: g.name as string }))
+  const gr = must(await sbUser.from('groups').select('id, name').in('id', ids)) ?? []; return gr.map((g) => ({ id: g.id as string, name: g.name as string })) as any[]
 }
 // v19: resolve a group NAME the caller mentions against their OWN groups only
 // (full-name match first, then name tokens; v20 adds typo tolerance). Never sees other users' groups.
@@ -990,9 +1048,9 @@ function unknownGroupAnswer(name: string, groups: Grp[]): string {
 // v20: group-mates roster (usernames) across the caller's groups — RLS-scoped.
 async function myGroupMembers(sbUser: Sb, gids: string[]): Promise<{ id: string; username: string }[]> {
   if (!gids.length) return []
-  const gm = (await sbUser.from('group_members').select('user_id').in('group_id', gids)).data ?? []
+  const gm = must(await sbUser.from('group_members').select('user_id').in('group_id', gids)) as any[] ?? []
   const ids = [...new Set(gm.map((r) => r.user_id as string))]; if (!ids.length) return []
-  const pr = (await sbUser.from('profiles').select('id, username').in('id', ids)).data ?? []
+  const pr = must(await sbUser.from('profiles').select('id, username').in('id', ids)) as any[] ?? []
   return pr.map((p) => ({ id: p.id as string, username: p.username as string }))
 }
 // v20: resolve a group-MATE's username mentioned in the question (typo-tolerant).
@@ -1041,7 +1099,7 @@ async function groupMeta(sbUser: Sb, meId: string, scope: Grp[], q: string): Pro
   if (!scope.length) return `You're not in any group yet.`
   const blocks: string[] = []
   for (const g of scope) {
-    const gm = (await sbUser.from('group_members').select('user_id').eq('group_id', g.id)).data ?? []
+    const gm = must(await sbUser.from('group_members').select('user_id').eq('group_id', g.id)) as any[] ?? []
     const ids = gm.map((r) => r.user_id as string)
     const prs = ids.length ? (((await sbUser.from('profiles').select('id, username').in('id', ids)).data) ?? []) : []
     const cap = (await sbUser.from('groups').select('created_by').eq('id', g.id).limit(1)).data?.[0]?.created_by
@@ -1118,7 +1176,7 @@ async function myFocus(sbUser: Sb, me: string, all: Grp[], target: Grp | null, k
   if (!all.length) return `You're not in any group yet.`
   const lines: string[] = []
   for (const g of target ? [target] : all) {
-    const rows = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]
+    const rows = (must(await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })) ?? []) as any[]
     const mine = rows.find((r) => r.user_id === me)
     if (!mine) { lines.push(`${g.name}: no ranking yet.`); continue }
     if (kind === 'rank') lines.push(`${g.name}: you're #${mine.group_rank} of ${rows.length} (global #${mine.global_rank}).`)
@@ -1134,7 +1192,7 @@ async function myExact(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target:
   const rows = must(await q) ?? []
   if (!rows.length) return target ? `No exact scores in ${target.name} yet — keep predicting!` : `You have no exact scores yet — keep predicting!`
   const ids = [...new Set(rows.map((r) => r.game_id as string))]
-  const games = ((await sbPublic.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)).data ?? []) as any[]
+  const games = (must(await sbPublic.from('games').select('id, team_home, team_away, score_home, score_away, phase').in('id', ids)) ?? []) as any[]
   const gmap = new Map(games.map((g) => [g.id, g]))
   const line = (r: any) => { const g = gmap.get(r.game_id); return g ? `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})` : null }
   if (target) return `You have ${rows.length} exact score${rows.length === 1 ? '' : 's'} in ${target.name}:\n` + rows.map(line).filter(Boolean).map((s) => '• ' + s).join('\n')
@@ -1171,7 +1229,7 @@ async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | 
   const preds = (must(await pq) ?? []) as any[]
   if (!preds.length) return null
   const ids = [...new Set(preds.map((r) => r.game_id as string))]
-  const games = ((await sbPublic.from('games').select('id, kick_off_time, score_home').in('id', ids)).data ?? []) as any[]
+  const games = (must(await sbPublic.from('games').select('id, kick_off_time, score_home').in('id', ids)) ?? []) as any[]
   const now = new Date()
   const finished = new Map(games.filter((g) => g.score_home !== null && new Date(g.kick_off_time) <= now).map((g) => [g.id, g.kick_off_time as string]))
   const scored = preds.filter((p) => finished.has(p.game_id))
@@ -1195,20 +1253,28 @@ async function ratesFor(sbPublic: Sb, sbUser: Sb, me: string, groupId: string | 
   }
   return { total, exact, hit, streak, hot, bestHot, bestCold }
 }
-function fmtRates(label: string, r: { total: number; exact: number; hit: number; streak: number; hot: boolean; bestHot: number; bestCold: number }, want: 'current' | 'hot' | 'cold' = 'current'): string {
+function fmtRates(label: string, r: { total: number; exact: number; hit: number; streak: number; hot: boolean; bestHot: number; bestCold: number }, want: 'current' | 'hot' | 'cold' | 'best' = 'current'): string {
   const base = `${label}Exact ${Math.round((r.exact / r.total) * 100)}% (${r.exact}/${r.total}) · Hit ${Math.round((r.hit / r.total) * 100)}% (${r.hit}/${r.total})`
   if (want === 'hot') return `${base} · 🔥 Best hot streak: ${r.bestHot} scored game${r.bestHot === 1 ? '' : 's'} in a row with points.`
   if (want === 'cold') return `${base} · 🧊 Worst cold streak: ${r.bestCold} scored game${r.bestCold === 1 ? '' : 's'} in a row without points.`
+  // v31: a bare "best streak" (no direction word) is genuinely ambiguous — show BOTH numbers
+  // rather than silently picking a direction (the v30-class failure mode, one level up).
+  if (want === 'best') return `${base} · 🔥 Best hot streak: ${r.bestHot} in a row with points · 🧊 Worst cold streak: ${r.bestCold} in a row without.`
   return `${base} · ${r.hot ? '🔥 Hot' : '🧊 Cold'} streak: ${r.streak} scored game${r.streak === 1 ? '' : 's'} ${r.hot ? 'in the points' : 'without points'}.`
 }
 // v30: `want` reads the actual streak DIRECTION asked for ("positive/hot/winning" vs
 // "negative/cold/losing streak") — default 'current' preserves today's bare-"streak" behavior.
-function streakWant(ql: string): 'current' | 'hot' | 'cold' {
+// v31: bare "best/longest/record streak" with NO direction qualifier gets its own branch —
+// it used to fall through to 'current' and could answer a LOSING streak to a "best" question
+// (the v30 fix only covered explicit hot/cold words). Direction words are checked FIRST so
+// "best positive streak" stays 'hot'.
+function streakWant(ql: string): 'current' | 'hot' | 'cold' | 'best' {
   if (/positive|hot streak|winning streak/.test(ql)) return 'hot'
   if (/negative|cold streak|losing streak/.test(ql)) return 'cold'
+  if (/\b(best|longest|record)\b/.test(ql) && /streak/.test(ql)) return 'best'
   return 'current'
 }
-async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null, want: 'current' | 'hot' | 'cold' = 'current'): Promise<string> {
+async function myRates(sbPublic: Sb, sbUser: Sb, me: string, all: Grp[], target: Grp | null, want: 'current' | 'hot' | 'cold' | 'best' = 'current'): Promise<string> {
   const r = await ratesFor(sbPublic, sbUser, me, target ? target.id : null)
   if (!r) return 'You have no scored predictions yet.'
   return fmtRates(target ? target.name + ' — ' : '', r, want)
@@ -1222,7 +1288,7 @@ async function myBestGroup(sbUser: Sb, sbPublic: Sb, me: string, all: Grp[], by:
   if (all.length === 1) return by === 'rate' ? await myRates(sbPublic, sbUser, me, all, all[0]) : await myFocus(sbUser, me, all, all[0], 'rank')
   if (by === 'rank') {
     const rows = await Promise.all(all.map(async (g) => {
-      const r = ((await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })).data ?? []) as any[]
+      const r = (must(await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })) ?? []) as any[]
       const mine = r.find((x) => x.user_id === me)
       return mine ? { g, rank: mine.group_rank as number, of: r.length, global: mine.global_rank as number } : null
     }))
@@ -1287,7 +1353,7 @@ function matchDayWindow(off: number): { start: string; end: string } {
 }
 async function dayPoints(sbPublic: Sb, sbUser: Sb, me: string, groups: Grp[], target: Grp | null, off: number, label: string, meOnly: boolean): Promise<string> {
   const w = matchDayWindow(off)
-  const games = ((await sbPublic.from('games').select('id').gte('kick_off_time', w.start).lt('kick_off_time', w.end).not('score_home', 'is', null).lte('kick_off_time', new Date().toISOString())).data ?? []) as any[]
+  const games = (must(await sbPublic.from('games').select('id').gte('kick_off_time', w.start).lt('kick_off_time', w.end).not('score_home', 'is', null).lte('kick_off_time', new Date().toISOString())) ?? []) as any[]
   if (!games.length) return `No games finished ${label}.`
   let pq = sbUser.from('predictions').select('user_id, group_id, points_earned').in('game_id', games.map((g) => g.id as string))
   if (meOnly) pq = pq.eq('user_id', me)
@@ -1315,7 +1381,7 @@ async function latestRoast(sbUser: Sb, groups: Grp[], target: Grp | null): Promi
 // v24: another user's champion + top-scorer picks are PUBLIC after the June-11 lock (the
 // global leaderboard displays them) — answer from the public leaderboard RPC by username.
 async function userPicksPublic(sb: Sb, q: string): Promise<string | null> {
-  const { data } = await sb.rpc('get_leaderboard')
+  const data = must(await sb.rpc('get_leaderboard')) as any[]
   const rows = (data ?? []) as any[]; if (!rows.length) return null
   const ql = ' ' + q.toLowerCase().replace(/[^a-z0-9_א-׿ ]/g, ' ').replace(/\s+/g, ' ') + ' '
   const users = [...new Set(rows.map((r) => r.username as string))]
@@ -1352,6 +1418,94 @@ async function groupHistory(sbPublic: Sb, sbUser: Sb, me: string, a: string, b: 
     + (started ? '' : `\n(Only your own predictions are visible before kickoff — everyone else's unlock at kickoff.)`)
 }
 // rules FAQ (deterministic answers for high-value facts; null => LLM fallback)
+// ---- v31 D4: RULES-AS-DATA + SHAPE-AWARE RENDERING -----------------------------------------
+// The confirmed failure family this replaces: rulesFAQ's first-match-wins regex chain answered
+// by bare TOPIC keyword, ignoring the question's SHAPE — "explain how Road to Final works" got
+// the location-only line; "when top scorer and champion point add?" got only the 10-point value;
+// "where can I see the AI summary?" fell to latest_roast and dumped real roast content. Three
+// topics migrated here (road_to_final / champion_scorer_points / ai_summary); the rest of
+// rulesFAQ stays as-is (fallback safety net for phrasings the topic gates exclude) and migrates
+// topic-by-topic in later increments — see docs/PLAN_ASK_BOT_V31_ARCHITECTURE.md §4 D4.
+type RuleShape = 'location' | 'explanation' | 'timing' | 'lock' | 'value'
+type RuleTopic = { location?: string; explanation?: string; timing?: string; lock?: string; value?: string; defaultShape: RuleShape }
+
+const RULE_TOPICS: Record<string, RuleTopic> = {
+  road_to_final: {
+    location: 'The knockout bracket game — "Road to Final" — is in the Picks tab. Open Picks and tap "Road to Final".',
+    explanation: 'Road to Final is the knockout-bracket prediction game: pick which teams reach the QF, SF, Final and 3rd-place play-off, plus who wins the Final (Champion) and who wins 3rd place. You get +2 points for each team correctly placed in a round, a bonus for getting a WHOLE round right (QF +12, SF +10, Final +8, 3rd/4th +6), +10 for the correct Champion and +5 for the correct 3rd-place winner. Maximum possible is 83 points. Entries locked July 4; points fold into the leaderboard from July 20.',
+    timing: 'Knockout-bracket points fold into the leaderboard from July 20. Until then you can check them on the Road to Final page (Picks tab).',
+    lock: 'The knockout bracket locks on July 4, 20:00 Israel time.',
+    value: 'The knockout bracket game is worth up to 83 points in total (max): +2 per team correctly placed in a round, round bonuses (QF +12, SF +10, Final +8, 3rd/4th +6), +10 for the correct Champion, +5 for the correct 3rd-place winner.',
+    defaultShape: 'location',   // preserves the old bare-mention -> location behavior exactly
+  },
+  champion_scorer_points: {
+    location: 'Champion and Top Scorer picks are made on the Picks tab, per group.',
+    explanation: 'Each user picks one Champion (who wins the World Cup) and one Top Scorer (Golden Boot) — per group they belong to. Picks locked permanently on June 11, 22:00 Israel time. A correct Champion pick is worth 10 points and a correct Top Scorer pick is worth 10 points, both awarded when the Final is decided.',
+    timing: 'Champion + Top Scorer points land when the Final is decided (~July 19).',
+    lock: 'Champion and Top Scorer picks lock on June 11, 22:00 Israel time — permanently.',
+    value: 'The Champion and Top Scorer picks are worth 10 points each.',
+    defaultShape: 'value',   // never reached bare — the topic gate requires a shape cue
+  },
+  ai_summary: {
+    location: 'Find the nightly AI roast in the AI tab — one per group with 3+ active members.',
+    explanation: "Every night, about 3.5 hours after the day's last kickoff, an AI generates a funny, roast-style summary for each group of 3+ active members, based on that group's leaderboard and that day's results. It's just for laughs, not a game recap. Find it in the AI tab.",
+    timing: "The nightly AI roast generates about 3.5 hours after the day's last kickoff — one per group with 3+ members. Find it in the AI tab.",
+    defaultShape: 'timing',   // never reached bare — bare "roast"/"show me the roast" must still reach latest_roast
+  },
+}
+
+const SHAPE_CUES: [RuleShape, RegExp][] = [
+  // "how ... work(s)" deliberately does NOT require does/do — the real transcript failure was
+  // the broken-grammar "how road to final work?", which has neither.
+  ['explanation', /\bexplain\b|\bhow\b[\s\S]{0,40}\bwork(s)?\b|\bwhat is\b|\bwhat('s| are)\b[\s\S]{0,15}\b(rules?|about)\b/],
+  ['location', /\bwhere\b|\bfind\b|\blocated\b/],
+  ['lock', /\block(s|ed|ing)?\b|\bdeadline\b|\bclose[sd]?\b/],
+  ['timing', /\bwhen\b|\btiming\b|\bfold(s)?\b|\bland(s)?\b|\bappear(s)?\b|\badd(ed|s)?\b|\bcomes? out\b|\barrive(s)?\b|\bposted\b/],
+  ['value', /\bpoints?\b|\bworth\b|how (many|much)\b/],
+]
+function detectRuleShapes(qlow: string): RuleShape[] {
+  let hits: RuleShape[] = []
+  for (const [shape, re] of SHAPE_CUES) if (re.test(qlow)) hits.push(shape)
+  // "when do picks LOCK?" fires both lock (lock) and timing (when) — lock is the specific ask.
+  if (hits.includes('lock')) hits = hits.filter((s) => s !== 'timing')
+  return hits
+}
+
+// Decides WHICH topic (if any) the question is about, and whether a shape cue is REQUIRED
+// before it may fire. `teams` is the same resolveTeams() output the full Spec uses (hoisted,
+// not recomputed) — a NAMED team means a per-team question (whoPicked/stats), never a rule.
+function detectRuleTopic(qlow: string, teams: string[]): { topic: string; requireShape: boolean } | null {
+  // Personal ("my bracket", "how many points can I get") stays with my_bracket/old FAQ lines.
+  if (/road to final|\bbracket\b/.test(qlow) && !/\b(my|mine|i)\b/.test(qlow))
+    return { topic: 'road_to_final', requireShape: false }
+
+  const isChampScorer = /champion|top scorer|golden boot/.test(qlow)
+  const bothPicks = /(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(qlow)
+  const isStatQ = /goals?\b|assists?\b|scored\b/.test(qlow)
+  // Verbatim the same popularity cue most_popular_pick/my_data use — the three layers must
+  // never disagree about what a popularity question looks like (v30 lesson).
+  const isPopularityQ = /most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b|who picked/.test(qlow)
+  const timingCue = /\bwhen\b|\btiming\b|\bfold(s)?\b|\bland(s)?\b|\bappear(s)?\b|\badd(ed|s)?\b/.test(qlow)
+  const locationCue = /\bwhere\b/.test(qlow)
+  if (isChampScorer && !isStatQ && !isPopularityQ && teams.length === 0 && (bothPicks || timingCue || locationCue))
+    return { topic: 'champion_scorer_points', requireShape: true }
+
+  if (/\broasts?\b|ai summar|nightly summar/.test(qlow))
+    return { topic: 'ai_summary', requireShape: true }
+
+  return null
+}
+
+// Renders EVERY detected shape's field (not just the first match) — the direct fix for
+// "value-cue always shadowed timing-cue" ("how much points... and when do they land?" now
+// answers both halves).
+function renderRule(topic: string, shapes: RuleShape[]): string | null {
+  const t = RULE_TOPICS[topic]; if (!t) return null
+  const use = shapes.length ? shapes : [t.defaultShape]
+  const parts = [...new Set(use.map((s) => t[s]).filter(Boolean))] as string[]
+  return parts.length ? parts.join(' ') : null
+}
+
 function rulesFAQ(q: string): string | null {
   const s = q.toLowerCase()
   if (/exact (score|scoreline).*(point|worth|how many|how much)|how (many|much) (points|pts).*exact|point.*exact score|exact.*worth more/.test(s)) return 'An exact scoreline is worth 3 points — that already includes the outcome point (scoring is not cumulative).'
@@ -1409,7 +1563,7 @@ function rulesFAQ(q: string): string | null {
 async function searchStats(sb: Sb, qvec: number[] | null, teams: string[]): Promise<{ title: string; content: string }[]> {
   if (teams.length) { const { data } = await sb.from('kb_embeddings').select('title, content').in('title', teams); if (data && data.length) return data as any[] }  // fetch resolved entity cards directly
   if (!qvec) return []  // v26: degraded mode (no embedding) — evidence gate handles the empty set
-  const { data } = await sb.rpc('match_kb', { query_embedding: qvec, match_count: 6, kind_filter: null })
+  const data = must(await sb.rpc('match_kb', { query_embedding: qvec, match_count: 6, kind_filter: null })) as any[]
   return (data ?? []) as { title: string; content: string }[]
 }
 // v26: ONE structured Writer call + a DETERMINISTIC grounding check (was a 2-4-call
@@ -1575,7 +1729,7 @@ const REGISTRY: Tool[] = [
 
 // v19: the whole per-question routing pipeline, callable once per clause so compound
 // questions answer BOTH parts. Returns {answer, pub(lic spec), extra} instead of a Response.
-type RouteDeps = { openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[]; lastAnswer?: string }
+type RouteDeps = { openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[]; lastAnswer?: string; isolatedRetry?: boolean }
 type RouteOut = { answer: string; pub: Record<string, unknown>; extra: Record<string, unknown> }
 
 // ---- v28: the deterministic override chain, as an ORDERED RULE TABLE ----
@@ -1651,14 +1805,20 @@ const ROUTE_RULES: Rule[] = [
   // asked ("how many trivia questions are there in total?" -> "worth 1 point"), and the
   // rules LLM had no clock to answer "is there one today" correctly.
   { id: 'trivia_info', run: async (c) => {
-    if (!/\btrivia\b/.test(c.qlow)) return null
+    // v31: a bare "question(s)" + open/time phrasing ("each question open to how much time?")
+    // is a trivia-window question in this app's domain even without the word "trivia" — it
+    // used to fall through to rules_llm, which answered only the 40s countdown and dropped
+    // the 24h open-window fact (LLM answer, non-deterministic). The "question about/for/on"
+    // exclusion keeps meta-questions ("I have a question about odds") out.
+    const triviaLike = /\btrivia\b/.test(c.qlow) || (/\bquestions?\b/.test(c.qlow) && /\b(open|available|live|window)\b/.test(c.qlow) && !/\bquestion (about|for|on|regarding)\b/.test(c.qlow))
+    if (!triviaLike) return null
     if (/\b(my|i'?ve|have i|did i)\b/.test(c.qlow) && /(score|point|correct|right|answer)/.test(c.qlow)) {
       const uid = await c.me(); if (!uid) return null
       return hit(await myTriviaScore(c.sbUser, uid), { route: 'my_trivia_score' })
     }
     if (/how (many|much)\b[\s\S]{0,20}\btrivia\b[\s\S]{0,20}\b(question|total|overall)|trivia questions?\b[\s\S]{0,15}\b(total|overall|are there)/.test(c.qlow) && !/point|worth/.test(c.qlow))
       return hit(await triviaInfo(c.sbService, 'count'), { route: 'trivia_count' })
-    if (/how long\b[\s\S]{0,20}\btrivia\b|trivia\b[\s\S]{0,20}(seconds|window|open for|how long)/.test(c.qlow))
+    if (/how long\b[\s\S]{0,20}\btrivia\b|trivia\b[\s\S]{0,20}(seconds|window|open for|how long)|\bquestions?\b[\s\S]{0,25}\bopen\b[\s\S]{0,25}\b(time|long|hours?)\b/.test(c.qlow))
       return hit(await triviaInfo(c.sbService, 'window'), { route: 'trivia_window' })
     if (/\b(today|tonight|right now|currently)\b[\s\S]{0,20}\btrivia\b|\btrivia\b[\s\S]{0,20}\b(today|tonight|now)\b|is there .*trivia|next trivia|when.*(next|is the).*trivia/.test(c.qlow))
       return hit(await triviaInfo(c.sbService, 'today'), { route: 'trivia_today' })
@@ -1704,6 +1864,23 @@ const ROUTE_RULES: Rule[] = [
     if (!target) { const cand = groupRefCandidate(c.question); if (cand) return hit(unknownGroupAnswer(cand, groups)) }
     if (target || /\b(my|our) groups?\b/.test(c.qlow)) return hit(await groupMeta(c.sbUser, uid, target ? [target] : groups, c.qlow))
     return null } },
+
+  // v23: "which games went to penalties / extra time?" — deterministic list from the
+  // went_to_* flags (used to fall into the upcoming-fixtures list or tournament progress).
+  // v30: "regular time"/"90 min"/"regulation" qualifiers mean an in-play penalty KICK, never a
+  // shootout — must win over et_pens_list, which only knows the went_to_penalties (shootout)
+  // flag and used to answer shootout data for this completely different question.
+  // v31: BOTH moved ABOVE the private/uid-gated block — "which games went to penalties" can
+  // classify as group_history (embedding proximity to prediction-list phrasings), and the
+  // private registry then demanded a login for a fully PUBLIC list question. A deterministic
+  // public tool must win over an intent-guessed auth gate (the tool-bound-auth principle).
+  { id: 'regulation_penalty', run: async (c) =>
+    /penalt/i.test(c.qlow) && /\b(regular|normal|90'?|90 ?min|regulation)\b/i.test(c.qlow) && !/shoot.?out|extra time/i.test(c.qlow)
+      ? hit(await regulationPenaltyList(c.sbPublic), { route: 'regulation_penalty' }) : null },
+
+  { id: 'et_pens_list', run: async (c) =>
+    /penalt|shoot.?out|extra time/i.test(c.qlow) && c.spec.teams.length < 2 && !/what happens|affects?|\brules?\b|predictions?|scoring|points|bracket|road to final/.test(c.qlow) && (/\b(which|what|list|show|any|how many|how much)\b[\s\S]{0,30}\b(games?|matches)\b/.test(c.qlow) || /\bgames? (that |which )?(went|go(es)?|gone)\b/.test(c.qlow))
+      ? hit(await etPensList(c.sbPublic, c.question)) : null },
 
   // v27: NEW private coverage routes — bracket game, latest roast, reverse pick lookup,
   // match-day-scoped points. All uid-gated; run before the intent registry so misclassified
@@ -1825,19 +2002,6 @@ const ROUTE_RULES: Rule[] = [
     /\b(next|coming|upcoming)\b[\s\S]{0,24}\b(game|match|fixture|kick.?off)\b|\bwhat('s| is) next\b/i.test(c.qlow) && !/\b(games|matches|fixtures)\b/.test(c.qlow) && !/\b(last|latest|previous)\b|how (many|much)/.test(c.qlow) && !c.spec.date && !c.spec.phase && c.spec.teams.length <= 1
       ? hit(await lookupGame(c.sbPublic, c.spec.teams[0] ?? null, null)) : null },
 
-  // v23: "which games went to penalties / extra time?" — deterministic list from the
-  // went_to_* flags (used to fall into the upcoming-fixtures list or tournament progress).
-  // v30: "regular time"/"90 min"/"regulation" qualifiers mean an in-play penalty KICK, never a
-  // shootout — must win over et_pens_list, which only knows the went_to_penalties (shootout)
-  // flag and used to answer shootout data for this completely different question.
-  { id: 'regulation_penalty', run: async (c) =>
-    /penalt/i.test(c.qlow) && /\b(regular|normal|90'?|90 ?min|regulation)\b/i.test(c.qlow) && !/shoot.?out|extra time/i.test(c.qlow)
-      ? hit(await regulationPenaltyList(c.sbPublic), { route: 'regulation_penalty' }) : null },
-
-  { id: 'et_pens_list', run: async (c) =>
-    /penalt|shoot.?out|extra time/i.test(c.qlow) && c.spec.teams.length < 2 && !/what happens|affects?|\brules?\b|predictions?|scoring|points/.test(c.qlow) && (/\b(which|what|list|show|any|how many|how much)\b[\s\S]{0,30}\b(games?|matches)\b/.test(c.qlow) || /\bgames? (that |which )?(went|go(es)?|gone)\b/.test(c.qlow))
-      ? hit(await etPensList(c.sbPublic, c.question)) : null },
-
   // v26: a SINGLE-stat game question ("how many red cards in PSG vs Arsenal?") answers just
   // that stat — the full box-score dump is reserved for "stats"-type asks.
   { id: 'game_stat_single', run: async (c) =>
@@ -1904,14 +2068,155 @@ const ROUTE_RULES: Rule[] = [
     /still in|knocked out|eliminated|out of the (tournament|cup)|still alive|gone through/i.test(c.qlow) && c.spec.teams.length
       ? hit(await bracketStatus(c.sbPublic, c.spec.teams[0])) : null },
 ]
+// ---- v31 D1: CONTEXT GATE — borrow team/dim/phase from a previous turn ONLY when the
+// CURRENT question itself signals it's a follow-up (pronoun / "what about" / "that game" /
+// a bare comparative). Before this, ANY question resolving to zero teams + no phase inherited
+// stale context unconditionally — e.g. "which games went to penalties?" asked right after an
+// unrelated 2-team question could silently borrow those 2 teams and answer about the wrong
+// game (et_pens_list wants teams.length<2, game_detail wants teams.length>=2 — both key off
+// the same "penalt" keyword). Confirmed live via the v31 architecture audit workflow.
+// NOTE: "they/them/their" is split from "he/him/his/she/her" — a PLURAL pronoun overwhelmingly
+// refers to a TEAM in this app's domain ("Man City scored X, how many have THEY conceded?"),
+// while a SINGULAR pronoun refers to a PLAYER. Conflating them into one signal (fixed live,
+// 2026-07-16, during the v31 rollout) broke exactly this compound-question shape: clause 2
+// ("...and how many have they conceded?") lost its team-borrow because "they" only licensed
+// entity/player resolution, not team resolution.
+type ContextSignalKind = 'pronoun_team' | 'pronoun_player' | 'leading_conjunction' | 'deictic_game' | 'deictic_group' | 'bare_comparative'
+type ContextNeed = { any: boolean; signals: ContextSignalKind[]; allow: { team: boolean; entity: boolean; group: boolean; shape: boolean } }
+type ContextSource = 'prev_spec' | 'last_answer_text' | 'history_text'
+type ContextTelemetry = { used: boolean; source: ContextSource | null; fields: string[] }
+
+const CTX_PRONOUN_TEAM = /\b(they|them|their)\b/i
+const CTX_PRONOUN_PLAYER = /\b(he|him|his|she|her)\b/i
+const CTX_LEADING_CONJ = /^\s*(and|what about|how about)\b/i
+const CTX_DEICTIC_GAME = /\b(that|this|same)\b[\s\S]{0,12}\b(game|match|one)\b/i
+const CTX_DEICTIC_GROUP = /\bin (that|this|our|my) group\b|\bin mine\b|\bover there\b|\bthere\b/i
+const CTX_BARE_COMPARATIVE = /^\s*(the\s+)?(1st|2nd|3rd|4th|5th|first|second|third|fourth|fifth|last|next|runner.?up|bottom|lowest|highest|worst)(\s+(place|one|team|group|spot|position))?\s*\??\s*$/i
+
+function detectContextNeed(question: string): ContextNeed {
+  const q = question.trim()
+  const signals: ContextSignalKind[] = []
+  if (CTX_PRONOUN_TEAM.test(q)) signals.push('pronoun_team')
+  if (CTX_PRONOUN_PLAYER.test(q)) signals.push('pronoun_player')
+  if (CTX_LEADING_CONJ.test(q)) signals.push('leading_conjunction')
+  if (CTX_DEICTIC_GAME.test(q)) signals.push('deictic_game')
+  if (CTX_DEICTIC_GROUP.test(q)) signals.push('deictic_group')
+  if (CTX_BARE_COMPARATIVE.test(q)) signals.push('bare_comparative')
+  const has = (k: ContextSignalKind) => signals.includes(k)
+  return {
+    any: signals.length > 0,
+    signals,
+    allow: {
+      team: has('pronoun_team') || has('leading_conjunction') || has('deictic_game') || has('bare_comparative'),
+      entity: has('pronoun_player'),
+      group: has('leading_conjunction') || has('deictic_group') || has('bare_comparative'),
+      shape: has('leading_conjunction') || has('deictic_group') || has('bare_comparative'),
+    },
+  }
+}
+function markBorrowed(t: ContextTelemetry, source: ContextSource, field: string): void {
+  t.used = true
+  if (t.source === null) t.source = source
+  if (!t.fields.includes(field)) t.fields.push(field)
+}
+
+// ---- v31 D3: UNIVERSAL ANSWER VALIDATION (V1 enforced, V2/V4/V5 observe-mode) --------------
+// Every route funnels through done(); done() now runs 4 deterministic checks on the final
+// answer BEFORE emit. V1 (repeat) is ENFORCED with a depth-1 self-heal: byte-identical answer
+// to a DIFFERENT question -> re-route once with ALL borrowed context stripped; ship the clean
+// re-route if it differs (the stale-replay bug class), ship the original if the clean context
+// reproduces it (two phrasings legitimately sharing one right answer — never a false clarify).
+// V2 (shape) / V4 (numeric provenance, Tier A) / V5 (on-topic entity) run in OBSERVE MODE this
+// cycle: every failure is recorded to ask_log.validation_fail (now text[]) so their real
+// false-positive rate is measurable on live traffic before any of them is allowed to block an
+// answer. Enforcement flip = a later, data-driven decision (docs/PLAN_ASK_BOT_V31_ARCHITECTURE.md §4 D3).
+type Shape = 'one' | 'count' | 'when' | 'where' | 'yesno' | 'other'
+function deriveShape(question: string, spec: Spec): Shape {
+  const q = question.trim().toLowerCase()
+  if (spec.intent === 'who_scored') return 'other'          // inherently 0-N scorers, never 'one'
+  if (/^(is|are|was|were|does|did|do|has|have|can|will|should)\b/.test(q)) return 'yesno'
+  if (/^where\b/.test(q)) return 'where'
+  if (/^when\b/.test(q) && !/how (many|much)/.test(q)) return 'when'
+  if (/how (many|much)\b/.test(q)) return 'count'
+  if (/^(who|which)\b/.test(q) && !/\b(list|all|top \d+|every|each|compare)\b/.test(q)) return 'one'
+  return 'other'
+}
+// Same vocabulary as detectDim() — a 'count' answer's number must be labeled with the asked
+// dimension's noun ("Argentina have played 2 games" fails a yellow-cards question).
+const DIM_NOUN: Record<string, RegExp> = {
+  assists: /assist/i, defense: /conced|goals? against|clean sheet/i, possession: /possession|%/i,
+  corners: /corner/i, fouls: /foul/i, yellow: /yellow|card|book/i, red: /red|card/i,
+  cards: /card|book/i, offsides: /offside/i, shots: /shot/i, goals_or_attack: /goal|score/i,
+  form: /win|draw|loss|form/i,
+}
+const SCREENS_RE = /\b(dashboard|groups?|picks|trivia|ai tab|game|tab|page|screen|bottom nav)\b/i
+function checkShape(shape: Shape, answer: string, spec: Spec): boolean {  // true = FAIL
+  switch (shape) {
+    case 'where': return !SCREENS_RE.test(answer)
+    case 'when': return !/\b\d{1,2}:\d{2}\b|\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\.?\s*\d{1,2}\b|\b(today|tomorrow|yesterday|tonight)\b|kick.?off|TBD|not (yet )?(scheduled|set)|isn'?t set|hasn'?t been/i.test(answer)
+    case 'count': { if (!/-?\d+(\.\d+)?/.test(answer)) return true
+                    const re = spec.dim ? DIM_NOUN[spec.dim] : null; return re ? !re.test(answer) : false }
+    case 'yesno': return !/^\s*(yes|no|yep|nope|correct|true|false)\b|\b(did(n'?t| not)?|do(n'?t| not)?|ha(s|ve)(n'?t| not)?|was(n'?t| not)?|were(n'?t| not)?|still|knocked out|eliminated|remains?|already|are (in|out|through))\b/i.test(answer)
+    default: return false  // 'one'/'other': no assertion (typed entity counting is deferred with D2)
+  }
+}
+// V4 Tier A: deterministic answers auto-pass (string-built from SQL rows); the rules LLM may
+// only cite numbers that exist in the app's actual rule constants; the off-topic steer-back
+// may cite none at all. rag_crew keeps its own in-answerCrew grounding check (Tier B, which
+// binds numbers to per-question retrieved facts, is deferred until tools return structured
+// results — D2). 'understand_fallback' is llm_used but its ANSWER comes from SQL tools (the
+// LLM only parsed the question), so it auto-passes too.
+const RULES_FACT_VALUES = new Set(['1', '2', '3', '5', '6', '8', '10', '12', '83', '40', '24', '48', '104', '4', '20', '19', '21', '11', '22', '00', '30', '3.5', '150', '2.5'])
+function checkNumericProvenance(answer: string, route: string, llmUsed: boolean): boolean {  // true = FAIL
+  if (!llmUsed) return false
+  if (route === 'off_topic') return /\d/.test(answer)
+  if (route !== 'rules_llm') return false
+  const nums = (answer.match(/\d+(?:\.\d+)?/g) ?? []).filter((n) => n !== '2026')
+  return !nums.every((n) => RULES_FACT_VALUES.has(n))
+}
+// V5: an answer about a NAMED team must actually mention that team (catches wrong-subject
+// substitution — the answer's entity silently differing from the question's).
+function checkOnTopicEntity(answer: string, spec: Spec): boolean {  // true = FAIL
+  if (!spec.teams.length) return false
+  return !spec.teams.some((t) => answer.includes(t))
+}
+
 // v27: `prev` = the previous turn's RESOLVED spec (client-echoed prev_spec, or clause 1's
 // spec for compound clause 2) — structured borrowing beats text re-parsing.
-async function routeQuestion(question: string, history: string[], d: RouteDeps, prev?: { teams?: string[]; dim?: string | null }): Promise<RouteOut> {
+async function routeQuestion(question: string, history: string[], d: RouteDeps, prev?: { teams?: string[]; dim?: string | null; topic?: string }): Promise<RouteOut> {
   const { openai, sbPublic, sbUser, sbService, me, names } = d
   // v29 S1: pure courtesy — never touches data, auth, or the LLM. Before this, a stray
   // "thanks!" landed on a misclassified private intent and demanded a login.
   if (/^\s*(thanks?( you)?( (so|very) much)?|ok(ay)?|cool|nice|got it|great|sounds good|perfect|bye|goodbye)\s*[!.]*\s*$/i.test(question))
     return { answer: "You're welcome! Ask me anything else about the tournament or the app.", pub: { intent: 'courtesy' }, extra: { llm_used: false, route: 'courtesy' } }
+  // v31 D4: teams resolved ONCE, up front — the RULE_TOPICS gate needs them (a named team means
+  // a per-team question, not a rule), and the Spec below reuses the same value (pure hoist).
+  const preTeams = resolveTeams(question, names)
+  // v31 D4: shape-aware rules-as-data BEFORE the legacy first-match regex chain — the same
+  // topic renders a different answer for "where" vs "explain" vs "when" vs "how many points".
+  {
+    const qlowEarly = question.toLowerCase()
+    const gate = detectRuleTopic(qlowEarly, preTeams)
+    if (gate) {
+      const shapes = detectRuleShapes(qlowEarly)
+      if (!gate.requireShape || shapes.length) {
+        const rendered = renderRule(gate.topic, shapes)
+        if (rendered) return { answer: rendered, pub: { intent: 'rules' }, extra: { llm_used: false, route: 'rule_topic:' + gate.topic, shape: shapes.join(',') || 'default' } }
+      }
+    } else if (prev?.topic && RULE_TOPICS[prev.topic] && /\b(they|them|those|it)\b/.test(qlowEarly)) {
+      // v31 D4: compound clause-2 TOPIC inheritance — splitCompound turns "how much points for
+      // champion and top scorer and when do they land?" into two clauses, and clause 2 ("when
+      // do they land?") has no topic keyword of its own. If clause 1 resolved to a rule topic
+      // and clause 2 is a pronoun follow-up WITH a shape cue, render that shape of the SAME
+      // topic instead of dropping the second half (the confirmed live "value shadowed timing"
+      // failure). Gated on all three signals so a normal new question can never inherit.
+      const shapes = detectRuleShapes(qlowEarly)
+      if (shapes.length) {
+        const rendered = renderRule(prev.topic, shapes)
+        if (rendered) return { answer: rendered, pub: { intent: 'rules' }, extra: { llm_used: false, route: 'rule_topic_followup:' + prev.topic, shape: shapes.join(',') } }
+      }
+    }
+  }
   // P1: a definitive rules FACT wins before the embedding classifier can misroute it to a data
   // intent (e.g. "how many points is the top scorer worth"). The exact-score FAQ regex is scoped
   // to require "points", so first-person personal counts ("how many exact scores do I have") fall
@@ -1925,7 +2230,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   let degraded = false
   try { const [v] = await embed(openai, question); qvec = v; cls = await classify(sbPublic, qvec) }
   catch { degraded = true; cls = { intent: guessIntent(question), confidence: 0.29, margin: 1, second: '' } }
-  let teams = resolveTeams(question, names)
+  let teams = preTeams  // v31 D4: hoisted above (same resolveTeams call, computed once)
   let dim = qvec ? await classifyDim(sbPublic, question, qvec) : detectDim(question)
   let agg = detectAgg(question)
   let op = detectOp(question)
@@ -1937,32 +2242,61 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   // v27: STRUCTURED borrow first — the echoed resolved spec, then entities literally present
   // in the last bot ANSWER (he/him/his stays a PLAYER ref, so no team-borrow then), and only
   // then the old text re-parse of prior questions.
-  if (teams.length === 0 && !phase && prev?.teams?.length) teams = prev.teams.filter((t) => names.includes(t)).slice(0, 3)
-  if (teams.length === 0 && !phase && d.lastAnswer && !/\b(he|him|his|she|her)\b/.test(question.toLowerCase())) teams = teamsInText(d.lastAnswer, names).slice(0, 2)
-  if (!dim && op === 'lookup' && prev?.dim) dim = prev.dim
-  if (history.length && teams.length === 0 && !phase) {
+  // v31 D1: every borrow below is now GATED on detectContextNeed() — the current question
+  // must itself carry a follow-up signal before anything is inherited from a previous turn.
+  const ctxNeed = detectContextNeed(question)
+  const ctxTelemetry: ContextTelemetry = { used: false, source: null, fields: [] }
+  if (ctxNeed.allow.team && teams.length === 0 && !phase && prev?.teams?.length) {
+    const t = prev.teams.filter((tm) => names.includes(tm)).slice(0, 3)
+    if (t.length) { teams = t; markBorrowed(ctxTelemetry, 'prev_spec', 'teams') }
+  }
+  if (ctxNeed.allow.team && !ctxNeed.signals.includes('pronoun_player') && teams.length === 0 && !phase && d.lastAnswer) {
+    const t = teamsInText(d.lastAnswer, names).slice(0, 2)
+    if (t.length) { teams = t; markBorrowed(ctxTelemetry, 'last_answer_text', 'teams') }
+  }
+  if (ctxNeed.allow.shape && !dim && op === 'lookup' && prev?.dim) { dim = prev.dim; markBorrowed(ctxTelemetry, 'prev_spec', 'dim') }
+  if (ctxNeed.allow.shape && history.length && teams.length === 0 && !phase) {
     const ctx = history.join(' ') + ' ' + question
-    teams = resolveTeams(ctx, names)
-    phase = detectPhase(ctx)
-    if (!dim && op === 'lookup') { dim = detectDim(ctx); if (agg === 'none') agg = detectAgg(ctx); op = detectOp(ctx) }
+    const t = resolveTeams(ctx, names)
+    if (t.length) { teams = t; markBorrowed(ctxTelemetry, 'history_text', 'teams') }
+    const ph = detectPhase(ctx)
+    if (ph) { phase = ph; markBorrowed(ctxTelemetry, 'history_text', 'phase') }
+    if (!dim && op === 'lookup') {
+      const d2 = detectDim(ctx)
+      if (d2) { dim = d2; markBorrowed(ctxTelemetry, 'history_text', 'dim') }
+      if (agg === 'none') agg = detectAgg(ctx)
+      op = detectOp(ctx)
+    }
   }
   let intent = cls.intent
   if (intent === 'who_scored' && detectPredicate(question)) intent = 'group_history'  // "who PREDICTED..." vs "who SCORED..."
   const spec: Spec = { intent, confidence: Number(cls.confidence.toFixed(3)), margin: Number(cls.margin.toFixed(3)), second: cls.second, op, dim, teams, date: resolveDate(question), phase, predicate: detectPredicate(question) }
-  const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim, ...(degraded ? { degraded: true } : {}) }
-  // v29 V1: a WEAKLY-classified question must never silently reuse the PREVIOUS turn's answer
-  // verbatim — a typo ("nexg") once replayed a red-card list for a schedule question because
-  // the borrow logic filled the gap from lastAnswer. Scoped to low-confidence classifications
-  // only, so two confident re-phrasings of the SAME question (which SHOULD share an answer,
-  // e.g. "who's the top scorer" asked twice) are never falsely flagged as a repeat bug.
-  const done = (answer: string, extra: Record<string, unknown> = {}): RouteOut => {
+  const pubSpec = { intent: spec.intent, confidence: spec.confidence, teams: spec.teams, op: spec.op, dim: spec.dim, context: ctxTelemetry, ...(degraded ? { degraded: true } : {}) }
+  // v31 D3: done() runs the validation checks on EVERY final answer. V1 (repeat) is now
+  // UNCONDITIONAL — the old `confidence < CLARIFY_CONF || off_topic` scoping left the
+  // highest-risk case (a CONFIDENT misroute echoing the previous answer verbatim) unguarded.
+  // Recovery is a depth-1 self-heal (isolatedRetry caps recursion): re-route with all borrowed
+  // context stripped; a stale replay produces a DIFFERENT (correct) answer on clean context and
+  // ships; a legitimate same-answer rephrase reproduces itself and ships unchanged — the old
+  // "could you rephrase it?" false-clarify for honest rephrasings is gone entirely.
+  const done = async (answer: string, extra: Record<string, unknown> = {}): Promise<RouteOut> => {
     const ans = answer || "Sorry, I couldn't find an answer."
+    const shape = deriveShape(question, spec)
+    const fails: string[] = []
     const prevQ = history.length ? history[history.length - 1]?.trim().toLowerCase() : ''
-    if (d.lastAnswer && ans === d.lastAnswer && prevQ && prevQ !== question.trim().toLowerCase() && (spec.confidence < CLARIFY_CONF || spec.intent === 'off_topic'))
-      return { answer: "I'm not confident I understood that — could you rephrase it?", pub: pubSpec, extra: { llm_used: false, route: 'repeat_guard' } }
-    return { answer: ans, pub: pubSpec, extra }
+    const isRepeat = !!(d.lastAnswer && ans === d.lastAnswer && prevQ && prevQ !== question.trim().toLowerCase())
+    if (isRepeat) fails.push('repeat')
+    if (checkShape(shape, ans, spec)) fails.push('shape')
+    if (checkNumericProvenance(ans, String(extra.route ?? ''), !!extra.llm_used)) fails.push('numeric')
+    if (checkOnTopicEntity(ans, spec)) fails.push('off_topic_entity')
+    if (isRepeat && !d.isolatedRetry) {
+      const retry = await routeQuestion(question, [], { ...d, lastAnswer: undefined, isolatedRetry: true }, undefined)
+      if (retry.answer && retry.answer !== d.lastAnswer)
+        return { ...retry, extra: { ...retry.extra, self_healed: 'repeat', validation_fail: fails, expected_shape: shape } }
+    }
+    return { answer: ans, pub: pubSpec, extra: { ...extra, ...(fails.length ? { validation_fail: fails } : {}), expected_shape: shape } }
   }
-  console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length }))
+  console.log(JSON.stringify({ q: question, intent: spec.intent, op: spec.op, dim: spec.dim, agg, conf: spec.confidence, margin: spec.margin, teams: spec.teams.length, ctx: ctxTelemetry }))
   const qlow = question.toLowerCase()
   const firstPerson = /\b(i|i'm|im|my|mine|me|myself)\b/i.test(qlow)
 
@@ -1986,9 +2320,9 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
       const members = uid ? await myGroupMembers(sbUser, groups.map((g) => g.id)) : []
       const u = await llmUnderstand(openai, question, groups.map((g) => g.name), members.map((m) => m.username), `teams=${spec.teams.join('|') || 'none'}, stat-dim=${spec.dim ?? 'none'}, phase=${spec.phase ?? 'none'}`)
       const ans = await execUnderstood(u, { question, sbPublic, sbUser, names }, uid ?? '', groups, members)
-      if (ans) return done(ans, { llm_used: true, fallback: true })
+      if (ans) return done(ans, { llm_used: true, fallback: true, route: 'understand_fallback' })
       const label: Record<string, string> = { schedule: 'the schedule', who_scored: 'match scorers', stats: 'team/player stats', my_data: 'your own stats', group_standings: 'group standings', group_history: 'group predictions', rules: 'how the app works' }
-      return done(`I'm not sure if you mean ${label[spec.intent] ?? spec.intent} or ${label[spec.second] ?? spec.second}. Could you rephrase?`, { llm_used: false, clarify: true })
+      return done(`I'm not sure if you mean ${label[spec.intent] ?? spec.intent} or ${label[spec.second] ?? spec.second}. Could you rephrase?`, { llm_used: false, clarify: true, route: 'clarify' })
     }
 
     // v26: the poisonable cross-user qa_cache is REMOVED — an injected "rules question"
@@ -2005,7 +2339,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
       const faq = rulesFAQ(question); if (faq) return done(faq, { llm_used: false, route: 'rules_faq' })
       // v24: a 1-2 word fragment ("score?") gets a clarify, not an LLM guess
       if (qlow.replace(/[^a-zא-׿ ]/g, ' ').trim().split(/\s+/).filter(Boolean).length <= 2 && spec.teams.length === 0 && !spec.phase && !spec.date)
-        return done('Could you give me a bit more? e.g. "what was the score of Argentina vs Colombia?" or "when is the next game?"', { llm_used: false, clarify: true })
+        return done('Could you give me a bit more? e.g. "what was the score of Argentina vs Colombia?" or "when is the next game?"', { llm_used: false, clarify: true, route: 'clarify' })
       try {
         // v29: FACTS (incl. today's date) computed fresh per-request — RULES_PROMPT alone had
         // no clock, so it once told a user trivia "hasn't started, it's before June 11" on a
@@ -2014,7 +2348,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
         assertPublicPayload('rulesLLM', sys, question)
         const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: sys }, { role: 'user', content: question }] })
         return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'rules_llm' })
-      } catch { return done("I'm having trouble reaching my language model right now — try again in a minute, or ask me a data question (schedule, scores, standings) which I can answer directly.", { llm_used: false, degraded: true }) }
+      } catch { return done("I'm having trouble reaching my language model right now — try again in a minute, or ask me a data question (schedule, scores, standings) which I can answer directly.", { llm_used: false, degraded: true, route: 'rules_degraded' }) }
     }
 
     // stats fuzzy "describe" -> RAG + crew (never cached: volatile)
@@ -2029,18 +2363,18 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
         if (groups.length && (resolveGroupName(question, groups) || groupRefCandidate(question) || resolveMemberName(question, members))) {
           const u = await llmUnderstand(openai, question, groups.map((g) => g.name), members.map((m) => m.username))
           const ans = await execUnderstood(u, { question, sbPublic, sbUser, names }, uid, groups, members)
-          if (ans) return done(ans, { llm_used: true, fallback: true })
+          if (ans) return done(ans, { llm_used: true, fallback: true, route: 'understand_fallback' })
         }
       }
       // P2: a superlative that didn't resolve to a deterministic metric must NOT go to the crew —
       // the LLM would invent a leader. Ask which stat instead of hallucinating one.
       if ((spec.op === 'rank' || /\b(best|most|worst|highest|lowest|dirtiest|meanest|cleanest|leakiest)\b/.test(qlow)) && !dimToMetric(spec.dim, question))
-        return done('Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards?', { llm_used: false, clarify: true })
+        return done('Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards?', { llm_used: false, clarify: true, route: 'clarify' })
       const cards = await searchStats(sbPublic, qvec, spec.teams)
       try {
         const crew = await answerCrew(openai, question, cards)
         return done(crew.answer || "I don't have stats to answer that yet.", { llm_used: crew.attempts > 0, retrieved: cards.length, route: 'rag_crew', crew: { attempts: crew.attempts, judge: crew.score } })
-      } catch { return done("I don't have stats to answer that yet.", { llm_used: false, retrieved: cards.length, degraded: true }) }
+      } catch { return done("I don't have stats to answer that yet.", { llm_used: false, retrieved: cards.length, degraded: true, route: 'rag_degraded' }) }
     }
 
     // off_topic -> short LLM steer-back
@@ -2049,7 +2383,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
       assertPublicPayload('offTopic', sys, question)
       const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.4, seed: 42, max_tokens: 150, messages: [{ role: 'system', content: sys }, { role: 'user', content: question }] })
       return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'off_topic' })
-    } catch { return done('I focus on the tournament and the app — ask me about the schedule, scores, standings or the rules!', { llm_used: false, degraded: true }) }
+    } catch { return done('I focus on the tournament and the app — ask me about the schedule, scores, standings or the rules!', { llm_used: false, degraded: true, route: 'off_topic_degraded' }) }
 }
 
 serve(async (req) => {
@@ -2102,7 +2436,9 @@ serve(async (req) => {
     // item was a CPU-exhaustion vector) and pass the same preGuard as the question.
     // v27: window widened to 3 user turns; the client also echoes the last resolved spec
     // (prev_spec) and the last bot answer (last_answer) for structured/answer-aware borrowing.
-    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string' && preGuard(x).ok).map((x: string) => x.slice(0, 500)).slice(-3) : []
+    // v31 D4: history items get the same normalization pass as the question (a typo'd compound
+    // in a PRIOR turn must not defeat the borrow/context regexes either).
+    const history: string[] = Array.isArray(body?.history) ? body.history.filter((x: any) => typeof x === 'string' && preGuard(x).ok).map((x: string) => normalizeQuestion(x.slice(0, 500))).slice(-3) : []
     const prevSpec = body?.prev_spec && typeof body.prev_spec === 'object'
       ? { teams: Array.isArray(body.prev_spec.teams) ? body.prev_spec.teams.filter((t: any) => typeof t === 'string').slice(0, 3) : [], dim: typeof body.prev_spec.dim === 'string' ? body.prev_spec.dim : null }
       : undefined
@@ -2113,25 +2449,33 @@ serve(async (req) => {
     // answer, latency. Without this, user complaints were undebuggable after EF log expiry.
     const finish = async (payload: Record<string, unknown>, answer: string) => {
       try {
-        // v29 P9: validation_fail records when a deterministic check rejected the FIRST answer
-        // and this is the fallback that shipped instead — today only V1 (`repeat_guard`) writes
-        // one; expected_shape/rows_count are reserved for the full validation-layer pass.
+        // v31 D3: validation_fail is now text[] (every observe-mode check that flagged this
+        // answer), expected_shape is the shape V2 derived. rows_count stays NULL until tools
+        // return structured results (D2, deferred).
         const route = (payload.route as string) ?? null
-        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0, validation_fail: route === 'repeat_guard' ? 'repeat' : null })
+        const vf = Array.isArray(payload.validation_fail) && (payload.validation_fail as string[]).length ? payload.validation_fail : null
+        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0, validation_fail: vf, expected_shape: (payload.expected_shape as string) ?? null })
       } catch { /* logging must never break the answer */ }
       return json({ ...payload, answer })
     }
 
     // v19: compound questions — route each clause (clause 2 sees clause 1 as history
     // so it can borrow entities), then join the two answers.
-    const parts = splitCompound(question)
+    // v31 D4: routing sees the NORMALIZED text (compound/typo repairs); preGuard already ran
+    // on the RAW text above, and finish() logs the RAW text — the audit trail never changes.
+    const parts = splitCompound(normalizeQuestion(question))
     const r1 = await routeQuestion(parts[0], history, deps, prevSpec)
     if (parts.length === 1) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
     // v27: clause 2 receives clause 1's RESOLVED spec (not just its text)
-    const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null })
+    // v31 D4: ...plus clause 1's rule TOPIC (if it hit RULE_TOPICS), so a pronoun follow-up
+    // clause ("...and when do they land?") can render another shape of the same topic.
+    const r1Topic = typeof r1.extra?.route === 'string' && (r1.extra.route as string).startsWith('rule_topic:') ? (r1.extra.route as string).slice('rule_topic:'.length) : undefined
+    const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic })
     // v26: a clause-2 clarify/parse-failure must not pollute a good clause-1 answer.
     if (r2.extra?.clarify && !r1.extra?.clarify) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
-    return await finish({ step: 'final', ok: true, spec: r1.pub, spec2: r2.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used) }, `${r1.answer}\n\n${r2.answer}`)
+    // v31 D3: a clause-2 validation flag must not be silently dropped when clause 1 is clean.
+    const vfBoth = [...new Set([...(Array.isArray(r1.extra?.validation_fail) ? r1.extra.validation_fail as string[] : []), ...(Array.isArray(r2.extra?.validation_fail) ? r2.extra.validation_fail as string[] : [])])]
+    return await finish({ step: 'final', ok: true, spec: r1.pub, spec2: r2.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used), ...(vfBoth.length ? { validation_fail: vfBoth } : {}) }, `${r1.answer}\n\n${r2.answer}`)
   } catch (err) {
     // v26: never leak raw internals; answer with a friendly degraded message instead of a 500.
     console.error('ask fatal:', String(err))

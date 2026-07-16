@@ -11,7 +11,8 @@ live data questions (schedule, scorers, stats, standings, counts, per-game box s
   - `20260706000000_chatbot_intent_embeddings.sql` — `intent_examples`/`match_intent` (intent classifier)
   - `20260706100000_chatbot_dim_examples.sql` — `dim_examples`/`match_dim` (stat-dimension classifier)
   - `20260713000001_ask_log.sql` — **`ask_log`** (question → route → answer → latency; RLS on, service-role only)
-  - `20260714000001_ask_log_validation_telemetry.sql` — adds `validation_fail`/`expected_shape`/`rows_count` to `ask_log` (v29 P0b/P9 — only `validation_fail='repeat'` is written so far, by V1)
+  - `20260714000001_ask_log_validation_telemetry.sql` — adds `validation_fail`/`expected_shape`/`rows_count` to `ask_log`
+  - `20260716000001_ask_log_validation_fail_array.sql` — **v31**: `validation_fail` text → **text[]** (the validation layer can flag multiple checks per answer). `validation_fail` + `expected_shape` are now written on EVERY answer that flows through `done()`; `rows_count` stays NULL (needs structured tool results — D2, deferred)
 - **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded; sends the last **3** user turns as `history` **plus** `last_answer` and `prev_spec` for structured/answer-aware follow-ups) + mounted in `src/components/Layout.jsx`.
 
 ## Coverage matrix (what the bot answers, refuses, or clarifies)
@@ -48,7 +49,7 @@ already public in the app UI?", not "whose data is it" — don't harden picks/ra
 **Use the CLI. One command, from disk:**
 ```bash
 npx supabase functions deploy ask --project-ref ftryuvfdihmhlzvbpfeu
-node scripts/ask/eval.mjs             # must print wide_test=PASS real_chat_test=PASS
+node scripts/ask/eval.mjs             # ALL 8 blocking suites must PASS (v31 gate)
 ```
 `verify_jwt` stays `true` (there is no `supabase/config.toml`, and the CLI default matches the live
 setting — don't add one without checking). **DEV project only** — never pass the PROD ref
@@ -68,11 +69,50 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 57** = **v30 deep-audit fixes** (docs/PLAN_ASK_BOT_V29.md Part 3 —
-> 6 fixes from a live-code-and-DB-verified audit, NOT the full understand-first rewrite), deployed
-> from disk 2026-07-15.
-> **`node scripts/ask/eval.mjs` → wide_test 110/110, real_chat_test 22/22.** No reindex needed
-> (v30 added tools/rules, not embedding examples — INTENT_EXAMPLES/DIM_EXAMPLES unchanged).
+> Current: DEV runs EF **version 64** = the **v31 architecture cycle** (docs/PLAN_ASK_BOT_V31_ARCHITECTURE.md — the
+> critique-panel-reconciled implementation of D1 context gate / D3 validation layer / D4
+> rules-as-data+normalization / D5 test-eval redesign, plus the streak-"best" and must()-sweep
+> fixes), deployed from disk 2026-07-16. No reindex needed (code/rules only — INTENT_EXAMPLES/
+> DIM_EXAMPLES unchanged).
+> **`node scripts/ask/eval.mjs` now runs EIGHT blocking suites** (wide 129 · real_chat 22 ·
+> fault_boundary 9 · typo_noise 15 · shape 14+distinctness · scope_matrix 8 · sql_oracle 6 ·
+> context_isolation 13) — all green at ship time. wide_test finally has real exit-code gating
+> (it used to ALWAYS exit 0, so "wide_test=PASS" in the old eval was decorative — found and
+> fixed this cycle).
+> v31 shipped: (1) **D1 context gate** — cross-turn team/dim/phase borrowing now requires a
+> linguistic follow-up signal in the CURRENT question (pronoun_team they/them/their ·
+> pronoun_player he/him/his/she/her · leading and/what-about · that/this/same game · bare
+> comparative); isolation is the default, every borrow is telemetered (`spec.context`); the
+> P0 audit finding (a stale 2-team spec silently flipping "which games went to penalties" into
+> a single game's detail) is closed at the source. (2) **D4 rules-as-data** — RULE_TOPICS
+> (road_to_final / champion_scorer_points / ai_summary) render by question SHAPE
+> (location/explanation/timing/lock/value), ALL matched shapes render (a value+timing compound
+> answers both halves), compound clause-2 inherits clause-1's topic on pronoun follow-ups, and
+> `normalizeQuestion()` repairs confirmed compounds/typos (globalleaderboard, wentto, topscorer,
+> nextgame, lastgame, leaderbord, chossen/choosen, avilable, froup, membrs, teh) before ANY
+> regex/classifier sees the text. (3) **D3 validation layer** — `done()` now checks EVERY answer:
+> V1 repeat-guard is UNCONDITIONAL (the old confidence-gated blind spot is gone) with a depth-1
+> isolated-context self-heal instead of a false "could you rephrase"; V2 shape / V4 numeric
+> provenance (Tier A) / V5 on-topic-entity run in OBSERVE MODE (recorded to
+> ask_log.validation_fail text[], never blocking) until live traffic proves their false-positive
+> rate. (4) **must() sweep** — 28 more bare `data ?? []` Supabase call sites now throw on a real
+> DB error instead of rendering a confident "no data exists" lie. (5) **streak-"best"** — bare
+> "best/longest streak" (no direction word) shows BOTH extremes instead of the current trailing
+> run. (6) **route always logged** — 7 done() call sites that left ask_log.route NULL now name
+> themselves (clarify / understand_fallback / *_degraded). (7) **oracle-found bot fixes** —
+> trivia count scoped to the tournament window (was 42 incl. 2 stray pre-tournament rows; the
+> old '40' substring test FALSE-PASSED against "40 seconds"), and per-team discipline totals
+> ("how many red cards does Man City have?" used to answer W/D/L form — new game_team_stats sum
+> branch in teamStat), public pens-list rule moved above the private block (it demanded login
+> for "which games went to penalties" when the classifier guessed group_history).
+> DEFERRED from the v31 plan, explicitly: D2 structured ToolResult migration (8 tools),
+> V4 Tier B (RAG per-question fact binding), V3/V6 validation gates, enforcement-flip for
+> V2/V4/V5 (observe-mode first, by design), the platform-wide pick-popularity tally, ask_log
+> shadow-replay, AskBot.jsx session_id telemetry + gh-pages deploy.
+>
+> **Previous: EF version 57** = **v30 deep-audit fixes** (docs/PLAN_ASK_BOT_V29.md Part 3 —
+> 6 fixes from a live-code-and-DB-verified audit), deployed 2026-07-15; wide_test 110/110,
+> real_chat_test 22/22 at the time.
 > v30 fixed: (1) game-scoped stat superlatives ("which game had the most red cards?" answered a
 > PLAYER — now answers a game, generalized across goals/red/yellow/corners); (2) superlative
 > DIRECTION ("which team conceded the most?" answered the BEST defense, hardcoded `dir` ignored
@@ -259,11 +299,14 @@ The one sequence every change follows, in order. Skipping a step is how DEV went
                    see "Do NOT deploy via MCP" above. NEVER a different project-ref.
 4. REINDEX?        Only if this change edited INTENT_EXAMPLES / DIM_EXAMPLES / kb stat-card text —
                    see "Reindex" above. Skip for pure code/logic changes (v24/v25/v26/v28 needed none).
-5. VALIDATE        node scripts/ask/eval.mjs   # runs wide_test then real_chat_test, ONE exit code
+5. VALIDATE        node scripts/ask/eval.mjs   # v31: runs EIGHT blocking suites, ONE exit code —
+                   wide_test, real_chat_test, fault_boundary, typo_noise, shape, scope_matrix,
+                   sql_oracle (numbers vs independent SQL ground truth), context_isolation.
                    Non-zero = DO NOT SHIP. Then separately, exploratory (not graded, not blocking):
      node scripts/ask/audit_probe.mjs out.json   # 82-question adversarial sweep, EVERY domain —
         read the printed answers yourself; anything wrong graduates into a new real_chat_test case
         BEFORE you consider the change done — that is how the suite grows (see PLAN §Learning loop).
+     node scripts/ask/context_isolation_test.mjs --full   # full probe×poison cross-product (advisory)
 6. SPOT-CHECK      ask_log for the questions you just changed behavior for:
      select question, route, answer, created_at from ask_log
      where created_at > now() - interval '10 minutes' order by created_at desc;

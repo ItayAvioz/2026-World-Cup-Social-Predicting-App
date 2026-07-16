@@ -71,7 +71,10 @@ const T = [
   ['time', 'hard', 'anon', 'When was the semi final played?', ['Netherlands', 'Portugal', "!isn't set yet"]],
   ['time', 'medium', 'anon', 'When do the semi finals take place?', ['Netherlands', "!isn't set yet"]],
   ['time', 'hard', 'anon', 'wen is teh finall', ['Netherlands', '!Semi-Final']],
-  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['Netherlands 1-0 Portugal', '!Name both teams']],
+  // NOTE: this fixture is inherently time-relative (real 2026 tournament clock) — recalibrate
+  // to the live-verified "last finished game" answer whenever it drifts (2026-07-16: was
+  // "Netherlands 1-0 Portugal", now "England 2-1 Argentina" after the 2nd semi-final finished).
+  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['England 2-1 Argentina', '!Name both teams']],
   ['time', 'hard', 'anon', 'and portugal?', ['Portugal', 'Argentina', '!3-2'], ['when do england play next']],
   ['stats', 'medium', 'anon', 'Which team commits the most fouls per game?', ['fouls', '!have been played']],
   ['stats', 'hard', 'anon', 'How many goals has Manchester City scored in total, and how many have they conceded?', ['Manchester City have scored', 'conceded', '!Fulham']],
@@ -184,6 +187,27 @@ const T = [
   // answer legitimately contains the word "shootout" once, to clarify it's NOT one — guard on
   // the actual shootout markers instead: an ET/pens scoreline or the went_to_penalties phrasing.)
   ['penalty', 'medium', 'anon', 'how much games were penalties score in regular time, 90 min?', ['regular time', '!after extra time', '!gone to penalties']],
+
+  // ---- v31: architecture-cycle regression cases (D1 context gate / D4 rules-as-data +
+  // normalization / streak-best). Each is a VERIFIED live failure from the 2026-07-16 real
+  // session or the v31 audit. ----
+  // D4-A: an EXPLAIN question on Road to Final must explain scoring, never just the location.
+  // Both the clean phrasing and the exact broken-grammar transcript phrasing.
+  ['shape', 'hard', 'anon', 'explain on road to final competiton how it works?', ['83', '!Open Picks and tap']],
+  ['shape', 'medium', 'anon', 'how road to final work?', ['83', '!Open Picks and tap']],
+  // regression guard: the bare/location phrasing must STILL get the location answer
+  ['shape', 'simple', 'anon', 'where is the road to final bracket?', ['Picks tab']],
+  // D4-B: a champion/scorer TIMING question must state the fold-in date, not only the value.
+  ['shape', 'hard', 'anon', 'when top scorer and champion point add?', ['July 19']],
+  ['shape', 'hard', 'anon', 'how much points for champion and top scorer and when do they land?', ['10 points', 'July 19']],
+  // D4-C: "where is the AI summary" is NAVIGATION — never actual roast content.
+  ['shape', 'hard', 'auth', 'where i can see ai summary?', ['AI tab', '!points.']],
+  // D4-D: compound typos must be normalized before \b-anchored regexes see them.
+  ['normalize', 'hard', 'auth', 'who lead the globalleaderboard?', ['Global leaderboard']],
+  ['normalize', 'medium', 'anon', 'which games wentto penalties', ['penalties']],
+  // D1: a bare "best streak" (no direction word) shows BOTH extremes, never the current
+  // trailing streak (which can be a losing one).
+  ['streak', 'hard', 'auth', 'what is my best streak in Alpha Wolves?', ['Best hot streak', 'Worst cold streak']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -241,3 +265,7 @@ const okAll = results.filter((r) => r.ok).length
 console.log(`\n===== WIDE TEST: ${okAll}/${results.length} answer-graded PASS =====`)
 for (const [k, v] of Object.entries(by)) console.log(`  ${k.padEnd(10)} ${v.ok}/${v.t}`)
 fs.writeFileSync(process.argv[2] || 'scripts/ask/wide_results.json', JSON.stringify(results, null, 2))
+// v31: the gate must actually GATE — this file used to always exit 0 (no exit-code logic at
+// all), so eval.mjs's "wide_test=PASS" was decorative and 3 real failures shipped through a
+// "green" gate. Found 2026-07-16 during the v31 rollout.
+process.exit(okAll === results.length ? 0 : 1)

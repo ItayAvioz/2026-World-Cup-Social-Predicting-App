@@ -47,7 +47,10 @@ const T = [
 
   // ---- CLASS E: rules precision (deterministic facts, not LLM prose) ----
   // v48 said "one per day until the last question closes" — never gave the number.
-  ['E1-trivia-count', 'anon', 'how many trivia questions are there in total?', ['40']],
+  // v31: tightened from a bare '40' — that substring FALSE-PASSED against "40 seconds" in the
+  // same sentence while the actual count was wrong (42, two stray pre-tournament rows). Found
+  // by sql_oracle_test's independent ground-truth comparison.
+  ['E1-trivia-count', 'anon', 'how many trivia questions are there in total?', ['40 trivia questions']],
   ['E2-trivia-window', 'anon', 'for how long is each trivia question open?', ['40 second']],
   ['E3-group-cap', 'anon', 'how many members can be in a group?', ['12']],
 
