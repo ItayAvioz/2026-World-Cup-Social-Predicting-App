@@ -804,3 +804,26 @@ api revision noise; stored values matched the UI/screenshot). 0 NULLs remain.
 **No other gaps:** full-tournament scan (all finished games) = this was the ONLY game with NULL team-stats;
 goal reconciliation clean everywhere (event_goals == Σ player goals; Merino's lone Spain goal reconciles 1=1).
 Display-only, zero scoring impact.
+
+---
+
+## 2026-07-15 — France 0–2 Spain (SF): % Accuracy Passes + xG lag
+
+**Game:** `40e9e184-316f-4f43-bf50-2fd80e380d8d` · api_fixture_id `1585131` · phase `sf` (Jul 14).
+**Symptom:** reported via screenshot — Match Stats showed `—` for **% Accuracy Passes** and **xG** for
+both teams. Possession, Total Passes, Shots, On Target, Inside Box, Corners, Fouls, Cards, Offsides
+were all present and correct. Routine passes/xG lag (same class as Cases 2/5/9/10/Portugal-Spain
+R16) — `passes_total` was already populated (473/500), only `passes_accuracy`/`xg` were NULL.
+**Verify-first (DEV `probe_stats` 1585131, read-only):** api now reports France passes 473 accurate
+396 (**84%**), xG **0.30** · Spain passes 500 accurate 428 (**86%**), xG **1.63**. Possession (49/51)
+and Total Passes (473/500) matched the existing DB rows exactly — same fixture, only the two lagging
+fields had NULL.
+**Fix (PROD):**
+```sql
+UPDATE game_team_stats SET passes_accuracy=84, xg=0.30 WHERE game_id='40e9e184-316f-4f43-bf50-2fd80e380d8d' AND team='France';
+UPDATE game_team_stats SET passes_accuracy=86, xg=1.63 WHERE game_id='40e9e184-316f-4f43-bf50-2fd80e380d8d' AND team='Spain';
+```
+Confirmed 0 NULLs remain in either row. Goal reconciliation checked (score 0–2, 2 event goals = 2
+`game_player_stats` goals — Porro + Oyarzabal — no scorer-lag gap on this game). Display-only, zero
+scoring impact. Note this game only exists in PROD (not staged in DEV DB) — DEV was used purely as
+the read-only `probe_stats` verification source, per the standard workflow.
