@@ -122,6 +122,33 @@ const CASES = [
     },
     extract: /(\d+)\s+members?/i,
   },
+  {
+    // v32: the new outcome-aggregate tool. Same scope the bot uses (WC only: no friendlies, no
+    // TBD, finished + kicked off) — 90-minute draws.
+    id: 'draws-count',
+    auth: 'anon',
+    question: 'how many games ended in a draw?',
+    oracle: async () => {
+      const rows = await rest(`games?select=score_home,score_away&phase=neq.friendly&team_home=neq.TBD&score_home=not.is.null&kick_off_time=lte.${new Date().toISOString()}`, KEY)
+      return rows.filter((g) => g.score_home === g.score_away).length
+    },
+    extract: /(\d+)\s+of the \d+ finished games ended level/i,
+  },
+  {
+    // v32: champion odds — the anon client saw 0 of 48 rows (RLS `authenticated`-only) and the
+    // bot answered "No champion odds are available yet." The oracle reads the same table with
+    // the e2e JWT and requires the FAVOURITE's odds value to appear in the bot's list. Note:
+    // Number('2.5') compares fine — odds are numeric in both places.
+    id: 'champion-odds-fav',
+    auth: 'anon',
+    question: 'provide the top 3 teams with the highest odds for champion',
+    oracle: async () => {
+      const rows = await rest('champion_odds?select=team_name,odds&order=odds.asc&limit=1', jwt)
+      if (!rows.length) throw new Error('champion_odds empty for e2e user')
+      return Number(rows[0].odds)
+    },
+    extract: /1\.\s+[^—\n]+—\s*([\d.]+)/,
+  },
 ]
 
 const out = []

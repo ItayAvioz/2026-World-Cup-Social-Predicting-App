@@ -129,9 +129,11 @@ SCORING (NOT cumulative — an exact score is 3 pts total, it already includes t
 Missed a prediction? The app auto-predicts for you — it leans toward the LEAST-popular outcome
 (contrarian, not pure random) and fills a scoreline for it. Auto-predictions score like manual ones.
 
-KNOCKOUT BRACKET (a separate prediction game, max 83 pts): predict which teams reach each knockout
-round + the champion + the 3rd-place winner. +2 per team correctly reaching a round; whole-round bonus
-QF +12 / SF +10 / Final +8 / 3rd-4th +6; correct Champion +10; correct 3rd-place winner +5.
+KNOCKOUT BRACKET (a separate prediction game, max 75 pts): predict which teams reach the QF, SF and
+Final, who WINS the 3rd-place play-off, plus the Champion and the 3rd-place winner. +2 per team
+correctly reaching the QF/SF/Final; whole-round bonus QF +12 / SF +10 / Final +8 (there is NO 3rd-4th
+round bonus); 3rd place is WIN-GATED: +2 only if your 3rd-place team actually WINS the bronze game
+(not for merely reaching it); correct Champion +10; correct 3rd-place winner +5.
 Locks 2026-07-04, 20:00 Israel; these points fold into the leaderboard from July 20.
 
 WHEN POINTS APPEAR: prediction points count immediately as games finish. Champion + Top Scorer points
@@ -308,6 +310,12 @@ function splitCompound(q: string): string[] {
   // v26: a verb-less noun fragment ("...? and score") is a continuation of clause 1, not a
   // second question — splitting it glued a bogus clarify onto a correct clause-1 answer.
   if (!/\b(when|where|who|what|which|how|did|do|does|is|are|was|were|has|have|will|can|show|list|give|tell)\b/i.test(tail)) return [q]
+  // v32: a bare ELLIPTICAL tail ("...? And how many?" / "and why?") carries no content of its
+  // own — routed alone it lands on some default tool and glues junk (a my_data group summary)
+  // onto a correct clause-1 answer. And KEEPING it inside clause 1 flips detectOp to 'count'
+  // ("in which game..." + "how many" = cards_total instead of the game superlative), so the
+  // tail is DROPPED: the deterministic tools already answer the count inline ("(2 each)").
+  if (/^(how (many|much)( of (them|those))?|why|what about (it|that|them|those))\s*\??\s*$/i.test(tail)) return [m[1].trim()]
   return [m[1].trim(), tail]
 }
 // ---- v31 D4: INPUT NORMALIZATION — one early pass fixing run-together compounds and
@@ -324,6 +332,8 @@ const COMPOUND_FIXES: [RegExp, string][] = [
   [/\btopscorer\b/gi, 'top scorer'],
   [/\bnextgame\b/gi, 'next game'],
   [/\blastgame\b/gi, 'last game'],
+  // v32: "road tp final" (live) — scoped to the phrase, never a bare tp->to rule.
+  [/\broad tp final\b/gi, 'road to final'],
 ]
 const TYPO_FIXES: [RegExp, string][] = [
   [/\bchossen\b/gi, 'chosen'],
@@ -335,11 +345,40 @@ const TYPO_FIXES: [RegExp, string][] = [
   // stoplist — "teh global" read as a candidate GROUP NAME and the global board demanded login.
   [/\bteh\b/gi, 'the'],
 ]
+// v32: FUZZY keyword repair — the wider fix behind the one-off TYPO_FIXES list. Live sessions
+// keep producing distance-1/2 misspellings of ROUTING-CRITICAL keywords ("catds"→cards,
+// "finisgeh"→finished, "recors"→records, "ditrbutions"→distributions), and every \b-anchored
+// trigger regex silently no-ops on them — the question then routes somewhere else entirely
+// (a typo'd GAME question answered PLAYERS). This corrects unknown tokens to a CURATED vocab
+// only (never a general spell-checker), and never touches a token that is a real word
+// (FUZZY_SAFE) — proper-noun typos stay with resolveTeams' own lev pass.
+const FUZZY_VOCAB = ['games', 'finished', 'records', 'record', 'cards', 'chosen', 'distribution', 'distributions', 'champion', 'penalties', 'penalty', 'predictions', 'prediction', 'leaderboard', 'standings', 'members', 'groups', 'group', 'points', 'scorer', 'trivia', 'bracket', 'streak', 'draws', 'draw', 'goals', 'extra', 'table', 'questions', 'question', 'available', 'yellow', 'corners', 'possession', 'winner', 'history', 'summary', 'schedule', 'results', 'result', 'against', 'scoreline', 'played']
+const FUZZY_SAFE = new Set([...FUZZY_VOCAB, 'champions', 'scorers', 'playing', 'winning', 'conceded', 'assists',
+  // real words exactly one edit away from a vocab entry — must never be "repaired"
+  // ('drawn'→draws flipped a red-cards question into the draws tool, live-found; 'james' is a
+  // player name one edit from 'games').
+  'drawn', 'james', 'names', 'gains', 'gates', 'goat', 'goats', 'chose', 'choose', 'trivial', 'streaks', 'winners', 'tables', 'crooners',
+  'what', 'was', 'were', 'the', 'which', 'game', 'with', 'most', 'more', 'many', 'much', 'how', 'who', 'when', 'where', 'why', 'did', 'does', 'has', 'have', 'had', 'and', 'for', 'are', 'is', 'in', 'on', 'of', 'to', 'by', 'my', 'me', 'our', 'we', 'you', 'your', 'they', 'them', 'their', 'his', 'her', 'he', 'she', 'it', 'its', 'this', 'that', 'these', 'those', 'there', 'here', 'from', 'about', 'all', 'any', 'some', 'not', 'end', 'ended', 'ends', 'finish', 'ending', 'red', 'card', 'goal', 'team', 'teams', 'player', 'players', 'match', 'matches', 'next', 'last', 'first', 'best', 'worst', 'top', 'win', 'wins', 'won', 'lost', 'loss', 'draw', 'drew', 'score', 'scores', 'scored', 'still', 'time', 'today', 'tomorrow', 'yesterday', 'total', 'overall', 'order', 'app', 'users', 'user', 'show', 'list', 'give', 'tell', 'provide', 'answer', 'level', 'live', 'now', 'will', 'would', 'can', 'could', 'been', 'being', 'other', 'each', 'per', 'odds', 'higher', 'highest', 'lower', 'lowest', 'world', 'cup', 'final', 'stage', 'round', 'place', 'city', 'real', 'united', 'saint', 'crystal', 'aston', 'west', 'como', 'nice', 'como', 'getafe', 'elche', 'leeds', 'brighton', 'wolves', 'regular', 'during', 'coming', 'between', 'into', 'went', 'goes', 'going'])
+// (uses the existing lev() defined above — plain Levenshtein is enough for every live case)
+function fuzzyRepair(q: string): string {
+  return q.replace(/\b[a-z]{5,14}\b/gi, (tok) => {
+    const t = tok.toLowerCase()
+    if (FUZZY_SAFE.has(t)) return tok
+    let best: string | null = null, bestD = 3
+    for (const v of FUZZY_VOCAB) {
+      if (v === t) return tok
+      const cap = t.length >= 8 ? 2 : 1
+      const d = lev(t, v)
+      if (d <= cap && d < bestD) { best = v; bestD = d }
+    }
+    return best ?? tok
+  })
+}
 function normalizeQuestion(raw: string): string {
   let q = raw
   for (const [re, rep] of COMPOUND_FIXES) q = q.replace(re, rep)
   for (const [re, rep] of TYPO_FIXES) q = q.replace(re, rep)
-  return q
+  return fuzzyRepair(q)
 }
 const RL = new Map<string, number[]>()
 function rateOk(key: string): boolean {
@@ -381,22 +420,33 @@ const TYPO_STOP = new Set(['place', 'take', 'takes', 'taken', 'lead', 'leads', '
 function resolveTeams(q: string, names: string[]): string[] {
   const ql = ' ' + q.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ') + ' '
   const qtok = ql.trim().split(' ').filter((w) => w.length >= 4 && !TYPO_STOP.has(w))
-  const scored: { t: string; score: number }[] = []
+  const scored: { t: string; score: number; hitToks: string[] }[] = []
   for (const t of names) {
-    const tl = t.toLowerCase(); let score = 0
+    const tl = t.toLowerCase(); let score = 0; const hitToks: string[] = []
     if (ql.includes(' ' + tl + ' ')) score = 100 + tl.length
     else {
       const toks = tl.split(' ').filter((w) => w.length >= 5 && !COMMON_TOK.has(w))
-      let hit = toks.filter((w) => ql.includes(' ' + w + ' ')).length
-      if (!hit) for (const tk of toks) for (const qw of qtok) { const L = lev(tk, qw); if ((tk.length >= 5 && L === 1) || (tk.length >= 8 && L === 2)) { hit++; break } }  // typo tolerance
+      let hit = 0
+      for (const w of toks) if (ql.includes(' ' + w + ' ')) { hit++; hitToks.push(w) }
+      if (!hit) for (const tk of toks) { let matched = false; for (const qw of qtok) { const L = lev(tk, qw); if ((tk.length >= 5 && L === 1) || (tk.length >= 8 && L === 2)) { hit++; hitToks.push(tk); matched = true; break } } if (matched) break }  // typo tolerance
       if (hit) score = hit
     }
-    if (score) scored.push({ t, score })
+    if (score) scored.push({ t, score, hitToks })
   }
-  for (const [al, full] of Object.entries(TEAM_ALIAS)) if (ql.includes(' ' + al + ' ') && names.includes(full) && !scored.some((s) => s.t === full)) scored.push({ t: full, score: 100 })
-  scored.sort((a, b) => b.score - a.score || b.t.length - a.t.length)
+  for (const [al, full] of Object.entries(TEAM_ALIAS)) if (ql.includes(' ' + al + ' ') && names.includes(full) && !scored.some((s) => s.t === full)) scored.push({ t: full, score: 100, hitToks: [] })
+  // v32: CITY-SHADOW suppression — "real madrid" also scored Atletico Madrid (shared token
+  // 'madrid'), so every teams.length===1 rule went blind on a perfectly clear question
+  // (confirmed live: a Real Madrid form question resolved 2 teams and fell to the RAG crew).
+  // When an EXACT full-name match exists, drop any partial candidate whose every hit-token is
+  // a word of an exact-matched name. "atletico vs real madrid" keeps both (its own 'atletico'
+  // token is not a word of "Real Madrid"); with no exact match nothing changes.
+  const exactWords = new Set(scored.filter((s) => s.score >= 100).flatMap((s) => s.t.toLowerCase().split(' ')))
+  const kept = exactWords.size
+    ? scored.filter((s) => s.score >= 100 || s.hitToks.some((w) => !exactWords.has(w)))
+    : scored
+  kept.sort((a, b) => b.score - a.score || b.t.length - a.t.length)
   const out: string[] = []
-  for (const { t } of scored) if (!out.some((o) => o.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(o.toLowerCase()))) out.push(t)
+  for (const { t } of kept) if (!out.some((o) => o.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(o.toLowerCase()))) out.push(t)
   return out
 }
 // v27: exact full-name team scan for BOT-ANSWER text (no typo pass — answers are long and
@@ -525,6 +575,37 @@ async function tournamentProgress(sb: Sb, q: string): Promise<string> {
   const remaining = rows.length - played.length
   if (/\bgoals?\b/.test(q.toLowerCase())) { const goals = played.reduce((s, g) => s + (g.score_home as number) + (g.score_away as number), 0); return `${goals} goals have been scored across ${played.length} completed games so far.` }
   return `${played.length} of ${rows.length} games have been played; ${remaining} remain.`
+}
+// v32: RESULT-level aggregates over finished games — a whole question family that had NO tool:
+// "how many games ended in a draw?" fell into tournamentProgress (games-played count),
+// "which games ended 0-0?" into the upcoming-fixtures list, and "W/D/L distribution" into
+// the next-game lookup. One tool, three shapes: draw count(+list), outcome distribution,
+// and a specific-scoreline filter. Same WC scope as tournamentProgress (neq friendly/TBD)
+// so its denominators always agree with the "X of Y played" answer. 90-minute results only
+// (games.score_home/away are 90-min by schema) — stated in the answer where it matters.
+async function outcomeAggregate(sb: Sb, kind: 'draws' | 'distribution' | 'scoreline', opts: { list?: boolean; sh?: number; sa?: number } = {}): Promise<string> {
+  const data = must(await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time').neq('phase', 'friendly').neq('team_home', 'TBD').not('score_home', 'is', null).lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: true })) as any[]
+  const played = (data ?? []) as any[]
+  if (!played.length) return 'No games have been completed yet.'
+  const fmt = (g: any) => `• ${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase})`
+  const pct = (n: number) => Math.round((n / played.length) * 100)
+  if (kind === 'distribution') {
+    const h = played.filter((g) => g.score_home > g.score_away).length
+    const d = played.filter((g) => g.score_home === g.score_away).length
+    const a = played.length - h - d
+    return `Of ${played.length} finished games (90-minute results): ${h} home wins (${pct(h)}%) · ${d} draws (${pct(d)}%) · ${a} away wins (${pct(a)}%).`
+  }
+  if (kind === 'scoreline') {
+    const hits = played.filter((g) => (g.score_home === opts.sh && g.score_away === opts.sa) || (g.score_home === opts.sa && g.score_away === opts.sh))
+    const label = `${opts.sh}-${opts.sa}`
+    if (!hits.length) return `No finished game has ended ${label} yet (90-minute score).`
+    return `${hits.length} game${hits.length === 1 ? ' has' : 's have'} finished ${label} (90-minute score):\n` + hits.slice(0, 15).map(fmt).join('\n') + (hits.length > 15 ? `\n…and ${hits.length - 15} more.` : '')
+  }
+  const draws = played.filter((g) => g.score_home === g.score_away)
+  const head = `${draws.length} of the ${played.length} finished games ended level after 90 minutes (${pct(draws.length)}%).`
+  const koNote = draws.some((g) => g.phase !== 'group') ? ' (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)' : ''
+  if (!opts.list || !draws.length) return head + koNote
+  return `${head}${koNote}\n` + draws.slice(0, 15).map(fmt).join('\n') + (draws.length > 15 ? `\n…and ${draws.length - 15} more.` : '')
 }
 async function findGame(sb: Sb, a: string, b: string) {
   // v26: one query for both orientations (was two sequential round-trips). Team names are
@@ -803,12 +884,19 @@ async function gameOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
   if (!o) return `${head}: no odds yet — Bet365 odds appear in the ~3 days before kickoff.`
   return `${head} — ${o.source ?? 'Bet365'} odds: ${g.team_home} ${o.home_win} · Draw ${o.draw} · ${g.team_away} ${o.away_win}${o.over_2_5 != null ? ` · Over 2.5 ${o.over_2_5} / Under 2.5 ${o.under_2_5}` : ''}.`
 }
-async function championOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
+// v32: reads via the SERVICE client — champion_odds RLS is `authenticated`-only, so the anon
+// client silently saw 0 of the 48 rows and this answered "No champion odds are available yet."
+// while the data sat right there (found by the observe-mode repeat/entity validators on a live
+// session). Champion odds are public app data (shown to every user on Picks) — same
+// service-for-public-facts pattern as triviaInfo. `q` adds top-N ("top 3 teams ... odds").
+async function championOddsAnswer(sb: Sb, teams: string[], q?: string): Promise<string> {
   const data = must(await sb.from('champion_odds').select('team_name, odds, bookmaker').order('odds', { ascending: true })) as any[]
   const rows = (data ?? []) as any[]
   if (!rows.length) return 'No champion odds are available yet.'
   if (teams.length) { const r = rows.find((x) => x.team_name === teams[0]); return r ? `${r.team_name} are ${r.odds} to win the World Cup (${r.bookmaker}).` : `I don't have champion odds for ${teams[0]}.` }
-  return `Favourites to win the World Cup (${rows[0].bookmaker} outright odds):\n` + rows.slice(0, 5).map((r, i) => `${i + 1}. ${r.team_name} — ${r.odds}`).join('\n')
+  const tn = q?.toLowerCase().match(/\b(?:top|best|first)\s+(\d{1,2})\b/)
+  const n = tn ? Math.min(Math.max(+tn[1], 1), 15) : 5
+  return `Favourites to win the World Cup (${rows[0].bookmaker} outright odds):\n` + rows.slice(0, n).map((r, i) => `${i + 1}. ${r.team_name} — ${r.odds}`).join('\n')
 }
 // v27: TOURNAMENT groups A-L ("group D standings") — computed from games.group_name.
 // These collided with FRIEND-group boards before (wrong-tool answers).
@@ -942,6 +1030,18 @@ async function topScorerCandidates(sb: Sb, team: string | null): Promise<string>
 async function etPensList(sb: Sb, q: string): Promise<string> {
   const s = q.toLowerCase()
   const wantPens = /penalt|shoot.?out/.test(s)
+  const wantET = /extra time|\bet\b/.test(s)
+  // v32: BOTH cues ("how many games went to extra time and penalties?") used to collapse to
+  // the shootout answer only — the extra-time half of the question was silently dropped.
+  // Answer each flag as its own section.
+  if (wantPens && wantET) {
+    const lead = /how many|how much|number of|\bcount\b/.test(s) ? 'how many' : 'which'
+    const [etPart, penPart] = await Promise.all([
+      etPensList(sb, `${lead} games went to extra time`),
+      etPensList(sb, `${lead} games went to penalties`),
+    ])
+    return `${etPart}\n\n${penPart}`
+  }
   const col = wantPens ? 'went_to_penalties' : 'went_to_extra_time'
   // v26: friendlies are included but labeled — "which games went to pens" answered "none"
   // while the PSG-Arsenal friendly had a 4-3 shootout sitting right there in the flags.
@@ -1327,21 +1427,54 @@ async function whoPicked(sbUser: Sb, q: string, groups: Grp[], names: string[], 
 // (same source whoPicked/myFocus already use) and reports the real leader + count per group.
 async function mostPopularPick(sbUser: Sb, groups: Grp[], target: Grp | null, wantScorer: boolean): Promise<string> {
   if (!groups.length) return `You're not in any group yet.`
+  const kind = wantScorer ? 'top scorer' : 'champion'
   const blocks: string[] = []
   for (const g of target ? [target] : groups) {
     const rows = (must(await sbUser.rpc('get_group_leaderboard', { p_group_id: g.id })) ?? []) as any[]
     const col = wantScorer ? 'top_scorer_player' : 'champion_team'
     const picked = rows.filter((r) => r[col])
-    if (!picked.length) { blocks.push(`${g.name}: nobody has picked ${wantScorer ? 'a top scorer' : 'a champion'} yet.`); continue }
+    if (!picked.length) { blocks.push(`${g.name}: nobody has picked a ${kind} yet.`); continue }
     const tally = new Map<string, number>()
     for (const r of picked) tally.set(r[col], (tally.get(r[col]) ?? 0) + 1)
     const max = Math.max(...tally.values())
     const leaders = [...tally.entries()].filter(([, n]) => n === max).map(([name]) => name)
     const pct = Math.round((max / picked.length) * 100)
-    if (leaders.length === tally.size && max === 1) { blocks.push(`${g.name}: no standout — every pick is different, 1 of ${picked.length} member${picked.length === 1 ? '' : 's'} each.`); continue }
-    blocks.push(`${g.name}: ${leaders.join(' / ')} ${leaders.length > 1 ? 'are tied as the top picks' : 'is the top pick'}, ${max} of ${picked.length} member${picked.length === 1 ? '' : 's'} (${pct}%).`)
+    // v32: the no-standout / top-pick lines NAME the pick kind — the champion and top-scorer
+    // versions of this answer used to render IDENTICAL text ("no standout — every pick is
+    // different"), which the V1 repeat validator correctly flagged on a live session.
+    if (leaders.length === tally.size && max === 1) { blocks.push(`${g.name}: no standout ${kind} pick — every pick is different, 1 of ${picked.length} member${picked.length === 1 ? '' : 's'} each.`); continue }
+    blocks.push(`${g.name}: ${leaders.join(' / ')} ${leaders.length > 1 ? `are tied as the top ${kind} picks` : `is the top ${kind} pick`}, ${max} of ${picked.length} member${picked.length === 1 ? '' : 's'} (${pct}%).`)
   }
   return blocks.join('\n')
+}
+// v32: ONE popularity cue for all four layers that must agree on what a popularity question
+// looks like (rulesFAQ exclusion, detectRuleTopic exclusion, my_data branch, most_popular_pick
+// rule) — they had drifted into four hand-copied variants. Also covers the top-N form
+// ("top 3 chosen top scorer"), which none of the copies matched.
+const POPULARITY_RE = /most (chosen|picked|popular|common)|(top|best) ?\d+ (chosen|picked|popular|most)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)/
+// v32: PLATFORM-WIDE pick popularity — "most chosen champion by users / in all the app".
+// A live session asked exactly this and got a groups-only answer. Post-lock picks are PUBLIC
+// data (they're printed on every leaderboard — see the public/private-line audit), so the
+// whole-app tally is answerable, and even for anonymous callers. The pick tables' RLS is
+// row-scoped per caller, so the tally reads via the service client — the same
+// service-for-public-facts pattern as triviaInfo/championOddsAnswer. Counts are (user × group)
+// picks, matching the global leaderboard's one-row-per-(user×group) model — stated in the answer.
+async function platformPopularPick(sbService: Sb, wantScorer: boolean, q: string, team?: string | null): Promise<string> {
+  const col = wantScorer ? 'player_name' : 'team'
+  const rows = (must(await sbService.from(wantScorer ? 'top_scorer_pick' : 'champion_pick').select(col)) ?? []) as any[]
+  const kind = wantScorer ? 'top scorer' : 'champion'
+  if (!rows.length) return `Nobody has made a ${kind} pick yet.`
+  const tally = new Map<string, number>()
+  for (const r of rows) if (r[col]) tally.set(r[col] as string, (tally.get(r[col] as string) ?? 0) + 1)
+  const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1])
+  if (team) {
+    const n = tally.get(team) ?? 0
+    return `${n} of ${rows.length} ${kind} picks across the app are ${team} (${Math.round((n / rows.length) * 100)}%).`
+  }
+  const tn = q.toLowerCase().match(/\b(?:top|best|first)\s*(\d{1,2})\b/)
+  const n = tn ? Math.min(Math.max(+tn[1], 1), 10) : 3
+  const list = sorted.slice(0, n).map(([name, cnt], i) => `${i + 1}. ${name} — ${cnt} pick${cnt === 1 ? '' : 's'} (${Math.round((cnt / rows.length) * 100)}%)`).join('\n')
+  return `Most chosen ${kind} across the whole app (${rows.length} picks, one per user per group):\n${list}`
 }
 // v27: match-day-scoped points ("how did my group do yesterday?") — the 07:30-UTC
 // match-day boundary the whole app uses (M110). offset 0 = current match-day, -1 = previous.
@@ -1432,10 +1565,10 @@ type RuleTopic = { location?: string; explanation?: string; timing?: string; loc
 const RULE_TOPICS: Record<string, RuleTopic> = {
   road_to_final: {
     location: 'The knockout bracket game — "Road to Final" — is in the Picks tab. Open Picks and tap "Road to Final".',
-    explanation: 'Road to Final is the knockout-bracket prediction game: pick which teams reach the QF, SF, Final and 3rd-place play-off, plus who wins the Final (Champion) and who wins 3rd place. You get +2 points for each team correctly placed in a round, a bonus for getting a WHOLE round right (QF +12, SF +10, Final +8, 3rd/4th +6), +10 for the correct Champion and +5 for the correct 3rd-place winner. Maximum possible is 83 points. Entries locked July 4; points fold into the leaderboard from July 20.',
+    explanation: 'Road to Final is the knockout-bracket prediction game: pick which teams reach the QF, SF and Final, who wins the 3rd-place play-off, plus who wins the Final (Champion). You get +2 points for each team correctly reaching the QF/SF/Final, a bonus for getting a WHOLE round right (QF +12, SF +10, Final +8 — no 3rd-4th bonus), +2 if your 3rd-place team WINS the bronze game (win-gated — not for merely reaching it), +10 for the correct Champion and +5 for the correct 3rd-place winner. Maximum possible is 75 points. Entries locked July 4; points fold into the leaderboard from July 20.',
     timing: 'Knockout-bracket points fold into the leaderboard from July 20. Until then you can check them on the Road to Final page (Picks tab).',
     lock: 'The knockout bracket locks on July 4, 20:00 Israel time.',
-    value: 'The knockout bracket game is worth up to 83 points in total (max): +2 per team correctly placed in a round, round bonuses (QF +12, SF +10, Final +8, 3rd/4th +6), +10 for the correct Champion, +5 for the correct 3rd-place winner.',
+    value: 'The knockout bracket game is worth up to 75 points in total (max): +2 per team correctly reaching the QF/SF/Final, round bonuses (QF +12, SF +10, Final +8 — no 3rd-4th bonus), +2 if your 3rd-place team WINS the bronze game, +10 for the correct Champion, +5 for the correct 3rd-place winner.',
     defaultShape: 'location',   // preserves the old bare-mention -> location behavior exactly
   },
   champion_scorer_points: {
@@ -1484,7 +1617,7 @@ function detectRuleTopic(qlow: string, teams: string[]): { topic: string; requir
   const isStatQ = /goals?\b|assists?\b|scored\b/.test(qlow)
   // Verbatim the same popularity cue most_popular_pick/my_data use — the three layers must
   // never disagree about what a popularity question looks like (v30 lesson).
-  const isPopularityQ = /most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b|who picked/.test(qlow)
+  const isPopularityQ = POPULARITY_RE.test(qlow)
   const timingCue = /\bwhen\b|\btiming\b|\bfold(s)?\b|\bland(s)?\b|\bappear(s)?\b|\badd(ed|s)?\b/.test(qlow)
   const locationCue = /\bwhere\b/.test(qlow)
   if (isChampScorer && !isStatQ && !isPopularityQ && teams.length === 0 && (bothPicks || timingCue || locationCue))
@@ -1519,13 +1652,13 @@ function rulesFAQ(q: string): string | null {
   // v30: nor must they swallow a POPULARITY question — "how many people picked Brazil as
   // champion?" used to be intercepted HERE (before intent classification even runs) and
   // answered with the flat 10-point rule instead of ever reaching mostPopularPick().
-  const isPopularity = /most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick|who picked/.test(s)
+  const isPopularity = POPULARITY_RE.test(s)
   if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'The Champion and Top Scorer picks are worth 10 points each.'
   if ((/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'A correct Champion pick is worth 10 points.'
   if ((/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) && !/goals?\b|assists?\b|scored\b|\bhave\b|\bhas\b/.test(s) && !isPopularity) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
   // v24: whole-round bonuses ("how many points for the round bonuses, per round?")
-  if (/round bonus|bonus(es)? (for|per|of|in)|whole round|full round|entire round/.test(s)) return 'Knockout-bracket whole-round bonuses: QF +12, SF +10, Final +8, 3rd-4th +6 — on top of +2 for every team you correctly have reaching a round.'
-  if (/(max|maximum|highest|most).*(bracket|road to final)|bracket.*(max|maximum|how many points|points can|worth)/.test(s)) return 'The knockout bracket game is worth up to 83 points in total (max).'
+  if (/round bonus|bonus(es)? (for|per|of|in)|whole round|full round|entire round/.test(s)) return 'Knockout-bracket whole-round bonuses: QF +12, SF +10, Final +8 — on top of +2 for every team you correctly have reaching a round. There is no 3rd-4th round bonus (3rd place is win-gated: +2 only if your pick WINS the bronze game).'
+  if (/(max|maximum|highest|most).*(bracket|road to final)|bracket.*(max|maximum|how many points|points can|worth)/.test(s)) return 'The knockout bracket game is worth up to 75 points in total (max).'
   // v24: leaderboard tie-break rule ("how are ties broken if two players have the same points?")
   if (/(tie|ties|tied|tie.?break(er)?)\b[\s\S]{0,40}(broken|break|rank|leaderboard|points|decided)|(same|equal) (number of )?points[\s\S]{0,30}(rank|leaderboard|tie|break)|how (is|are) (the )?rank(ing)?s? (decided|determined)/.test(s)) return 'Leaderboard ties are broken by the number of exact scorelines. Same points AND same exact count = the same shared rank (the numbering then skips). There is no further tiebreaker.'
   if (/road to final|where.*bracket|find.*bracket|bracket.*(where|located)/.test(s)) return 'The knockout bracket game — \"Road to Final\" — is in the Picks tab. Open Picks and tap \"Road to Final\".'
@@ -1686,8 +1819,14 @@ const REGISTRY: Tool[] = [
         // is an AGGREGATE across everyone — must win over both the named-user lookup below and
         // the own-pick fallback, which used to silently answer with the CALLER's own single
         // pick (the exact bug reported: "which team is most chosen for champion?" -> your pick).
-        if (/most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick/.test(ql))
-          return { answer: await mostPopularPick(c.sbUser, scope, target, /top scorer|golden boot/.test(ql) && !/champion/.test(ql)) }
+        if (POPULARITY_RE.test(ql)) {
+          // v32: platform-wide by default — "most chosen champion (by users)" means across the
+          // app (public post-lock data); only an explicit group scope keeps the per-group tally.
+          const wantScorerPop = /top scorer|golden boot/.test(ql) && !/champion/.test(ql)
+          if (!target && !/\b(my|our) groups?\b|in my group/.test(ql))
+            return { answer: await platformPopularPick(c.sbService, wantScorerPop, c.question) }
+          return { answer: await mostPopularPick(c.sbUser, scope, target, wantScorerPop) }
+        }
         // v24: "what is Dani's champion pick?" — another user's picks are PUBLIC after the June-11
         // lock (shown on the global leaderboard); answer from the public RPC, never your own picks.
         if (!/\b(i|my|me|mine|we|our)\b/.test(ql)) { const pub = await userPicksPublic(c.sbPublic, c.question); if (pub) return { answer: pub } }
@@ -1834,7 +1973,7 @@ const ROUTE_RULES: Rule[] = [
   { id: 'odds', run: async (c) => {
     if (!(/\bodds\b|bookmaker|bet ?365|william hill|favou?rites? (to win|for the)|chances of winning/.test(c.qlow) && !/against the odds/.test(c.qlow))) return null
     if (/champion|win(ning)? (the )?(world cup|tournament|whole thing|it all)|outright|favou?rites?/.test(c.qlow) && c.spec.teams.length <= 1 && !/\bvs\b|against|draw|over|under/.test(c.qlow))
-      return hit(await championOddsAnswer(c.sbPublic, c.spec.teams), { route: 'champion_odds' })
+      return hit(await championOddsAnswer(c.sbService, c.spec.teams, c.question), { route: 'champion_odds' })
     return hit(await gameOddsAnswer(c.sbPublic, c.spec.teams), { route: 'game_odds' }) } },
 
   // Global leaderboard is PUBLIC — detect it broadly and route here BEFORE the private dispatch,
@@ -1901,14 +2040,23 @@ const ROUTE_RULES: Rule[] = [
   // count path instead ("how many people picked Brazil as champion?" used to land on a stats
   // count -> RAG, which admitted "I don't have stats to answer that yet" rather than counting).
   { id: 'most_popular_pick', run: async (c) => {
-    if (!(/most (chosen|picked|popular|common)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b/.test(c.qlow) && /champion|top scorer|golden boot/.test(c.qlow))) return null
-    const uid = await c.me(); if (!uid) return null
-    const groups = await myGroups(c.sbUser, uid); if (!groups.length) return null
-    // v30: a NAMED team ("how many people picked BRAZIL as champion?") is a per-team count,
-    // which whoPicked already answers precisely (usernames + a real count) — mostPopularPick
-    // is for the genuinely open "which team is the most popular pick" question (no team named).
-    if (c.spec.teams.length >= 1) return hit(await whoPicked(c.sbUser, c.question, groups, c.names, resolveGroupName(c.question, groups)), { route: 'most_popular_pick' })
-    return hit(await mostPopularPick(c.sbUser, groups, resolveGroupName(c.question, groups), /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)), { route: 'most_popular_pick' }) } },
+    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot/.test(c.qlow))) return null
+    const wantScorer = /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)
+    // v32: PLATFORM-WIDE is the default — "most chosen champion by users / top 3 chosen in all
+    // the app" means across everyone (public post-lock data, no login needed); a live session
+    // asked exactly this and got a groups-only answer. Only an explicit group scope ("in my
+    // group", a named group) keeps the per-group tally.
+    const uid0 = await c.me()
+    const groups0 = uid0 ? await myGroups(c.sbUser, uid0) : []
+    const target = resolveGroupName(c.question, groups0)
+    const groupScopedQ = !!target || /\b(my|our) groups?\b|in my group/.test(c.qlow)
+    if (!groupScopedQ)
+      return hit(await platformPopularPick(c.sbService, wantScorer, c.question, c.spec.teams[0] ?? null), { route: 'most_popular_pick_platform' })
+    if (!uid0 || !groups0.length) return null
+    // v30: a NAMED team ("how many people picked BRAZIL as champion in my group?") is a per-team
+    // count, which whoPicked already answers precisely (usernames + a real count).
+    if (c.spec.teams.length >= 1) return hit(await whoPicked(c.sbUser, c.question, groups0, c.names, target), { route: 'most_popular_pick' })
+    return hit(await mostPopularPick(c.sbUser, groups0, target, wantScorer), { route: 'most_popular_pick' }) } },
 
   { id: 'who_picked', run: async (c) => {
     if (!(/who (picked|chose|took|selected|bet on|went (with|for))\b/.test(c.qlow) && /champion|top scorer|golden boot|winner|\bpick/.test(c.qlow) || (/who (picked|chose|took|selected|bet on)\b/.test(c.qlow) && c.spec.teams.length === 1))) return null
@@ -1969,9 +2117,13 @@ const ROUTE_RULES: Rule[] = [
 
   // v27: recent form / last-N-games trend ("how is Argentina doing?", "last 5 games").
   { id: 'recent_form', run: async (c) => {
-    if (!(c.spec.teams.length === 1 && (/\bform\b|recent(ly)?|improving|trend|last (\d+|two|three|four|five) (games|matches)|how (has|have|is|are) [\s\S]{0,24}(doing|playing|performing|been)/.test(c.qlow)) && !/predict|\bmy\b|\bour\b/.test(c.qlow))) return null
+    // v32: +ordered-results cues — "what is X's W/D/L record? by order" wants the game-by-game
+    // SEQUENCE, not the "3W 1D 2L" summary the stats path gives (confirmed live). Any explicit
+    // order/sequence ask on a single team's results routes here with the full run (n=10).
+    const orderCue = /(w\s*\/?\s*d\s*\/?\s*l|record|results)[\s\S]{0,25}\b(by order|in order|ordered|sequence|chronological|game by game)\b|\b(by order|in order|sequence|chronological|game by game)\b[\s\S]{0,25}(w\s*\/?\s*d\s*\/?\s*l|record|results)/.test(c.qlow)
+    if (!(c.spec.teams.length === 1 && (orderCue || /\bform\b|recent(ly)?|improving|trend|last (\d+|two|three|four|five) (games|matches)|how (has|have|is|are) [\s\S]{0,24}(doing|playing|performing|been)/.test(c.qlow)) && !/predict|\bmy\b|\bour\b/.test(c.qlow))) return null
     const nMatch = c.qlow.match(/last (\d+)/)
-    const n = nMatch ? +nMatch[1] : (/three/.test(c.qlow) ? 3 : /four/.test(c.qlow) ? 4 : /two/.test(c.qlow) ? 2 : 5)
+    const n = nMatch ? +nMatch[1] : orderCue ? 10 : (/three/.test(c.qlow) ? 3 : /four/.test(c.qlow) ? 4 : /two/.test(c.qlow) ? 2 : 5)
     return hit(await recentForm(c.sbPublic, c.spec.teams[0], n)) } },
 
   // v26: "when is the LAST game (of the tournament / group stage)?" is a FUTURE schedule
@@ -2027,6 +2179,24 @@ const ROUTE_RULES: Rule[] = [
 
   { id: 'compare_teams', run: async (c) =>
     c.spec.op === 'compare' && c.spec.teams.length >= 2 ? hit(await compareTeams(c.sbPublic, c.spec.teams[0], c.spec.teams[1])) : null },
+
+  // v32: RESULT-level aggregates ("how many games ended in a draw?", "which games ended 0-0?",
+  // "W/D/L distribution of finished games") — a question family with NO tool before: draws
+  // fell into tournamentProgress (games-played count), 0-0 into the upcoming-fixtures list,
+  // distribution into the next-game lookup (all confirmed live). Team-less only — "did Brazil
+  // draw?" is a form question — and never a rules/points or prediction question.
+  { id: 'outcome_aggregate', run: async (c) => {
+    if (c.spec.teams.length || c.firstPerson) return null
+    if (/point|worth|\bpts\b|predict|\bpicks?\b/.test(c.qlow)) return null
+    const score = c.qlow.match(/\b(\d)\s*[-:]\s*(\d)\b/)
+    const gamesWord = /\b(games?|matches|fixtures)\b/.test(c.qlow)
+    if (score && gamesWord && /\bend(ed|s)?\b|\bfinish(ed)?\b|final score|scoreline|result/.test(c.qlow))
+      return hit(await outcomeAggregate(c.sbPublic, 'scoreline', { sh: +score[1], sa: +score[2] }), { route: 'outcome_scoreline' })
+    if (/w\s*\/?\s*d\s*\/?\s*l|\bdistributions?\b|\bbreakdown\b|outcome split|home wins? (vs|and|versus)/.test(c.qlow) && (gamesWord || /finished|played|results?\b/.test(c.qlow)))
+      return hit(await outcomeAggregate(c.sbPublic, 'distribution'), { route: 'outcome_distribution' })
+    if (/\b(draws?|drew|tied?|level)\b/.test(c.qlow) && gamesWord && /how (many|much)|number of|\bcount\b|\bwhich\b|\blist\b|end(ed|s)?|finish(ed)?/.test(c.qlow))
+      return hit(await outcomeAggregate(c.sbPublic, 'draws', { list: /\bwhich\b|\blist\b|\bshow\b/.test(c.qlow) }), { route: 'outcome_draws' })
+    return null } },
 
   // v29: tournament-wide card TOTALS ("how many red cards in the tournament?") are a SUM(),
   // never a similarity search — this used to have no deterministic path and fell all the way
@@ -2166,14 +2336,36 @@ function checkShape(shape: Shape, answer: string, spec: Spec): boolean {  // tru
 // binds numbers to per-question retrieved facts, is deferred until tools return structured
 // results — D2). 'understand_fallback' is llm_used but its ANSWER comes from SQL tools (the
 // LLM only parsed the question), so it auto-passes too.
-const RULES_FACT_VALUES = new Set(['1', '2', '3', '5', '6', '8', '10', '12', '83', '40', '24', '48', '104', '4', '20', '19', '21', '11', '22', '00', '30', '3.5', '150', '2.5'])
-function checkNumericProvenance(answer: string, route: string, llmUsed: boolean): boolean {  // true = FAIL
+// v32: '83' and '6' REMOVED — the 3rd-place win-gating change (2026-07-16) made them false
+// (max is 75, there is no 3rd-4th round bonus). They were stale PROMPT facts the LLM cited
+// faithfully; the numeric validator correctly flagged the answer in observe mode.
+const RULES_FACT_VALUES = new Set(['1', '2', '3', '5', '8', '10', '12', '75', '40', '24', '48', '104', '4', '20', '19', '21', '11', '22', '00', '30', '3.5', '150', '2.5'])
+function checkNumericProvenance(answer: string, route: string, llmUsed: boolean, facts = '', question = ''): boolean {  // true = FAIL
   if (!llmUsed) return false
-  if (route === 'off_topic') return /\d/.test(answer)
-  if (route !== 'rules_llm') return false
-  const nums = (answer.match(/\d+(?:\.\d+)?/g) ?? []).filter((n) => n !== '2026')
-  return !nums.every((n) => RULES_FACT_VALUES.has(n))
+  // v32: 4-digit YEARS are exempt everywhere — the off_topic steer-back saying "the World Cup
+  // 2026 app" was flagged as a fabricated number on live traffic (a pure false positive).
+  const strip = (s: string) => s.replace(/\b(19|20)\d{2}\b/g, '')
+  if (route === 'off_topic') return /\d/.test(strip(answer))
+  if (route === 'rules_llm') {
+    const nums = (strip(answer).match(/\d+(?:\.\d+)?/g) ?? [])
+    return !nums.every((n) => RULES_FACT_VALUES.has(n))
+  }
+  // v32 V4 Tier B: a RAG answer's numbers must each exist in the retrieved fact cards (or be
+  // quoted from the question itself). Decimal forms normalized ("75.0" == "75") so formatting
+  // differences never flag. Deterministic routes auto-pass (string-built from SQL rows).
+  if (route === 'rag_crew' && facts) {
+    const norm = (n: string) => String(parseFloat(n))
+    const known = new Set([...(facts.match(/\d+(?:\.\d+)?/g) ?? []), ...(question.match(/\d+(?:\.\d+)?/g) ?? [])].map(norm))
+    const nums = (strip(answer).match(/\d+(?:\.\d+)?/g) ?? []).map(norm)
+    return nums.some((n) => !known.has(n))
+  }
+  return false
 }
+// v32: refusal / no-data / clarify answers have NO shape or entity to validate — every live
+// shape/entity flag in the observe-mode logs was one of these (a privacy refusal "failing" a
+// count question, unknown-team "failing" a when question). Exempting them is what makes the
+// observe->enforce flip safe.
+const REFUSAL_ANSWER_RE = /^(i can only show|i don'?t|i couldn'?t|i'?m not sure|i'?m having trouble|no |nobody|you'?re not in any group|you haven'?t|please sign in|sorry|could you give|which stat do you mean|i appreciate|i focus on)/i
 // V5: an answer about a NAMED team must actually mention that team (catches wrong-subject
 // substitution — the answer's entity silently differing from the question's).
 function checkOnTopicEntity(answer: string, spec: Spec): boolean {  // true = FAIL
@@ -2286,13 +2478,25 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
     const prevQ = history.length ? history[history.length - 1]?.trim().toLowerCase() : ''
     const isRepeat = !!(d.lastAnswer && ans === d.lastAnswer && prevQ && prevQ !== question.trim().toLowerCase())
     if (isRepeat) fails.push('repeat')
-    if (checkShape(shape, ans, spec)) fails.push('shape')
-    if (checkNumericProvenance(ans, String(extra.route ?? ''), !!extra.llm_used)) fails.push('numeric')
-    if (checkOnTopicEntity(ans, spec)) fails.push('off_topic_entity')
-    if (isRepeat && !d.isolatedRetry) {
+    // v32: refusal/clarify answers are exempt from shape+entity (see REFUSAL_ANSWER_RE) —
+    // real traffic proved every one of those flags was a false positive on an honest refusal.
+    const isRefusal = !!extra.clarify || REFUSAL_ANSWER_RE.test(ans)
+    if (!isRefusal && checkShape(shape, ans, spec)) fails.push('shape')
+    const factsText = typeof extra.facts === 'string' ? (extra.facts as string) : ''
+    if (checkNumericProvenance(ans, String(extra.route ?? ''), !!extra.llm_used, factsText, question)) fails.push('numeric')
+    if (!isRefusal && checkOnTopicEntity(ans, spec)) fails.push('off_topic_entity')
+    delete extra.facts  // validation input only — retrieved card text never ships in the payload
+    // v32 ENFORCE (the observe->enforce flip, driven by the logged observe-mode data): one
+    // isolated context-stripped re-route on ANY failure. A repeat ships the retry whenever it
+    // differs from the stale answer (v31 semantics, unchanged); every other failure ships the
+    // retry only if it is CLEAN and different — so a false-positive check can never make an
+    // answer worse, only recover a real misroute. LLM answers skip the retry (a second LLM
+    // round can't fix provenance and doubles cost) except for repeats.
+    if (fails.length && !d.isolatedRetry && (isRepeat || !extra.llm_used)) {
       const retry = await routeQuestion(question, [], { ...d, lastAnswer: undefined, isolatedRetry: true }, undefined)
-      if (retry.answer && retry.answer !== d.lastAnswer)
-        return { ...retry, extra: { ...retry.extra, self_healed: 'repeat', validation_fail: fails, expected_shape: shape } }
+      const rf = Array.isArray(retry.extra?.validation_fail) ? (retry.extra.validation_fail as string[]) : []
+      const accept = isRepeat ? (!!retry.answer && retry.answer !== d.lastAnswer) : (!!retry.answer && retry.answer !== ans && rf.length === 0)
+      if (accept) return { ...retry, extra: { ...retry.extra, self_healed: fails.join('+'), validation_fail: fails, expected_shape: shape } }
     }
     return { answer: ans, pub: pubSpec, extra: { ...extra, ...(fails.length ? { validation_fail: fails } : {}), expected_shape: shape } }
   }
@@ -2373,7 +2577,9 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
       const cards = await searchStats(sbPublic, qvec, spec.teams)
       try {
         const crew = await answerCrew(openai, question, cards)
-        return done(crew.answer || "I don't have stats to answer that yet.", { llm_used: crew.attempts > 0, retrieved: cards.length, route: 'rag_crew', crew: { attempts: crew.attempts, judge: crew.score } })
+        // v32 D2-core: the retrieved cards ARE the structured fact source — passed to done()
+        // so V4 Tier B can bind every number in the LLM's answer to a retrieved fact.
+        return done(crew.answer || "I don't have stats to answer that yet.", { llm_used: crew.attempts > 0, retrieved: cards.length, route: 'rag_crew', crew: { attempts: crew.attempts, judge: crew.score }, facts: cards.map((c) => c.title + ' ' + c.content).join(' | ') })
       } catch { return done("I don't have stats to answer that yet.", { llm_used: false, retrieved: cards.length, degraded: true, route: 'rag_degraded' }) }
     }
 
@@ -2443,6 +2649,11 @@ serve(async (req) => {
       ? { teams: Array.isArray(body.prev_spec.teams) ? body.prev_spec.teams.filter((t: any) => typeof t === 'string').slice(0, 3) : [], dim: typeof body.prev_spec.dim === 'string' ? body.prev_spec.dim : null }
       : undefined
     const lastAnswer = typeof body?.last_answer === 'string' ? body.last_answer.slice(0, 1200) : undefined
+    // v32: session telemetry — the client sends a per-widget-mount session id + turn counter so
+    // a whole conversation can be reconstructed from ask_log (multi-turn bugs were previously
+    // un-groupable). Pure observability: never used for routing.
+    const sessionId = typeof body?.session_id === 'string' && body.session_id.length <= 64 ? body.session_id : null
+    const sessionTurn = Number.isInteger(body?.turn) && body.turn >= 0 && body.turn < 10000 ? body.turn as number : null
     const deps: RouteDeps = { openai, sbPublic, sbUser, sbService, me, names, lastAnswer }
 
     // v26: every answered question is logged (service-role-only table) — question, route,
@@ -2454,7 +2665,7 @@ serve(async (req) => {
         // return structured results (D2, deferred).
         const route = (payload.route as string) ?? null
         const vf = Array.isArray(payload.validation_fail) && (payload.validation_fail as string[]).length ? payload.validation_fail : null
-        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0, validation_fail: vf, expected_shape: (payload.expected_shape as string) ?? null })
+        await sbService.from('ask_log').insert({ user_id: await me(), question: question.slice(0, 500), intent: (payload.spec as any)?.intent ?? null, route, answer: (answer ?? '').slice(0, 2000), llm_used: !!payload.llm_used, latency_ms: Date.now() - t0, validation_fail: vf, expected_shape: (payload.expected_shape as string) ?? null, session_id: sessionId, session_turn: sessionTurn })
       } catch { /* logging must never break the answer */ }
       return json({ ...payload, answer })
     }

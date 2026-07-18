@@ -50,7 +50,10 @@ async function ask(q, bearer, tries = 3) {
 const T = [
   // ---- FAMILY A: pick popularity ----
   ['pop-self', 'auth', 'what is my champion pick in Alpha Wolves?', ['Alpha Wolves']],
-  ['pop-mygroups', 'auth', 'which team is the most chosen for champion?', ['Alpha Wolves', '!worth 10 points']],
+  // v32 SPEC CHANGE: a bare "most chosen" (no group scope) is now the PLATFORM-WIDE tally
+  // (picks are public post-lock data); the per-group tally requires an explicit "in my groups".
+  ['pop-bare-platform', 'auth', 'which team is the most chosen for champion?', ['across the whole app', '!worth 10 points']],
+  ['pop-mygroups', 'auth', 'which champion pick is most popular in my groups?', ['Alpha Wolves', '!across the whole app', '!worth 10 points']],
   ['pop-namedgroup', 'auth', 'which team is most picked as champion in Beta Sharks?', ['Beta Sharks', '!Alpha Wolves']],
   // Scope-honesty: answering from my-groups scope must NAME the group(s) it covered, so the
   // user can see the scope was NOT app-wide.

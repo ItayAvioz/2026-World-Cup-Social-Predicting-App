@@ -13,7 +13,8 @@ live data questions (schedule, scorers, stats, standings, counts, per-game box s
   - `20260713000001_ask_log.sql` — **`ask_log`** (question → route → answer → latency; RLS on, service-role only)
   - `20260714000001_ask_log_validation_telemetry.sql` — adds `validation_fail`/`expected_shape`/`rows_count` to `ask_log`
   - `20260716000001_ask_log_validation_fail_array.sql` — **v31**: `validation_fail` text → **text[]** (the validation layer can flag multiple checks per answer). `validation_fail` + `expected_shape` are now written on EVERY answer that flows through `done()`; `rows_count` stays NULL (needs structured tool results — D2, deferred)
-- **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded; sends the last **3** user turns as `history` **plus** `last_answer` and `prev_spec` for structured/answer-aware follow-ups) + mounted in `src/components/Layout.jsx`.
+  - `20260718000001_ask_log_session_telemetry.sql` — **v32**: `session_id`/`session_turn` (AskBot sends a per-mount id + turn counter; whole conversations reconstructable: `select * from ask_log where session_id = X order by session_turn`)
+- **Frontend**: `src/components/AskBot.jsx` (chat widget, dev-host-guarded; sends the last **3** user turns as `history` **plus** `last_answer`, `prev_spec`, and (v32) `session_id`/`turn`) + mounted in `src/components/Layout.jsx`.
 
 ## Coverage matrix (what the bot answers, refuses, or clarifies)
 Anything not in this table should **refuse or clarify** — never substitute a nearby answer.
@@ -69,7 +70,48 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 64** = the **v31 architecture cycle** (docs/PLAN_ASK_BOT_V31_ARCHITECTURE.md — the
+> Current: DEV runs EF **version 66** = the **v32 fine-tuning cycle** (2026-07-18, driven by a real
+> user session transcript + the v31 observe-mode validation telemetry — every fix is a failure
+> CLASS, not a point patch). All EIGHT blocking suites green at ship time: **wide 132 · real_chat 22 ·
+> fault_boundary 9 · typo_noise 15 · shape 14+24-distinctness · scope_matrix 9 · sql_oracle 8 ·
+> context_isolation 13**, plus the new **shadow-replay** harness (125 real ask_log questions frozen
+> as a baseline; all 34 v31→v32 drifts reviewed as intended before rebasing).
+> v32 shipped: (1) **outcome aggregates** — draws count / "which games ended 0-0" / W-D-L
+> distribution had NO tool (fell into games-played, upcoming fixtures, next-game); new
+> `outcomeAggregate` + `outcome_*` routes, oracle-verified. (2) **platform-wide pick popularity**
+> — "most chosen champion/top scorer by users / in all the app" now tallies ALL picks
+> (`most_popular_pick_platform`, service-read, anon-capable — picks are public post-lock); bare
+> "most chosen" defaults to platform (SPEC CHANGE), per-group needs "in my group(s)"/a named
+> group; one shared `POPULARITY_RE` replaced 4 drifted copies. (3) **champion-odds RLS bug** —
+> `champion_odds` is authenticated-read; the anon client saw 0 of 48 rows and answered "No
+> champion odds are available yet" (caught live by the repeat+entity validators); now
+> service-read + top-N. (4) **fuzzy typo repair** — curated-vocab Damerau≤1/≤2 pass in
+> `normalizeQuestion` (catds→cards, finisgeh→finished, recors→records, ditrbutions→
+> distributions) with a FUZZY_SAFE real-word guard ('drawn'→draws corruption was caught by the
+> gate and guarded). (5) **city-shadow team resolution** — "real madrid" also resolved Atletico
+> Madrid via the shared 'madrid' token, blinding every teams.length===1 rule; exact-name matches
+> now suppress token-shadow candidates. (6) **elliptical compound tails** — "...? And how many?"
+> is DROPPED (tools answer counts inline); it used to glue a my_data dump onto a correct answer.
+> (7) **ET+pens combined** — "extra time and penalties" answers both flags, not just the
+> shootout. (8) **W/D/L "by order"** — routes to recent_form's chronological strip (n=10).
+> (9) **rules facts corrected at source** — max **75** (not 83), NO 3rd-4th round bonus,
+> win-gated 3rd place, in RULES prompt + RULE_TOPICS + rulesFAQ + RULES_FACT_VALUES (the
+> "hallucinated +6" the numeric validator flagged was a faithful cite of a stale prompt).
+> (10) **observe→enforce flip (V2/V4/V5)** — driven by the logged telemetry: refusal/clarify
+> answers exempt from shape+entity, years exempt from numerics (all logged false-positives
+> closed), then `done()` self-heals on ANY flag (isolated re-route; non-repeat failures ship the
+> retry only if clean AND different — a false positive can never make an answer worse).
+> (11) **V4 Tier B (D2-core)** — rag_crew passes its retrieved cards as `facts`; every number in
+> a RAG answer must exist in the cards (or the question), decimal-normalized. (12) **session
+> telemetry** — `ask_log.session_id/session_turn` (M-20260718000001) + AskBot.jsx sends a
+> per-mount id + turn counter. (13) **repeat-proof popularity wording** — the champion vs
+> top-scorer "no standout" lines now name the pick kind (they rendered identical text; V1
+> flagged it live). New harnesses: `shadow_replay.mjs` (--rebase/--strict) + `area_probe.mjs`
+> (batch runner for area sweeps). Still deferred: FULL D2 structured-ToolResult migration
+> (rows_count, per-tool typed rows), V3 entity-registry gate, V6 general per-tool auth map
+> (worst instances fixed: platform popularity + champion odds are tool-bound now).
+>
+> **Previous: EF version 64** = the **v31 architecture cycle** (docs/PLAN_ASK_BOT_V31_ARCHITECTURE.md — the
 > critique-panel-reconciled implementation of D1 context gate / D3 validation layer / D4
 > rules-as-data+normalization / D5 test-eval redesign, plus the streak-"best" and must()-sweep
 > fixes), deployed from disk 2026-07-16. No reindex needed (code/rules only — INTENT_EXAMPLES/

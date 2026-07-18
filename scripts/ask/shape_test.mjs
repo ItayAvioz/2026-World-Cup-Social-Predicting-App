@@ -52,9 +52,10 @@ const T = [
   // The confirmed live bug: ALL of these used to get the same location-only answer.
   ['rtf', 'where', 'anon', 'where can I see the road to final bracket?', ['Picks']],
   ['rtf', 'lock', 'anon', 'when does the road to final bracket lock?', ['July 4']],
-  ['rtf', 'howmany', 'anon', 'how many points can I get from the knockout bracket?', ['83']],
-  ['rtf', 'explain', 'anon', 'explain how the road to final bracket works', ['83', 'QF', '!Open Picks and tap']],
-  ['rtf', 'howitworks', 'anon', 'how does the knockout bracket prediction work?', ['83', 'QF', '!Open Picks and tap']],
+  // v32: max is 75 since the 3rd-place win-gating (2026-07-16) — '83' is the stale pre-gating max.
+  ['rtf', 'howmany', 'anon', 'how many points can I get from the knockout bracket?', ['75', '!83']],
+  ['rtf', 'explain', 'anon', 'explain how the road to final bracket works', ['75', 'QF', '!83', '!Open Picks and tap']],
+  ['rtf', 'howitworks', 'anon', 'how does the knockout bracket prediction work?', ['75', 'QF', '!83', '!Open Picks and tap']],
 
   // ---- TOPIC 2: AI summary / nightly roast ----
   // "where" used to dump real roast CONTENT (latest_roast's negative lookahead skipped 'where').

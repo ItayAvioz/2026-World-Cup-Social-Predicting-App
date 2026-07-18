@@ -54,7 +54,8 @@ const T = [
   ['rules', 'simple', 'anon', 'how much points champion and top scorer?', ['10 points each']],
   ['rules', 'medium', 'anon', 'what are the min and max members per group?', ['12', 'no minimum']],
   // ---- v24: workflow-probe regression cases (107-question sweep, 40 confirmed failures) ----
-  ['rules', 'medium', 'anon', 'How many points for the round bonuses in the bracket game, per round?', ['+12', '+10', '+8', '+6', '!have been played']],
+  // v32: '+6' REMOVED — the 3rd-4th round bonus no longer exists (3rd place is win-gated).
+  ['rules', 'medium', 'anon', 'How many points for the round bonuses in the bracket game, per round?', ['+12', '+10', '+8', '!+6', '!have been played']],
   ['rules', 'medium', 'anon', 'How are ties broken on the leaderboard if two players have the same points?', ['exact', '!Global leaderboard (']],
   ['rules', 'hard', 'anon', 'When did the knockout bracket predictions lock, and when do those points count in the leaderboard?', ['July 4', 'July 20', '!Global leaderboard (']],
   ['rules', 'hard', 'anon', 'If a knockout game is a draw after 90 minutes and gets decided on penalties, and I predicted a draw, do I get the outcome point?', ['90-minute']],
@@ -176,7 +177,9 @@ const T = [
   // regression guard: default (no explicit polarity word) must be UNCHANGED
   ['polarity', 'medium', 'anon', 'which team has the best defense?', ['best defense', 'conceding']],
   // C: a POPULARITY question is an aggregate across everyone, never the caller's own single pick.
-  ['popularity', 'hard', 'auth', 'how many people picked Brazil as champion?', ['Alpha Wolves', '!worth 10 points']],
+  // v32 SPEC CHANGE: no explicit group scope -> PLATFORM-WIDE per-team count (picks are public
+  // post-lock); the per-group listing needs "in my group(s)" (next case, unchanged).
+  ['popularity', 'hard', 'auth', 'how many people picked Brazil as champion?', ['across the app', 'Brazil', '!worth 10 points']],
   ['popularity', 'hard', 'auth', 'which champion pick is most popular in my groups?', ['Alpha Wolves', '!worth 10 points']],
   // D: an explicit POSITIVE/HOT streak question must answer the longest scoring run, not
   // whatever the CURRENT trailing state happens to be.
@@ -193,8 +196,9 @@ const T = [
   // session or the v31 audit. ----
   // D4-A: an EXPLAIN question on Road to Final must explain scoring, never just the location.
   // Both the clean phrasing and the exact broken-grammar transcript phrasing.
-  ['shape', 'hard', 'anon', 'explain on road to final competiton how it works?', ['83', '!Open Picks and tap']],
-  ['shape', 'medium', 'anon', 'how road to final work?', ['83', '!Open Picks and tap']],
+  // v32: max is now 75 (3rd-place win-gating, 2026-07-16) — '83' was the stale pre-gating max.
+  ['shape', 'hard', 'anon', 'explain on road to final competiton how it works?', ['75', '!83', '!Open Picks and tap']],
+  ['shape', 'medium', 'anon', 'how road to final work?', ['75', '!83', '!Open Picks and tap']],
   // regression guard: the bare/location phrasing must STILL get the location answer
   ['shape', 'simple', 'anon', 'where is the road to final bracket?', ['Picks tab']],
   // D4-B: a champion/scorer TIMING question must state the fold-in date, not only the value.
@@ -208,6 +212,33 @@ const T = [
   // D1: a bare "best streak" (no direction word) shows BOTH extremes, never the current
   // trailing streak (which can be a losing one).
   ['streak', 'hard', 'auth', 'what is my best streak in Alpha Wolves?', ['Best hot streak', 'Worst cold streak']],
+
+  // ---- v32: fine-tuning cycle — every case is a VERIFIED live failure from the 2026-07-18
+  // real session (or its guard). Wider-fix families: outcome aggregates, platform popularity,
+  // champion-odds RLS, fuzzy typos, elliptical compounds, ET+pens both, W/D/L order. ----
+  // outcome aggregates: draws/0-0/distribution had NO tool (fell into games-played/fixtures).
+  ['outcome', 'medium', 'anon', 'how much games finish in draw?', ['ended level after 90', '!have been played;']],
+  ['outcome', 'medium', 'anon', 'which games ended 0-0?', ['0-0', '!upcoming games']],
+  ['outcome', 'hard', 'anon', 'provide W/D/L finished games ditrbutions', ['home wins', 'draws', 'away wins']],
+  ['outcome', 'hard', 'anon', 'in finisgeh games, how much end with draw?', ['ended level after 90', '!have been played;']],
+  // platform popularity: "by users / in all app" = the WHOLE app (public post-lock data),
+  // never just the caller's groups — and it works for anonymous callers too.
+  ['popularity', 'medium', 'auth', 'what is the most chossen champion team by users?', ['across the whole app']],
+  ['popularity', 'hard', 'anon', 'provide the top 3 chossen top scorer in all app', ['across the whole app', '1.']],
+  // champion odds: RLS-visible now (was anon-blind: "No champion odds are available yet" with
+  // 48 rows in the table), plus top-N.
+  ['odds', 'medium', 'anon', 'what are spain will be the champion odds?', ['Spain', '!no champion odds']],
+  ['odds', 'hard', 'anon', 'provide the top 3 teams with the higher odds for champion world cup 2026', ['Favourites to win the World Cup', '3.', '!no champion odds']],
+  // ET+pens combined: both halves answered, not just the shootout.
+  ['etpens', 'hard', 'anon', 'how much games went to extra time and penalties?', ['extra time', 'penalties']],
+  // W/D/L "by order" = the chronological sequence, not the 3W-1D-2L summary.
+  ['form', 'hard', 'anon', 'what is real madrid w/d/l recors? by order', ['most recent first']],
+  // fuzzy typo repair: "catds" must still be a GAME-scoped cards question.
+  ['typo', 'medium', 'anon', 'which game was with the most red catds?', ['red cards', '!players are tied']],
+  // elliptical compound: "And how many?" must NOT become a second clause gluing a my_data dump.
+  ['compound', 'hard', 'auth', 'In which game were the most red cards drawn? And how many?', ['red cards', "!you're in"]],
+  // road-to-final facts: corrected scoring (max 75, no 3rd-4th bonus) in the typo'd phrasing too.
+  ['rules', 'medium', 'anon', 'explain on road tp final. how it works?', ['75', '!83']],
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

@@ -4,7 +4,30 @@
 quality, accurate, professional, and reliable" — not more point-fixes, but closing the
 *architecture* gaps that keep producing the same bug shape.
 
-## STATUS (2026-07-16): IMPLEMENTED (D1 + D3 + D4 + D5 + streak-best + must-sweep). D2 + the §7 deferred list remain open.
+## STATUS (2026-07-18, v32): the §7 deferred list is now largely CLOSED — see below.
+
+**v32 fine-tuning cycle (EF v66, 2026-07-18)** — driven by a real user session transcript (10
+annotated failures) + the v31 observe-mode validation telemetry. Every fix targeted a failure
+CLASS: outcome aggregates (draws/0-0/W-D-L distribution — no tool existed), platform-wide pick
+popularity (SPEC CHANGE: bare "most chosen" = whole app; `POPULARITY_RE` unified 4 drifted
+copies), champion-odds RLS bug (anon client saw 0 of 48 rows — caught by the observe-mode
+validators), fuzzy typo repair (curated vocab, FUZZY_SAFE real-word guard), city-shadow team
+resolution ("real madrid" no longer summons Atletico), elliptical compound tails dropped,
+ET+pens combined, W/D/L "by order" → recent_form, **rules facts corrected at source (max 75,
+no 3rd-4th bonus, win-gated 3rd place — the "+6/83 hallucination" was a faithful cite of a
+stale prompt)**. From §7: ✅ **enforcement flip for V2/V4/V5** (false-positive classes exempted
+first — refusals/clarifies skip shape+entity, years skip numerics — then `done()` self-heals on
+any flag; non-repeat failures ship the retry only if clean AND different), ✅ **V4 Tier B
+(D2-core)** (rag_crew binds every answer number to its retrieved cards), ✅ **platform
+popularity tally**, ✅ **shadow-replay** (`scripts/ask/shadow_replay.mjs`, 125 real questions,
+baseline rebased after the 34 intended drifts were reviewed), ✅ **AskBot session telemetry**
+(session_id/turn → ask_log, M-20260718000001). Gate at ship: wide 132 · real_chat 22 · fault 9
+· typo 15 · shape 14 · scope 9 · sql_oracle 8 · context_isolation 13 — ALL green (three suites
+updated for the 75-point + platform-popularity SPEC changes, not weakened). Still open: FULL D2
+structured-ToolResult migration (typed rows + rows_count), V3 entity-registry gate, V6 general
+auth map (worst instances now tool-bound), rulesFAQ PR3 topic migration.
+
+## PREVIOUS STATUS (2026-07-16): IMPLEMENTED (D1 + D3 + D4 + D5 + streak-best + must-sweep). D2 + the §7 deferred list remain open.
 
 **What shipped 2026-07-16 (all DEV-only, CLI-deployed, full 8-suite gate green):**
 - **Phase 1 — D1 Context Gate**: `detectContextNeed()` + gated borrows + `spec.context` telemetry.

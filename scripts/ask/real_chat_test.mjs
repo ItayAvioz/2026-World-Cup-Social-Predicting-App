@@ -70,7 +70,9 @@ const T = [
   // most recent scored game was a miss) regardless of what direction was asked for.
   ['F1-positive-streak', 'auth', 'what is my best positive streak in Alpha Wolves?', ['Best hot streak', '!Cold streak']],
   // "most chosen for champion" used to dump the CALLER's own single pick per group.
-  ['F2-most-chosen', 'auth', 'which team is the most chosen for champion? and how much?', ['Alpha Wolves', '!worth 10 points']],
+  // v32 SPEC CHANGE: with no explicit group scope this is now the PLATFORM-WIDE tally (picks
+  // are public post-lock) — the per-group tally needs "in my group(s)" / a named group.
+  ['F2-most-chosen', 'auth', 'which team is the most chosen for champion? and how much?', ['across the whole app', '!worth 10 points']],
   // trivia's 24h open window was never stated anywhere — only the 40-second answer countdown.
   ['F3-trivia-24h', 'anon', 'explain how the trivia works', ['24', 'hour']],
   // a GAME-scoped card superlative used to answer with a PLAYER leaderboard.

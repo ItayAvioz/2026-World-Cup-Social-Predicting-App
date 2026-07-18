@@ -29,6 +29,9 @@ export default function AskBot() {
   ])
   const [loading, setLoading] = useState(false)
   const bodyRef = useRef(null)
+  // v32: session telemetry — one id per widget mount + a turn counter, sent with every ask so
+  // the EF can group a whole conversation in ask_log (multi-turn bugs were un-groupable).
+  const sessionRef = useRef({ id: (crypto?.randomUUID?.() ?? String(Math.random()).slice(2)), turn: 0 })
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
@@ -47,7 +50,7 @@ export default function AskBot() {
     // missing, so dropping the filter only ever makes last_answer more accurate, never less.
     const history = msgs.filter((m) => m.role === 'user').slice(-3).map((m) => m.text)
     const lastBot = [...msgs].reverse().find((m) => m.role === 'bot')
-    const body = { question, history }
+    const body = { question, history, session_id: sessionRef.current.id, turn: sessionRef.current.turn++ }
     if (lastBot?.text) body.last_answer = lastBot.text
     if (lastBot?.spec) body.prev_spec = { teams: lastBot.spec.teams ?? [], dim: lastBot.spec.dim ?? null }
     setMsgs((m) => [...m, { role: 'user', text: question }])

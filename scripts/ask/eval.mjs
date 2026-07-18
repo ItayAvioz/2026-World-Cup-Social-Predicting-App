@@ -35,6 +35,8 @@ results.context_isolation = run('context_isolation_test.mjs (context-bleed immun
 console.log('\n========== ADVISORY (not gating, run by hand) ==========')
 console.log('  node scripts/ask/audit_probe.mjs out.json            (82Q exploratory sweep)')
 console.log('  node scripts/ask/context_isolation_test.mjs --full   (full probe × poison cross-product)')
+console.log('  node scripts/ask/shadow_replay.mjs                   (v32: real-question drift vs frozen baseline;')
+console.log('                                                        review drift, then --rebase after intended changes)')
 
 const line = Object.entries(results).map(([k, v]) => `${k}=${v ? 'PASS' : 'FAIL'}`).join('  ')
 console.log(`\n===== EVAL: ${line} =====`)
