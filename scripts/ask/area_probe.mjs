@@ -40,6 +40,9 @@ async function ask(q, bearer, body = {}, tries = 3) {
 
 const [inFile, outFile] = process.argv.slice(2)
 if (!inFile || !outFile) { console.error('usage: node area_probe.mjs questions.json answers.json'); process.exit(2) }
+// The EF rate-limits at 30 questions/60s per (token,IP) bucket — an all-anon batch at the
+// default 250ms gap trips it. PROBE_GAP_MS paces long sweeps under the limit.
+const GAP = Math.max(250, +(process.env.PROBE_GAP_MS ?? 250) || 250)
 const cases = JSON.parse(fs.readFileSync(inFile, 'utf8'))
 const jwt = await signIn()
 const out = []
@@ -57,9 +60,9 @@ for (const c of cases) {
   } else {
     d = await ask(c.q, bearer)
   }
-  out.push({ q: c.q, auth: c.auth ?? 'anon', route: d.route ?? null, intent: d.spec?.intent ?? null, llm_used: d.llm_used ?? null, answer: d.answer ?? '' })
+  out.push({ q: c.q, auth: c.auth ?? 'anon', route: d.route ?? null, intent: d.spec?.intent ?? null, llm_used: d.llm_used ?? null, validation_fail: d.validation_fail ?? null, self_healed: d.self_healed ?? null, answer: d.answer ?? '' })
   process.stdout.write('.')
-  await sleep(250)
+  await sleep(GAP)
 }
 console.log(` ${out.length} probed`)
 fs.writeFileSync(outFile, JSON.stringify(out, null, 2))

@@ -70,13 +70,29 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 66** = the **v32 fine-tuning cycle** (2026-07-18, driven by a real
-> user session transcript + the v31 observe-mode validation telemetry — every fix is a failure
-> CLASS, not a point patch). All EIGHT blocking suites green at ship time: **wide 132 · real_chat 22 ·
-> fault_boundary 9 · typo_noise 15 · shape 14+24-distinctness · scope_matrix 9 · sql_oracle 8 ·
-> context_isolation 13**, plus the new **shadow-replay** harness (125 real ask_log questions frozen
-> as a baseline; all 34 v31→v32 drifts reviewed as intended before rebasing).
-> v32 shipped: (1) **outcome aggregates** — draws count / "which games ended 0-0" / W-D-L
+> Current: DEV runs EF **version 69** = the **v32 fine-tuning cycle** (2026-07-18/19, two rounds:
+> round 1 from a real user session transcript + the v31 observe-mode validation telemetry;
+> round 2 from a **600-question 8-area sweep** — the 8-agent×75-question workflow hit the
+> monthly subagent spend limit, so the identical sweep ran INLINE via `scripts/ask/area_probe.mjs`
+> + a red-flag analyzer + manual review; ~35 fixes total, every one a failure CLASS). All EIGHT
+> blocking suites green at ship time: **wide 132 · real_chat 22 · fault_boundary 9 ·
+> typo_noise 15 · shape 14+24-distinctness · scope_matrix 9 · sql_oracle 8 · context_isolation
+> 13**, plus the new **shadow-replay** harness (125 real ask_log questions frozen as a baseline;
+> all 34 v31→v32 drifts reviewed as intended before rebasing).
+> Round-2 sweep fixes (beyond the round-1 list below): outcome_aggregate moved ABOVE the private
+> registry ("which games ended 2-1?" login-walled — the v31 pens-rule class again); "most clean
+> sheets" polarity INVERSION + cleanest/fairest→asc + "scores the least"; goalkeeper/keeper →
+> honest untracked refusal; bronze→third; unknown-team verb-second form ("when italy plays?");
+> tournament_meta (opening game / start / end / after-final); phase_progress ("are all group
+> games done?"); when_played (2-team WHEN answers the DATE); team_record (bare W/D/L →
+> deterministic team line); penalty_scorers (+who-missed); top-N player leaderboards; r16-plural
+> phase lists; results_list ("who won the semi finals / yesterday?" + resolveDate yesterday);
+> app_census (groups list / user count / most-exact — public-leaderboard tier); wc_group_table
+> singular "which TEAM LEADS"; leaderboard_location (WHERE-question dumped the board);
+> picks-visibility + top-scorer-TIE + multi-topic scoring FAQ lines; my_picks rescue;
+> who_advanced; over/under odds cue + phase-aware game odds; deictic/elliptical no-context
+> clarify + clause-1-clarify suppresses clause-2; 'drow' TYPO_FIX.
+> Round-1 v32 shipped: (1) **outcome aggregates** — draws count / "which games ended 0-0" / W-D-L
 > distribution had NO tool (fell into games-played, upcoming fixtures, next-game); new
 > `outcomeAggregate` + `outcome_*` routes, oracle-verified. (2) **platform-wide pick popularity**
 > — "most chosen champion/top scorer by users / in all the app" now tallies ALL picks

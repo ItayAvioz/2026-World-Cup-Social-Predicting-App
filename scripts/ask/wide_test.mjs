@@ -72,11 +72,15 @@ const T = [
   ['time', 'hard', 'anon', 'When was the semi final played?', ['Netherlands', 'Portugal', "!isn't set yet"]],
   ['time', 'medium', 'anon', 'When do the semi finals take place?', ['Netherlands', "!isn't set yet"]],
   ['time', 'hard', 'anon', 'wen is teh finall', ['Netherlands', '!Semi-Final']],
-  // NOTE: this fixture is inherently time-relative (real 2026 tournament clock) — recalibrate
-  // to the live-verified "last finished game" answer whenever it drifts (2026-07-16: was
-  // "Netherlands 1-0 Portugal", now "England 2-1 Argentina" after the 2nd semi-final finished).
-  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['England 2-1 Argentina', '!Name both teams']],
-  ['time', 'hard', 'anon', 'and portugal?', ['Portugal', 'Argentina', '!3-2'], ['when do england play next']],
+  // NOTE: this fixture is inherently time-relative (real 2026 tournament clock). v32 (Jul 19,
+  // after the 3rd-place game finished): asserted CLOCK-ROBUSTLY — the bug class was "last game
+  // answered with the NEXT fixture", so require a played scoreline and forbid the next-fixture
+  // phrasing, instead of pinning a specific game that drifts every kickoff.
+  ['time', 'hard', 'anon', 'What game just finished, and what was the score of tomorrows game?', ['-', '!Name both teams', '!next game is']],
+  // "and portugal?" borrows the SHAPE of the prior question. Post-bronze, Portugal has no
+  // upcoming game ever again — the correct answer names Portugal either way; the bug class
+  // (context bleed) answered about the WRONG entity entirely.
+  ['time', 'hard', 'anon', 'and portugal?', ['Portugal', '!red card', '!Netherlands'], ['when do england play next']],
   ['stats', 'medium', 'anon', 'Which team commits the most fouls per game?', ['fouls', '!have been played']],
   ['stats', 'hard', 'anon', 'How many goals has Manchester City scored in total, and how many have they conceded?', ['Manchester City have scored', 'conceded', '!Fulham']],
   ['stats', 'hard', 'anon', 'Compare Liverpool and Everton - who has better tournament stats?', ['Liverpool:', 'Everton:', "!couldn't find"]],

@@ -344,6 +344,9 @@ const TYPO_FIXES: [RegExp, string][] = [
   // "teh" before a group-suffix word ("show teh global leaderbord") defeated groupRefCandidate's
   // stoplist — "teh global" read as a candidate GROUP NAME and the global board demanded login.
   [/\bteh\b/gi, 'the'],
+  // v32 round-2: 4-letter typos are BELOW the fuzzy layer's length floor (len-4 repair against
+  // real words is too dangerous) — confirmed one-offs land here instead.
+  [/\bdrow(s|n)?\b/gi, 'draw'],
 ]
 // v32: FUZZY keyword repair — the wider fix behind the one-off TYPO_FIXES list. Live sessions
 // keep producing distance-1/2 misspellings of ROUTING-CRITICAL keywords ("catds"→cards,
@@ -466,6 +469,8 @@ function resolveDate(q: string): { start: string; end: string; label: string } |
   const il = new Date(now.getTime() + 3 * 3600_000)
   if (/\btoday\b|\btonight\b/.test(s)) return dayRangeIL(il.getUTCFullYear(), il.getUTCMonth(), il.getUTCDate(), 'today')
   if (/\btomorrow'?s?\b/.test(s)) { const d = new Date(il); d.setUTCDate(d.getUTCDate() + 1); return dayRangeIL(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 'tomorrow') }
+  // v32 round-2: yesterday was never resolvable — "who won yesterday?" login-walled.
+  if (/\byesterday'?s?\b/.test(s)) { const d = new Date(il); d.setUTCDate(d.getUTCDate() - 1); return dayRangeIL(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 'yesterday') }
   if (/this weekend|the weekend/.test(s)) { const d = new Date(now); const add = (6 - d.getUTCDay() + 7) % 7; d.setUTCDate(d.getUTCDate() + add); const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); const end = new Date(start); end.setUTCDate(end.getUTCDate() + 2); return { start: start.toISOString(), end: end.toISOString(), label: 'this weekend' } }
   let m = s.match(/\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b/) || s.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b/)
   if (m) { const a = m[1], b = m[2]; const mon = MONTHS.indexOf((isNaN(+a) ? a : b).slice(0, 3)); const day = +(isNaN(+a) ? b : a); if (mon >= 0 && day >= 1 && day <= 31) return dayRange(Y, mon, day, `${MONTHS[mon][0].toUpperCase()}${MONTHS[mon].slice(1)} ${day}`) }
@@ -475,7 +480,8 @@ const PHASE: Record<string, string> = { group: 'Group Stage', r32: 'Round of 32'
 // v27: "group stage" is a PHASE too — without it, "when is the last group stage game?" lost the
 // phase and answered with the last game of the WHOLE tournament. Only the two-word forms match,
 // so a FRIEND-group question ("who is winning our group") never becomes a phase.
-const PHASE_WORD: [RegExp, string][] = [[/group stage|group phase|\bgroup games?\b/i, 'group'], [/round of 32|\br32\b/i, 'r32'], [/round of 16|last 16|\br16\b/i, 'r16'], [/quarter[- ]?finals?|\bqf\b/i, 'qf'], [/semi[- ]?finals?|\bsf\b/i, 'sf'], [/third[- ]?place|3rd[- ]?place/i, 'third'], [/\bfinal(l|e)?s?\b/i, 'final']]
+// v32: +bronze — "the bronze final" resolved to the FINAL (only the 'final' word matched).
+const PHASE_WORD: [RegExp, string][] = [[/group stage|group phase|\bgroup games?\b/i, 'group'], [/round of 32|\br32\b/i, 'r32'], [/round of 16|last 16|\br16\b/i, 'r16'], [/quarter[- ]?finals?|\bqf\b/i, 'qf'], [/semi[- ]?finals?|\bsf\b/i, 'sf'], [/third[- ]?place|3rd[- ]?place|\bbronze\b/i, 'third'], [/\bfinal(l|e)?s?\b/i, 'final']]
 function detectPhase(q: string): string | null { for (const [re, ph] of PHASE_WORD) if (re.test(q)) return ph; return null }
 function detectPredicate(q: string): boolean { return /\bpredict|\bguess|\bnail|got .{0,40}\bright\b|exact score|\bcalled?\b/i.test(q) }
 function detectOp(q: string): string {
@@ -504,7 +510,7 @@ function detectDim(q: string): string | null {
   if (/card|booked|booking/.test(s)) return 'cards'
   if (/offsides?/.test(s)) return 'offsides'
   if (/\bshots?\b|attempts on goal/.test(s)) return 'shots'
-  if (/goal|scorer|golden boot|score[ds]? the most|attack|prolific/.test(s)) return 'goals_or_attack'
+  if (/goal|scorer|golden boot|score[ds]? the (most|least|fewest)|attack|prolific/.test(s)) return 'goals_or_attack'
   if (/form|in.?form|playing well|how is .* (doing|playing)/.test(s)) return 'form'
   return null
 }
@@ -583,7 +589,7 @@ async function tournamentProgress(sb: Sb, q: string): Promise<string> {
 // and a specific-scoreline filter. Same WC scope as tournamentProgress (neq friendly/TBD)
 // so its denominators always agree with the "X of Y played" answer. 90-minute results only
 // (games.score_home/away are 90-min by schema) — stated in the answer where it matters.
-async function outcomeAggregate(sb: Sb, kind: 'draws' | 'distribution' | 'scoreline', opts: { list?: boolean; sh?: number; sa?: number } = {}): Promise<string> {
+async function outcomeAggregate(sb: Sb, kind: 'draws' | 'distribution' | 'scoreline' | 'common', opts: { list?: boolean; sh?: number; sa?: number } = {}): Promise<string> {
   const data = must(await sb.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time').neq('phase', 'friendly').neq('team_home', 'TBD').not('score_home', 'is', null).lte('kick_off_time', new Date().toISOString()).order('kick_off_time', { ascending: true })) as any[]
   const played = (data ?? []) as any[]
   if (!played.length) return 'No games have been completed yet.'
@@ -594,6 +600,12 @@ async function outcomeAggregate(sb: Sb, kind: 'draws' | 'distribution' | 'scorel
     const d = played.filter((g) => g.score_home === g.score_away).length
     const a = played.length - h - d
     return `Of ${played.length} finished games (90-minute results): ${h} home wins (${pct(h)}%) · ${d} draws (${pct(d)}%) · ${a} away wins (${pct(a)}%).`
+  }
+  if (kind === 'common') {
+    const tally = new Map<string, number>()
+    for (const g of played) { const k = `${Math.max(g.score_home, g.score_away)}-${Math.min(g.score_home, g.score_away)}`; tally.set(k, (tally.get(k) ?? 0) + 1) }
+    const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    return `Most common scorelines across ${played.length} finished games (90-minute results, either direction): ` + sorted.map(([k, n], i) => `${i + 1}. ${k} — ${n} game${n === 1 ? '' : 's'}`).join(' · ') + '.'
   }
   if (kind === 'scoreline') {
     const hits = played.filter((g) => (g.score_home === opts.sh && g.score_away === opts.sa) || (g.score_home === opts.sa && g.score_away === opts.sh))
@@ -676,6 +688,11 @@ const STATLB: Record<string, any> = {
 // "LEAST possession" and "FEWEST fouls" (both default=desc) answered the most of each.
 function detectPolarity(q: string): 'asc' | 'desc' | null {
   const s = q.toLowerCase()
+  // v32: "most CLEAN SHEETS" is a fewest-conceded (asc) question — the bare 'most' override
+  // inverted it into "conceded the most goals" (live-found, the most dangerous polarity flip).
+  if (/clean sheets?/.test(s)) return /\b(least|fewest|lowest)\b/.test(s) ? 'desc' : 'asc'
+  // v32: semantic-negative words ("cleanest team" = FEWEST fouls; answered most fouls before).
+  if (/\b(cleanest|fairest|best behaved|most disciplined)\b/.test(s)) return 'asc'
   if (/\b(least|fewest|lowest|smallest|minimum|bottom)\b/.test(s)) return 'asc'
   if (/\b(most|highest|greatest|maximum|top)\b/.test(s)) return 'desc'
   return null
@@ -732,6 +749,12 @@ async function statLeaderboard(sb: Sb, key: string, question?: string): Promise<
   const val = (r: any) => M.compute ? M.compute(r) : r[M.col]
   const rows = [...data].filter((r) => val(r) > 0).sort((a, b) => val(b) - val(a))
   if (!rows.length) return `No ${M.noun} have been recorded yet.`
+  // v32: "top 5 scorers" lists N ranked rows — it used to return only the tied leaders.
+  const tn = question?.toLowerCase().match(/\btop\s+(\d{1,2})\b/)
+  if (tn && +tn[1] > 1) {
+    const n = Math.min(+tn[1], 15)
+    return `Top ${n} — ${M.noun}:\n` + rows.slice(0, n).map((p, i) => `${i + 1}. ${p.player_name} (${p.team}) — ${val(p)} ${M.noun}`).join('\n')
+  }
   const ext = val(rows[0]); const lead = rows.filter((r) => val(r) === ext)
   if (lead.length === 1) return `The ${M.sup} is ${lead[0].player_name} (${lead[0].team}) with ${ext} ${M.noun}.`
   return `${lead.length} players are tied for ${M.sup} with ${ext} ${M.noun} each: ` + lead.map((p) => `${p.player_name} (${p.team})`).join(', ') + '.'
@@ -873,10 +896,13 @@ async function playerCount(sb: Sb, dim: string): Promise<string> {
 }
 // v27: ODDS — game odds (Bet365, sync-odds EF) for a named/next game, and champion
 // outright odds (William Hill). The UI shows both; the bot had ZERO odds tools.
-async function gameOddsAnswer(sb: Sb, teams: string[]): Promise<string> {
+async function gameOddsAnswer(sb: Sb, teams: string[], phase?: string | null): Promise<string> {
   let g: any = null
   if (teams.length >= 2) g = await findGame(sb, teams[0], teams[1])
   else if (teams.length === 1) g = (await sb.from('games').select('id, team_home, team_away, phase, kick_off_time').or(`team_home.eq.${teams[0]},team_away.eq.${teams[0]}`).is('score_home', null).gt('kick_off_time', new Date().toISOString()).neq('phase', 'friendly').order('kick_off_time', { ascending: true }).limit(1)).data?.[0]
+  // v32 round-2: a NAMED PHASE ("over/under 2.5 for the final?") resolves that phase's game,
+  // not just the next fixture on the calendar.
+  else if (phase) g = (await sb.from('games').select('id, team_home, team_away, phase, kick_off_time').eq('phase', phase).neq('team_home', 'TBD').order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
   else g = (await sb.from('games').select('id, team_home, team_away, phase, kick_off_time').is('score_home', null).gt('kick_off_time', new Date().toISOString()).neq('phase', 'friendly').neq('team_home', 'TBD').order('kick_off_time', { ascending: true }).limit(1)).data?.[0]
   if (!g) return `I couldn't find an upcoming game for that — odds only exist for unplayed fixtures.`
   const o = (await sb.from('game_odds').select('home_win, draw, away_win, over_2_5, under_2_5, source').eq('game_id', g.id).limit(1)).data?.[0]
@@ -1451,7 +1477,7 @@ async function mostPopularPick(sbUser: Sb, groups: Grp[], target: Grp | null, wa
 // looks like (rulesFAQ exclusion, detectRuleTopic exclusion, my_data branch, most_popular_pick
 // rule) — they had drifted into four hand-copied variants. Also covers the top-N form
 // ("top 3 chosen top scorer"), which none of the copies matched.
-const POPULARITY_RE = /most (chosen|picked|popular|common)|(top|best) ?\d+ (chosen|picked|popular|most)|majority (pick|chose|picked)|everyone'?s? pick|how many (people|members|users)\b[\s\S]{0,20}\bpick(ed)?\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)/
+const POPULARITY_RE = /most (chosen|picked|popular|common)|(top|best) ?\d+ (chosen|picked|popular|most)|majority (pick|chose|picked)|everyone'?s? pick|how many( \w+)?\b[\s\S]{0,20}\b(picked|chose|chosen|selected|bet on)\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)/
 // v32: PLATFORM-WIDE pick popularity — "most chosen champion by users / in all the app".
 // A live session asked exactly this and got a groups-only answer. Post-lock picks are PUBLIC
 // data (they're printed on every leaderboard — see the public/private-line audit), so the
@@ -1530,6 +1556,32 @@ async function globalStandings(sb: Sb, limit = 5): Promise<string> {
   // Show them as-is with the group name; do NOT dedupe by username (that hid real ranks).
   const top = rows.slice(0, Math.max(1, Math.min(limit, 20)))
   return 'Global leaderboard (one row per player per group):\n' + top.map((r) => `${r.rank}. ${r.username} (${r.group_name}) — ${r.total_points} pts`).join('\n')
+}
+// v32 (round-2 sweep): APP CENSUS — "what groups exist?", "how many users are registered?",
+// "who has the most exact scores in the app?" all login-walled via my_data/group_standings
+// classifies. Everything here is derivable from the PUBLIC global leaderboard (the same
+// exposure tier global_standings already answers anonymously): group names + row counts +
+// usernames are printed on it.
+async function appCensus(sb: Sb, kind: 'groups' | 'users' | 'exact', q: string): Promise<string> {
+  const rows = (must(await sb.rpc('get_leaderboard')) ?? []) as any[]
+  if (!rows.length) return 'The leaderboard is empty.'
+  if (kind === 'groups') {
+    const tally = new Map<string, number>()
+    for (const r of rows) if (r.group_name && r.group_name !== '—') tally.set(r.group_name as string, (tally.get(r.group_name as string) ?? 0) + 1)
+    const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1])
+    if (!sorted.length) return 'No groups exist yet.'
+    if (/biggest|largest/.test(q)) { const [n, cnt] = sorted[0]; return `The biggest group is ${n} with ${cnt} member${cnt === 1 ? '' : 's'}.` }
+    return `There are ${sorted.length} groups in the app: ` + sorted.map(([n, cnt]) => `${n} (${cnt})`).join(', ') + '.'
+  }
+  if (kind === 'users') {
+    const users = new Set(rows.map((r) => r.username as string))
+    return `${users.size} players are registered in the app.`
+  }
+  const es = rows.filter((r) => typeof r.exact_scores === 'number')
+  if (!es.length) return "I can't break the leaderboard down by exact scores right now."
+  const max = Math.max(...es.map((r) => r.exact_scores as number))
+  const lead = es.filter((r) => r.exact_scores === max)
+  return `${lead.map((r) => `${r.username} (${r.group_name})`).join(', ')} ${lead.length === 1 ? 'has' : 'are tied for'} the most exact scores in the app: ${max}.`
 }
 async function groupHistory(sbPublic: Sb, sbUser: Sb, me: string, a: string, b: string, target: Grp | null = null): Promise<string> {
   const game = await findGame(sbPublic, a, b); if (!game) return `I couldn't find a game between ${a} and ${b}.`
@@ -1641,6 +1693,9 @@ function renderRule(topic: string, shapes: RuleShape[]): string | null {
 
 function rulesFAQ(q: string): string | null {
   const s = q.toLowerCase()
+  // v32 round-2: a MULTI-topic points question ("exact score points and outcome points and
+  // champion points?") got only the first matching line — answer the whole scoring table.
+  if (/exact[\s\S]{0,50}champion|champion[\s\S]{0,50}exact/.test(s) && /point|worth/.test(s) && !/goals?\b|picked|chose/.test(s)) return 'Scoring: exact scoreline = 3 pts (already includes the outcome point) · correct outcome alone = 1 pt · correct Champion pick = 10 pts · correct Top Scorer pick = 10 pts.'
   if (/exact (score|scoreline).*(point|worth|how many|how much)|how (many|much) (points|pts).*exact|point.*exact score|exact.*worth more/.test(s)) return 'An exact scoreline is worth 3 points — that already includes the outcome point (scoring is not cumulative).'
   // v24: 90-min scoring vs ET/pens — must beat the generic outcome-point line ("...and I
   // predicted a draw, do I get the outcome point?" is a penalties question, not a generic one)
@@ -1653,6 +1708,12 @@ function rulesFAQ(q: string): string | null {
   // champion?" used to be intercepted HERE (before intent classification even runs) and
   // answered with the flat 10-point rule instead of ever reaching mostPopularPick().
   const isPopularity = POPULARITY_RE.test(s)
+  // v32 (round-2 sweep): the top-scorer TIE rule — "if two players tie for top scorer who gets
+  // the 10 points?" was swallowed by the generic 10-point value line below.
+  if (/\btie[ds]?\b[\s\S]{0,40}(top scorer|golden boot|most goals)|(top scorer|golden boot)[\s\S]{0,40}\btie[ds]?\b|tie split/.test(s)) return 'Top-scorer ties: if several players tie for most goals, EVERYONE who picked ANY of the tied players gets the full 10 points — the points are not split.'
+  // v32 (round-2 sweep): pick VISIBILITY — "are picks public?" was login-walled via a my_data
+  // classify; it is a rules fact.
+  if (/\bpicks?\b[\s\S]{0,30}\b(public|visible|secret|hidden|see|shown)\b|\b(public|visible|secret|hidden)\b[\s\S]{0,30}\bpicks?\b|when do picks become visible/.test(s) && !/prediction/.test(s)) return "After the June-11 lock, everyone's Champion + Top Scorer picks are PUBLIC — they're shown on the leaderboards. Before the lock, only you can see your own picks."
   if (/(champion[\s\S]{0,30}(top scorer|golden boot)|(top scorer|golden boot)[\s\S]{0,30}champion)/.test(s) && /point|worth|how (many|much)/.test(s) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'The Champion and Top Scorer picks are worth 10 points each.'
   if ((/champion.*(point|worth|how many|how much)|how (many|much).*champion/.test(s)) && !/goals?\b|assists?\b|scored\b/.test(s) && !isPopularity) return 'A correct Champion pick is worth 10 points.'
   if ((/top scorer.*(point|worth|reward)|golden boot.*(point|worth|reward)|how (many|much).*(top scorer|golden boot)|(reward|worth).*(top scorer|golden boot)/.test(s)) && !/goals?\b|assists?\b|scored\b|\bhave\b|\bhas\b/.test(s) && !isPopularity) return 'A correct Top Scorer pick (the Golden Boot pick) is worth 10 points.'
@@ -1774,7 +1835,10 @@ const NEED_LOGIN = 'Please sign in — I can only look up your personal data whe
 // inline overrides in serve() BEFORE this registry, since they cut across intents.
 const REGISTRY: Tool[] = [
   { id: 'schedule', match: (s) => s.intent === 'schedule', run: async (c) => {
-      if (c.spec.op === 'list' || c.spec.date) return { answer: await scheduleList(c.sbPublic, c.spec.date, c.spec.phase) }
+      // v32: a PHASE named with PLURAL games ("when do the r16 games happen?") is a list —
+      // the single-game lookup answered with just the first fixture of the phase.
+      const pluralPhase = !!c.spec.phase && c.spec.phase !== 'final' && c.spec.phase !== 'third' && /\b(games|matches|fixtures)\b/.test(c.question.toLowerCase())
+      if (c.spec.op === 'list' || c.spec.date || pluralPhase) return { answer: await scheduleList(c.sbPublic, c.spec.date, c.spec.phase) }
       return { answer: await lookupGame(c.sbPublic, c.spec.teams[0] ?? null, detectPhase(c.question)) } } },
   { id: 'who_scored', match: (s) => s.intent === 'who_scored', run: async (c) => {
       if (c.spec.teams.length >= 2) return { answer: await whoScored(c.sbPublic, c.spec.teams[0], c.spec.teams[1]) }
@@ -1808,7 +1872,7 @@ const REGISTRY: Tool[] = [
       // dispatched to myRates/myFocus with target=null (they combine all groups into one
       // number) — this was the D2 bug reported live. Detect the "which/what group" framing
       // FIRST and answer with the actual best-performing group, named.
-      if (!target && /\b(which|what)\b[\s\S]{0,15}\bgroups?\b/.test(ql) && /\b(best|doing best|winning|leading|top|ahead)\b/.test(ql))
+      if (!target && /\b(which|what)\b[\s\S]{0,15}\bgroups?\b/.test(ql) && /\b(best|better|doing best|winning|leading|top|ahead)\b/.test(ql))
         return { answer: await myBestGroup(c.sbUser, c.sbPublic, me, scope, /percent|%|hit ?rate|streak|\bhot\b|\bcold\b|exact/.test(ql) ? 'rate' : 'rank') }
       // v27: exact% / hit% / streak — computed, no longer a generic summary
       if (/percent|%|hit ?rate|streak|\bhot\b|\bcold\b/.test(ql)) return { answer: await myRates(c.sbPublic, c.sbUser, me, scope, target, streakWant(ql)) }
@@ -1927,7 +1991,9 @@ const ROUTE_RULES: Rule[] = [
     if (!tg) return null
     const letter = tg[1]
     const strongCue = /standing|table|top of|qualif|\bteams?\b/.test(c.qlow)
-    const broadCue = /standing|table|teams|who|top|leader|qualif|games|fixtures|points|finish(ed)?|status|\bover\b|\bdone\b|complete|conclude|started?|begun|\bin\b/.test(c.qlow)
+    // v32 round-2: +team/leads/winner — "which TEAM LEADS the group A?" (singular, no 'who')
+    // matched none of these and login-walled via a group_standings classify.
+    const broadCue = /standing|table|\bteams?\b|who|top|lead(s|er)?\b|winner|qualif|games|fixtures|points|finish(ed)?|status|\bover\b|\bdone\b|complete|conclude|started?|begun|\bin\b/.test(c.qlow)
     const cue = letter === 'i' ? strongCue : broadCue
     if (!cue || /\b(my|our|friend)\b/.test(c.qlow)) return null
     // v29 fix (found live): "who finished 1 in group d?" uses the bare numeral "1", not the
@@ -1971,10 +2037,12 @@ const ROUTE_RULES: Rule[] = [
 
   // v27: ODDS — game odds (Bet365) / champion outright odds (William Hill).
   { id: 'odds', run: async (c) => {
-    if (!(/\bodds\b|bookmaker|bet ?365|william hill|favou?rites? (to win|for the)|chances of winning/.test(c.qlow) && !/against the odds/.test(c.qlow))) return null
+    // v32 round-2: +over/under — "over/under 2.5 for the final?" had no odds keyword and
+    // login-walled via a group_history classify.
+    if (!(/\bodds\b|bookmaker|bet ?365|william hill|favou?rites? (to win|for the)|chances of winning|over\s*\/?\s*under|over \d(\.\d)?|under \d(\.\d)?/.test(c.qlow) && !/against the odds/.test(c.qlow))) return null
     if (/champion|win(ning)? (the )?(world cup|tournament|whole thing|it all)|outright|favou?rites?/.test(c.qlow) && c.spec.teams.length <= 1 && !/\bvs\b|against|draw|over|under/.test(c.qlow))
       return hit(await championOddsAnswer(c.sbService, c.spec.teams, c.question), { route: 'champion_odds' })
-    return hit(await gameOddsAnswer(c.sbPublic, c.spec.teams), { route: 'game_odds' }) } },
+    return hit(await gameOddsAnswer(c.sbPublic, c.spec.teams, c.spec.phase), { route: 'game_odds' }) } },
 
   // Global leaderboard is PUBLIC — detect it broadly and route here BEFORE the private dispatch,
   // else "top 5 players" / "worldwide" / "across all groups" get swallowed by the anon sign-in gate.
@@ -1984,8 +2052,36 @@ const ROUTE_RULES: Rule[] = [
   { id: 'global_standings', run: async (c) => {
     const globalCue = !c.groupScoped && !c.namedGroup && (/\b(global|overall|worldwide|whole app|entire competition|the (whole )?world|all players|every player|across (all|every) groups?|all groups|everyone|rank everyone|globally)\b/.test(c.qlow) || /\b(top|best)\s+\d+\s+(player|globally)/.test(c.qlow) || /\b(most|total)\s+points\b/.test(c.qlow) || /\bleaderboard\b|\bstandings\b/.test(c.qlow))
     if (!globalCue || c.spec.intent === 'rules') return null
+    // v32 (round-2 sweep): "WHERE is the global leaderboard?" is a NAVIGATION question — it
+    // used to dump the actual leaderboard rows instead of saying where it lives.
+    if (/^where\b|where (is|can|do)\b|how do i (see|find|get to|open)\b/.test(c.qlow))
+      return hit("The leaderboards live on the Dashboard — the global leaderboard is right there with your row highlighted. Each group's own leaderboard is on its card in the Groups tab.", { route: 'leaderboard_location' })
     const tn = c.qlow.match(/\b(?:top|best)\s+(\d{1,2})/)
     return hit(await globalStandings(c.sbPublic, tn ? +tn[1] : 5)) } },
+
+  // v32 (round-2 sweep): phase/date RESULTS — "who won the semi finals?", "who won yesterday?",
+  // "result of the bronze game?" all classified group_standings/group_history and login-walled.
+  // Public results = the schedule list with scores.
+  { id: 'results_list', run: async (c) => {
+    if (c.groupScoped || c.namedGroup || c.firstPerson || c.spec.teams.length) return null
+    if (!(c.spec.phase || c.spec.date)) return null
+    if (!/who (won|wins)\b|\bresults?\b|\bscores?\b|who (advanced|went through)/.test(c.qlow)) return null
+    if (/predict|\bpicks?\b|point|worth/.test(c.qlow)) return null
+    return hit(await scheduleList(c.sbPublic, c.spec.date, c.spec.phase), { route: 'results_list' }) } },
+
+  // v32 (round-2 sweep): app census — public-tier facts that used to login-wall.
+  { id: 'app_census', run: async (c) => {
+    if (c.namedGroup || c.groupScoped || c.firstPerson) return null
+    if (/\b(what|which|list|all|how many)\b[\s\S]{0,20}\bgroups?\b[\s\S]{0,22}\b(exist|are there|in the app)\b|\blist all groups\b|\b(biggest|largest) group\b/.test(c.qlow) && !/group [a-l]\b/.test(c.qlow))
+      return hit(await appCensus(c.sbPublic, 'groups', c.qlow), { route: 'app_census' })
+    if (/how many (users|players|people)\b[\s\S]{0,25}\b(registered|in the app|are there|play\b|total)\b/.test(c.qlow))
+      return hit(await appCensus(c.sbPublic, 'users', c.qlow), { route: 'app_census' })
+    // Requires an explicit APP scope — the bare "who has the most exact" form stole the
+    // group-scoped "who has the most exact scores in Alpha Wolves?" (caught by the gate:
+    // groupRefCandidate doesn't flag a bare "in <Name>" as a named group).
+    if (/most exact (scores?|scorelines?)\b[\s\S]{0,30}\b(app|overall|globally|everyone|all players)\b/.test(c.qlow))
+      return hit(await appCensus(c.sbPublic, 'exact', c.qlow), { route: 'app_census' })
+    return null } },
 
   // bare superlative with no team / group / metric -> ask which stat rather than gate or guess
   { id: 'best_needs_metric', run: async (c) =>
@@ -1996,7 +2092,7 @@ const ROUTE_RULES: Rule[] = [
   // v20: group META (member count / list / captain) — real DATA for a specific group,
   // not the rules-FAQ cap. Cap questions ("how many members CAN...") never reach here.
   { id: 'group_meta', run: async (c) => {
-    if (!(/\bmembers?\b|\bcaptain\b|who('s| is) in\b/.test(c.qlow) && !/can (have|be|join)|allowed|max|maximum|limit|up to/.test(c.qlow) && !/first place|last place|winning|lead|top of|rank|standing|points/.test(c.qlow))) return null
+    if (!(/\bmembers?\b|\bcaptain\b|who('s| is)? in\b|\binactive\b/.test(c.qlow) && !/can (have|be|join)|allowed|max|maximum|limit|up to/.test(c.qlow) && !/first place|last place|winning|lead|top of|rank|standing|points/.test(c.qlow))) return null
     const uid = await c.me(); if (!uid) return null
     const groups = await myGroups(c.sbUser, uid)
     const target = resolveGroupName(c.question, groups)
@@ -2021,6 +2117,60 @@ const ROUTE_RULES: Rule[] = [
     /penalt|shoot.?out|extra time/i.test(c.qlow) && c.spec.teams.length < 2 && !/what happens|affects?|\brules?\b|predictions?|scoring|points|bracket|road to final/.test(c.qlow) && (/\b(which|what|list|show|any|how many|how much)\b[\s\S]{0,30}\b(games?|matches)\b/.test(c.qlow) || /\bgames? (that |which )?(went|go(es)?|gone)\b/.test(c.qlow))
       ? hit(await etPensList(c.sbPublic, c.question)) : null },
 
+  // v32 (round-2 sweep): tournament META — "first/opening game", "when did the tournament
+  // start/end", "next game after the final". PUBLIC ZONE (tool-bound-auth): these classify as
+  // group_history and the private registry login-walled them when placed lower.
+  { id: 'tournament_meta', run: async (c) => {
+    const wantFirst = /\b(first|opening)\b[\s\S]{0,24}\b(game|match|fixture)\b|tournament (start|begin|began|started)|when (did|does) it (all )?(start|begin)/.test(c.qlow)
+    const wantEnd = /tournament (end|ends|ended|finish|finishes)|what month[\s\S]{0,20}(end|over)|after the final/.test(c.qlow)
+    if (!wantFirst && !wantEnd) return null
+    if (/predict|\bmy\b|\bour\b|trivia|pick/.test(c.qlow)) return null
+    if (wantFirst) {
+      const g = (await c.sbPublic.from('games').select('team_home, team_away, score_home, score_away, phase, kick_off_time').neq('phase', 'friendly').neq('team_home', 'TBD').order('kick_off_time', { ascending: true }).limit(1)).data?.[0]
+      if (!g) return null
+      const played = g.score_home !== null && new Date(g.kick_off_time as string) <= new Date()
+      return hit(`The tournament's opening game was ${g.team_home}${played ? ` ${g.score_home}-${g.score_away} ` : ' vs '}${g.team_away} — ${fmtKO(g.kick_off_time as string)}.`, { route: 'tournament_meta' })
+    }
+    const g = (await c.sbPublic.from('games').select('team_home, team_away, phase, kick_off_time').neq('phase', 'friendly').neq('team_home', 'TBD').order('kick_off_time', { ascending: false }).limit(1)).data?.[0]
+    if (!g) return null
+    return hit(`The tournament ends with the ${PHASE[g.phase as string] ?? g.phase} — ${g.team_home} vs ${g.team_away}, ${fmtKO(g.kick_off_time as string)}. Nothing is scheduled after it.`, { route: 'tournament_meta' }) } },
+
+  // v32 (round-2 sweep): PHASE progress — "are all group games done?" login-walled via a
+  // group_history classify ('group' satisfied the private gate). PUBLIC ZONE for the same
+  // tool-bound-auth reason as tournament_meta above.
+  { id: 'phase_progress', run: async (c) => {
+    if (!(/\b(are|is|have)\b[\s\S]{0,26}\b(done|over|finished|complete[d]?|played|wrapped)\b/.test(c.qlow) && /\b(games?|matches|stage|round)\b/.test(c.qlow) && !c.firstPerson && !/predict|pick|\bmy\b|\bour\b/.test(c.qlow))) return null
+    const ph = c.spec.phase
+    if (!ph) return null
+    const rows = (must(await c.sbPublic.from('games').select('score_home, kick_off_time').eq('phase', ph).neq('team_home', 'TBD')) ?? []) as any[]
+    if (!rows.length) return null
+    const left = rows.filter((g) => g.score_home === null || new Date(g.kick_off_time as string) > new Date()).length
+    const label = PHASE[ph] ?? ph
+    return hit(left === 0 ? `Yes — all ${rows.length} ${label} games are finished.` : `Not yet — ${left} of ${rows.length} ${label} game${rows.length === 1 ? '' : 's'} still to play.`, { route: 'phase_progress' }) } },
+
+  // v32: RESULT-level aggregates ("how many games ended in a draw?", "which games ended 0-0?",
+  // "W/D/L distribution", "most common scoreline") — a question family with NO tool before.
+  // Sits in the PUBLIC zone (tool-bound-auth): "which games ended 2-1?" classifies as my_data
+  // (a scoreline reads like a prediction) and the private registry login-walled it when this
+  // rule lived below (round-2 sweep finding — the exact v31 pens-list bug class again).
+  { id: 'outcome_aggregate', run: async (c) => {
+    if (c.spec.teams.length || c.firstPerson) return null
+    if (/point|worth|\bpts\b|predict|\bpicks?\b/.test(c.qlow)) return null
+    const score = c.qlow.match(/\b(\d)\s*[-:]\s*(\d)\b/)
+    const gamesWord = /\b(games?|matches|fixtures)\b/.test(c.qlow)
+    if (score && gamesWord && /\bend(ed|s)?\b|\bfinish(ed)?\b|final score|scoreline|result/.test(c.qlow))
+      return hit(await outcomeAggregate(c.sbPublic, 'scoreline', { sh: +score[1], sa: +score[2] }), { route: 'outcome_scoreline' })
+    if (/most (common|popular|frequent)\b[\s\S]{0,15}\b(score(line)?|result)/.test(c.qlow))
+      return hit(await outcomeAggregate(c.sbPublic, 'common'), { route: 'outcome_common' })
+    // "outcome distribution/breakdown/split" is unambiguous on its own — round-2 found the
+    // games-word requirement sent "what is the outcome distrubtion?" to a clarify.
+    if (/w\s*\/?\s*d\s*\/?\s*l|outcome (distributions?|breakdown|split)/.test(c.qlow)
+      || (/\bdistributions?\b|\bbreakdown\b|home wins? (vs|and|versus)|wins? (most )?at home|home advantage/.test(c.qlow) && (gamesWord || /finished|played|results?\b|at home/.test(c.qlow))))
+      return hit(await outcomeAggregate(c.sbPublic, 'distribution'), { route: 'outcome_distribution' })
+    if (/\b(draws?|drew|tied?|level)\b/.test(c.qlow) && (gamesWord || /so far|in total|overall/.test(c.qlow)) && /how (many|much)|number of|\bcount\b|\bwhich\b|\blist\b|end(ed|s)?|finish(ed)?|so far|\btotal\b|\b%|percent/.test(c.qlow))
+      return hit(await outcomeAggregate(c.sbPublic, 'draws', { list: /\bwhich\b|\blist\b|\bshow\b/.test(c.qlow) }), { route: 'outcome_draws' })
+    return null } },
+
   // v27: NEW private coverage routes — bracket game, latest roast, reverse pick lookup,
   // match-day-scoped points. All uid-gated; run before the intent registry so misclassified
   // phrasings still land here.
@@ -2040,7 +2190,9 @@ const ROUTE_RULES: Rule[] = [
   // count path instead ("how many people picked Brazil as champion?" used to land on a stats
   // count -> RAG, which admitted "I don't have stats to answer that yet" rather than counting).
   { id: 'most_popular_pick', run: async (c) => {
-    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot/.test(c.qlow))) return null
+    // v32 round-2: +"to win"/"winner" — "how many users chose Spain to win?" has neither
+    // 'champion' nor 'top scorer' and was login-walled via a group_standings classify.
+    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot|\bto win\b|\bwinner\b/.test(c.qlow))) return null
     const wantScorer = /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)
     // v32: PLATFORM-WIDE is the default — "most chosen champion by users / top 3 chosen in all
     // the app" means across everyone (public post-lock data, no login needed); a live session
@@ -2072,6 +2224,16 @@ const ROUTE_RULES: Rule[] = [
     const meOnly = c.firstPerson && !/\bgroup\b/.test(c.qlow)
     return hit(await dayPoints(c.sbPublic, c.sbUser, uid, groups, resolveGroupName(c.question, groups), off, /\byesterday\b/.test(c.qlow) ? 'yesterday' : 'today', meOnly)) } },
 
+  // v32 (round-2 sweep): FIRST-PERSON pick questions that classify as 'rules' ("did I pick the
+  // same champion in both groups?") — the rules LLM answered "I can't check your picks" when
+  // my_data's pick branch answers it directly. Popularity phrasings never reach here (no 'i').
+  { id: 'my_picks', run: async (c) => {
+    const cue = /\bmy picks?\b/.test(c.qlow) || (c.firstPerson && /\b(did|do|what|which|show)\b[\s\S]{0,14}\bi\b[\s\S]{0,24}\b(pick(ed)?|chose|choose)\b/.test(c.qlow))
+    if (!cue || POPULARITY_RE.test(c.qlow) || /can i (still )?(change|edit|update)|what happens/.test(c.qlow)) return null
+    const uid = await c.me(); if (!uid) return null
+    const groups = await myGroups(c.sbUser, uid); if (!groups.length) return null
+    return hit(await myFocus(c.sbUser, uid, groups, resolveGroupName(c.question, groups), 'picks'), { route: 'my_picks' }) } },
+
   // P1: honor PRIVATE intents (personal / group) BEFORE the public overrides below can hijack them.
   // Without this, a personal question containing "how many … games" fell into the count rule and
   // returned tournament progress; "most exact in our group" fell into the rank rule and returned
@@ -2080,10 +2242,12 @@ const ROUTE_RULES: Rule[] = [
   // but WITH a team is really a public team question ("did holland win there last game").
   { id: 'private_registry', run: async (c) => {
     const PRIVATE = new Set(['my_data', 'group_standings', 'group_history'])
+    // v32: group_standings + a NAMED TEAM + zero group/leaderboard wording is a public team
+    // question in disguise ("what is Brighton's xG this tournament?" was login-walled).
     const privateOk = c.spec.teams.length === 0
       || (c.spec.intent === 'my_data' ? c.firstPerson
         : c.spec.intent === 'group_history' ? (c.spec.predicate || /\b(we|our|us|my|group)\b/.test(c.qlow))
-        : true)
+        : (c.groupScoped || /\bgroup\b|leaderboard|standings?|\btable\b|\brank\b/.test(c.qlow)))
     if (!(PRIVATE.has(c.spec.intent) && privateOk)) return null
     for (const t of REGISTRY) if (t.match(c.spec)) {
       const r = await t.run({ spec: c.spec, question: c.question, sbPublic: c.sbPublic, sbUser: c.sbUser, sbService: c.sbService, openai: c.openai, me: c.me, names: c.names })
@@ -2104,15 +2268,19 @@ const ROUTE_RULES: Rule[] = [
   // v24: a "when does X play" where X resolves to NO known team — say so instead of
   // answering with the tournament's next fixture ("when does Wakanda play?").
   { id: 'unknown_team', run: async (c) => {
-    const unk = c.qlow.match(/when (do(es)?|will|did) (the )?([a-z][a-z0-9]{2,15}) play/)
-    return unk && c.spec.teams.length === 0 && !c.spec.phase && !['we', 'they', 'i', 'you', 'it', 'people'].includes(unk[4])
-      ? hit(`I don't recognize "${unk[4]}" as a team in this tournament.`) : null } },
+    // v32: +the verb-second form — "when italy plays?" answered with the generic next fixture
+    // instead of saying the name isn't a team here (Italy isn't in this dataset).
+    const unk = c.qlow.match(/when (do(es)?|will|did|is) (the )?([a-z][a-z0-9]{2,15}) play/) || c.qlow.match(/when ([a-z][a-z0-9]{2,15}) plays?\b/)
+    const name = unk ? (unk[4] ?? unk[1]) : null
+    return name && c.spec.teams.length === 0 && !c.spec.phase && !['we', 'they', 'i', 'you', 'it', 'people', 'next', 'game'].includes(name)
+      ? hit(`I don't recognize "${name}" as a team in this tournament.`) : null } },
 
   // v24: stats nobody tracks — be honest instead of answering with something else.
   // v27: +venue/city/time-zone (previously only "stadium" was guarded).
   { id: 'untracked_stat', run: async (c) =>
-    /attendance|referee|\bweather\b|stadium|\bvenue\b|host cit|which city|what city|time ?zone|\bcrowd\b|throw.?ins?\b|\bvar\b/.test(c.qlow) && !/possession|shots?|corners|cards/.test(c.qlow)
-      ? hit("I don't track venues or that kind of detail — for a game I can give you the kickoff time, score, scorers and match stats (shots, possession, corners, fouls, cards, offsides, xG).")
+    // v32: +goalkeeper/keeper/saves — "best goalkeeper?" used to answer with the TOP SCORER.
+    /attendance|referee|\bweather\b|stadium|\bvenue\b|host cit|which city|what city|time ?zone|\bcrowd\b|throw.?ins?\b|\bvar\b|goal ?keepers?|\bkeeper\b|\bsaves\b|half.?time score|first half/.test(c.qlow) && !/possession|shots?|corners|cards/.test(c.qlow)
+      ? hit("I don't track that stat — for a game I can give you the kickoff time, score, scorers and match stats (shots, possession, corners, fouls, cards, offsides, xG); for players: goals, assists and cards.")
       : null },
 
   // v27: recent form / last-N-games trend ("how is Argentina doing?", "last 5 games").
@@ -2125,6 +2293,68 @@ const ROUTE_RULES: Rule[] = [
     const nMatch = c.qlow.match(/last (\d+)/)
     const n = nMatch ? +nMatch[1] : orderCue ? 10 : (/three/.test(c.qlow) ? 3 : /four/.test(c.qlow) ? 4 : /two/.test(c.qlow) ? 2 : 5)
     return hit(await recentForm(c.sbPublic, c.spec.teams[0], n)) } },
+
+  // v32 (round-2 sweep): a bare "W/D/L record" for ONE team — deterministic team line instead
+  // of the RAG crew's terse unattributed "3W 1D 2L" (which also failed the entity validator).
+  { id: 'team_record', run: async (c) =>
+    c.spec.teams.length === 1 && /w\s*\/?\s*d\s*\/?\s*l|\brecords?\b/.test(c.qlow) && !/predict|\bmy\b|\bour\b|head to head|\bh2h\b/.test(c.qlow)
+      ? hit(await teamStat(c.sbPublic, c.spec.teams[0], null), { route: 'team_record' }) : null },
+
+  // v32 (round-2 sweep): "who advanced from the France Netherlands game?" answered the scorer
+  // list with no advancement verdict. knockout_winner (or the 90' score) decides it directly.
+  { id: 'who_advanced', run: async (c) => {
+    if (!(c.spec.teams.length >= 2 && /who (advanced|went through|progressed|qualified|won)\b/.test(c.qlow) && !/group [a-l]\b/.test(c.qlow))) return null
+    const g = await findGame(c.sbPublic, c.spec.teams[0], c.spec.teams[1])
+    if (!g || g.score_home === null) return null
+    const winner = g.knockout_winner ?? (g.score_home > g.score_away ? g.team_home : g.score_away > g.score_home ? g.team_away : null)
+    const head = `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase}).${etPensLine(g)}`
+    if (!winner) return hit(`${head} It ended level and no winner is recorded.`, { route: 'who_advanced' })
+    return hit(g.phase === 'group' || g.phase === 'friendly' ? `${head} ${winner} won.` : `${head} ${winner} advanced.`, { route: 'who_advanced' }) } },
+
+  // v32 (round-2 sweep): "when did England Argentina play?" — a WHEN question about a named
+  // pairing answered the RESULT with no date. Date first, result attached.
+  { id: 'when_played', run: async (c) => {
+    if (!(c.spec.teams.length >= 2 && /^when\b|what (day|date|time)\b/.test(c.qlow))) return null
+    const g = await findGame(c.sbPublic, c.spec.teams[0], c.spec.teams[1])
+    if (!g) return hit(`I couldn't find a game between ${c.spec.teams[0]} and ${c.spec.teams[1]}.`, { route: 'when_played' })
+    const played = g.score_home !== null && new Date(g.kick_off_time as string) <= new Date()
+    return hit(played
+      ? `${g.team_home} ${g.score_home}-${g.score_away} ${g.team_away} (${PHASE[g.phase as string] ?? g.phase}) was played ${fmtKO(g.kick_off_time as string)}.`
+      : `${g.team_home} vs ${g.team_away} (${PHASE[g.phase as string] ?? g.phase}) kicks off ${fmtKO(g.kick_off_time as string)}.`, { route: 'when_played' }) } },
+
+  // v32 (round-2 sweep): PHASE-resolved box score — "xG for the semi final?" clarified instead
+  // of resolving the phase's game (most recent one when the phase has several).
+  { id: 'phase_box', run: async (c) => {
+    if (!(c.spec.teams.length === 0 && c.spec.phase && /\bxg\b|possession|\bshots?\b|corners|fouls|pass(es| accuracy)?|box score|match stats|\bstats\b/.test(c.qlow) && !/predict|\bmy\b|\bour\b|tournament|overall/.test(c.qlow))) return null
+    const g = await resolveGameRef(c.sbPublic, c.question, [], c.spec.phase)
+    if (!g || g.score_home === null) return null
+    return hit(await gameStats(c.sbPublic, g.team_home as string, g.team_away as string), { route: 'phase_box' }) } },
+
+  // v32 (round-2 sweep): penalty SCORERS tally — "who scored the most penalties?" answered the
+  // generic top scorer. In-play penalty goals only (game_events detail=Penalty), WC scope.
+  { id: 'penalty_scorers', run: async (c) => {
+    if (!(/penalt/.test(c.qlow) && /who (scored|took|converted|missed)|most penalt|penalty (king|leader|scorers?)|scored the most penalt|missed( a)? penalt/.test(c.qlow) && !/shoot.?out|which games?|how many games/.test(c.qlow))) return null
+    // v32 round-2: "who MISSED a penalty?" — game_events tracks missed_penalty separately.
+    if (/miss(ed)?/.test(c.qlow)) {
+      const mevs = (must(await c.sbPublic.from('game_events').select('player_name, game_id').eq('event_type', 'missed_penalty')) ?? []) as any[]
+      if (!mevs.length) return hit('Nobody has missed an in-play penalty yet.', { route: 'penalty_missed' })
+      const mg = (must(await c.sbPublic.from('games').select('id, team_home, team_away, phase').in('id', [...new Set(mevs.map((e) => e.game_id as string))])) ?? []) as any[]
+      const gm = new Map(mg.map((g) => [g.id, g]))
+      const lines = mevs.filter((e) => gm.get(e.game_id) && gm.get(e.game_id)!.phase !== 'friendly').map((e) => { const g = gm.get(e.game_id)!; return `${e.player_name} (${g.team_home} vs ${g.team_away})` })
+      return hit(lines.length ? `Missed in-play penalties (90 min, not shootouts): ${lines.join(', ')}.` : 'Nobody has missed an in-play penalty in World Cup games yet.', { route: 'penalty_missed' })
+    }
+    const evs = (must(await c.sbPublic.from('game_events').select('player_name, game_id').eq('event_type', 'goal').ilike('detail', '%Penalty%')) ?? []) as any[]
+    if (!evs.length) return hit('No in-play penalties have been scored yet.', { route: 'penalty_scorers' })
+    const games = (must(await c.sbPublic.from('games').select('id, phase').in('id', [...new Set(evs.map((e) => e.game_id as string))])) ?? []) as any[]
+    const wc = new Set(games.filter((g) => g.phase !== 'friendly').map((g) => g.id as string))
+    const tally = new Map<string, number>()
+    for (const e of evs) if (wc.has(e.game_id as string) && e.player_name) tally.set(e.player_name as string, (tally.get(e.player_name as string) ?? 0) + 1)
+    if (!tally.size) return hit('No in-play penalties have been scored in World Cup games yet.', { route: 'penalty_scorers' })
+    const max = Math.max(...tally.values())
+    const leaders = [...tally.entries()].filter(([, n]) => n === max).map(([n]) => n)
+    return hit(leaders.length === 1
+      ? `${leaders[0]} has scored the most in-play penalties: ${max}.`
+      : `${leaders.length} players are tied for most in-play penalties scored (${max} each): ${leaders.join(', ')}.`, { route: 'penalty_scorers' }) } },
 
   // v26: "when is the LAST game (of the tournament / group stage)?" is a FUTURE schedule
   // question — the latest kickoff, never a past result (this used to answer a played QF).
@@ -2179,24 +2409,6 @@ const ROUTE_RULES: Rule[] = [
 
   { id: 'compare_teams', run: async (c) =>
     c.spec.op === 'compare' && c.spec.teams.length >= 2 ? hit(await compareTeams(c.sbPublic, c.spec.teams[0], c.spec.teams[1])) : null },
-
-  // v32: RESULT-level aggregates ("how many games ended in a draw?", "which games ended 0-0?",
-  // "W/D/L distribution of finished games") — a question family with NO tool before: draws
-  // fell into tournamentProgress (games-played count), 0-0 into the upcoming-fixtures list,
-  // distribution into the next-game lookup (all confirmed live). Team-less only — "did Brazil
-  // draw?" is a form question — and never a rules/points or prediction question.
-  { id: 'outcome_aggregate', run: async (c) => {
-    if (c.spec.teams.length || c.firstPerson) return null
-    if (/point|worth|\bpts\b|predict|\bpicks?\b/.test(c.qlow)) return null
-    const score = c.qlow.match(/\b(\d)\s*[-:]\s*(\d)\b/)
-    const gamesWord = /\b(games?|matches|fixtures)\b/.test(c.qlow)
-    if (score && gamesWord && /\bend(ed|s)?\b|\bfinish(ed)?\b|final score|scoreline|result/.test(c.qlow))
-      return hit(await outcomeAggregate(c.sbPublic, 'scoreline', { sh: +score[1], sa: +score[2] }), { route: 'outcome_scoreline' })
-    if (/w\s*\/?\s*d\s*\/?\s*l|\bdistributions?\b|\bbreakdown\b|outcome split|home wins? (vs|and|versus)/.test(c.qlow) && (gamesWord || /finished|played|results?\b/.test(c.qlow)))
-      return hit(await outcomeAggregate(c.sbPublic, 'distribution'), { route: 'outcome_distribution' })
-    if (/\b(draws?|drew|tied?|level)\b/.test(c.qlow) && gamesWord && /how (many|much)|number of|\bcount\b|\bwhich\b|\blist\b|end(ed|s)?|finish(ed)?/.test(c.qlow))
-      return hit(await outcomeAggregate(c.sbPublic, 'draws', { list: /\bwhich\b|\blist\b|\bshow\b/.test(c.qlow) }), { route: 'outcome_draws' })
-    return null } },
 
   // v29: tournament-wide card TOTALS ("how many red cards in the tournament?") are a SUM(),
   // never a similarity search — this used to have no deterministic path and fell all the way
@@ -2381,6 +2593,11 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   // "thanks!" landed on a misclassified private intent and demanded a login.
   if (/^\s*(thanks?( you)?( (so|very) much)?|ok(ay)?|cool|nice|got it|great|sounds good|perfect|bye|goodbye)\s*[!.]*\s*$/i.test(question))
     return { answer: "You're welcome! Ask me anything else about the tournament or the app.", pub: { intent: 'courtesy' }, extra: { llm_used: false, route: 'courtesy' } }
+  // v32 round-2: a CONTENT-LESS follow-up fragment with nothing to attach to must clarify, not
+  // fall into an intent guess ("how so?" from an anon caller login-walled via my_data; a bare
+  // "who won?" with no game in scope did the same via group_standings).
+  if ((/^\s*(how so|why|really|what do you mean|who won|who advanced|and)\s*\??\s*$/i.test(question) || /^\s*(did|does|was|is|has)\s+(it|that)\b[^?]{0,40}\??\s*$/i.test(question)) && !d.lastAnswer && !history.length)
+    return { answer: 'Could you give me a bit more? e.g. "who won the semi final?" or "did France vs Netherlands go to penalties?"', pub: { intent: 'clarify' }, extra: { llm_used: false, clarify: true, route: 'clarify' } }
   // v31 D4: teams resolved ONCE, up front — the RULE_TOPICS gate needs them (a named team means
   // a per-team question, not a rule), and the Spec below reuses the same value (pure hoist).
   const preTeams = resolveTeams(question, names)
@@ -2684,6 +2901,10 @@ serve(async (req) => {
     const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic })
     // v26: a clause-2 clarify/parse-failure must not pollute a good clause-1 answer.
     if (r2.extra?.clarify && !r1.extra?.clarify) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
+    // v32 round-2: symmetric — if clause 1 could not even be understood (clarify), clause 2
+    // borrowed from nothing; asking the ONE clarifying question beats gluing a second answer
+    // ("did it go to pens? and who advanced?" used to return clarify + a login wall).
+    if (r1.extra?.clarify && !r2.extra?.clarify) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
     // v31 D3: a clause-2 validation flag must not be silently dropped when clause 1 is clean.
     const vfBoth = [...new Set([...(Array.isArray(r1.extra?.validation_fail) ? r1.extra.validation_fail as string[] : []), ...(Array.isArray(r2.extra?.validation_fail) ? r2.extra.validation_fail as string[] : [])])]
     return await finish({ step: 'final', ok: true, spec: r1.pub, spec2: r2.pub, compound: true, llm_used: !!(r1.extra.llm_used || r2.extra.llm_used), ...(vfBoth.length ? { validation_fail: vfBoth } : {}) }, `${r1.answer}\n\n${r2.answer}`)

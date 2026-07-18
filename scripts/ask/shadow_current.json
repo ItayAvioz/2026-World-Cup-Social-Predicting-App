@@ -22,7 +22,7 @@
   {
     "q": "provide W/D/L finished games ditrbutions",
     "route": "outcome_distribution",
-    "answer": "Of 92 finished games (90-minute results): 56 home wins (61%) · 21 draws (23%) · 15 away wins (16%)."
+    "answer": "Of 93 finished games (90-minute results): 57 home wins (61%) · 21 draws (23%) · 15 away wins (16%)."
   },
   {
     "q": "what is the most chossen top scorer by users?",
@@ -47,7 +47,7 @@
   {
     "q": "in finisgeh games, how much end with draw?",
     "route": "outcome_draws",
-    "answer": "21 of the 92 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "which games ended 0-0?",
@@ -62,12 +62,12 @@
   {
     "q": "how much games were finished in draw result?",
     "route": "outcome_draws",
-    "answer": "21 of the 92 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "how much games finish in draw?",
     "route": "outcome_draws",
-    "answer": "21 of the 92 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "when ai summary created?",
@@ -82,7 +82,7 @@
   {
     "q": "what was the last finish game?",
     "route": "last_game",
-    "answer": "England 2-1 Argentina (Semi-Final) after 90'. It did not go to extra time or penalties."
+    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "how much users can be in group?",
@@ -142,7 +142,7 @@
   {
     "q": "what is the coming next game?",
     "route": "next_game",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "how the trivia work?",
@@ -157,7 +157,7 @@
   {
     "q": "explain on the app",
     "route": "rules_llm",
-    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and Top Scorer for each group, and participate in a knockout bracket game. \n\nThe app features a dashboard for tracking your predictions, group standings, and trivia questions. You can create or join private groups, and the app automatically predicts for you if you miss a game. Points are awarded based on the accuracy of your predictions, and there's a nightly AI roast for some fun interaction.\n\nIf you have specific questions about how to navigate or use certain features, feel free to ask!"
+    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and Top Scorer for each group, and participate in daily trivia. The app features private groups for friendly competition, and you can track your stats and standings easily. For more details, check the \"How to Play\" section in the app!"
   },
   {
     "q": "How am I doing?",
@@ -187,7 +187,7 @@
   {
     "q": "what is the next game?",
     "route": "next_game",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "which team has the best defense?",
@@ -342,7 +342,7 @@
   {
     "q": "xplain hw trivia wrks",
     "route": "rules_llm",
-    "answer": "Trivia in the app consists of one question per day, available at 22:00 Israel time. Each question stays open for 24 hours, giving you a chance to answer. You have 40 seconds to respond, and there are no retries if you miss it. Each correct answer earns you 1 point, but these points are banked silently and will be revealed all at once after the last trivia question closes on July 21. Enjoy the challenge!"
+    "answer": "Trivia in the app consists of one question per day, available at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there's only one shot — no retries. If you miss it, it counts as wrong. You earn 1 point for each correct answer, and trivia points are banked silently, landing all at once after the last trivia question closes. Enjoy the challenge!"
   },
   {
     "q": "how many membrs can b in a group",
@@ -362,7 +362,7 @@
   {
     "q": "wat is teh nxt game",
     "route": "schedule",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "how many members can be in a froup?",
@@ -382,12 +382,12 @@
   {
     "q": "what was the lastgame?",
     "route": "last_game",
-    "answer": "England 2-1 Argentina (Semi-Final) after 90'. It did not go to extra time or penalties."
+    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "whats the nextgame?",
     "route": "next_game",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "who is the topscorer?",
@@ -427,7 +427,7 @@
   {
     "q": "explain how the trivia works",
     "route": "rules_llm",
-    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer, and there's only one shot with no retries. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently and will be added to your total after the last trivia question closes on July 21. Enjoy!"
+    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer, and there's only one shot with no retries. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently and will be added to your total after the last trivia question closes. Enjoy playing!"
   },
   {
     "q": "which team is the most chosen for champion? and how much?",
@@ -437,7 +437,7 @@
   {
     "q": "what is my best positive streak in Alpha Wolves?",
     "route": "my_data",
-    "answer": "Alpha Wolves — Exact 50% (2/4) · Hit 75% (3/4) · 🔥 Best hot streak: 2 scored games in a row with points."
+    "answer": "Alpha Wolves — Exact 40% (2/5) · Hit 60% (3/5) · 🔥 Best hot streak: 2 scored games in a row with points."
   },
   {
     "q": "where i can road to final?",
@@ -447,7 +447,7 @@
   {
     "q": "what was the last game finished?",
     "route": "last_game",
-    "answer": "England 2-1 Argentina (Semi-Final) after 90'. It did not go to extra time or penalties."
+    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "how many members can be in a group?",
@@ -462,7 +462,7 @@
   {
     "q": "in which of my groups i have the best streak?",
     "route": "my_data",
-    "answer": "You're doing best in Alpha Wolves: Exact 50% (2/4) · Hit 75% (3/4) · 🔥 Hot streak: 1 scored game in the points."
+    "answer": "You're doing best in Alpha Wolves: Exact 40% (2/5) · Hit 60% (3/5) · 🧊 Cold streak: 1 scored game without points."
   },
   {
     "q": "who finished 1 in group d?",
@@ -472,17 +472,17 @@
   {
     "q": "what is the nexg game?",
     "route": "schedule",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "where i can see my predictions?",
     "route": "rules_llm",
-    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and your history of completed games. Enjoy checking them out!"
+    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and completed game history with full stats. Enjoy tracking your picks!"
   },
   {
     "q": "where i can see game stat?",
     "route": "rules_llm",
-    "answer": "You can see game stats on the Match Page. After the game, it provides full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, xG, and the goal timeline. Just tap on any game to access this information!"
+    "answer": "You can see game stats on the Match Page. After the game finishes, it will show full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, xG, and the goal timeline. Just tap on any game to access this information!"
   },
   {
     "q": "show the group D standings",
@@ -502,7 +502,7 @@
   {
     "q": "what is my best streak in Alpha Wolves?",
     "route": "my_data",
-    "answer": "Alpha Wolves — Exact 50% (2/4) · Hit 75% (3/4) · 🔥 Best hot streak: 2 in a row with points · 🧊 Worst cold streak: 1 in a row without."
+    "answer": "Alpha Wolves — Exact 40% (2/5) · Hit 60% (3/5) · 🔥 Best hot streak: 2 in a row with points · 🧊 Worst cold streak: 1 in a row without."
   },
   {
     "q": "where i can see ai summary?",
@@ -577,12 +577,12 @@
   {
     "q": "when is the next game?",
     "route": "next_game",
-    "answer": "The next game is Portugal vs Argentina — Third Place, Jul 18, 21:00 UTC (00:00 Israel)."
+    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
   },
   {
     "q": "what stadium is the final played in?",
     "route": "untracked_stat",
-    "answer": "I don't track venues or that kind of detail — for a game I can give you the kickoff time, score, scorers and match stats (shots, possession, corners, fouls, cards, offsides, xG)."
+    "answer": "I don't track that stat — for a game I can give you the kickoff time, score, scorers and match stats (shots, possession, corners, fouls, cards, offsides, xG); for players: goals, assists and cards."
   },
   {
     "q": "when does the AI roast come out?",
@@ -592,7 +592,7 @@
   {
     "q": "what is my exact percentage and hit rate?",
     "route": "my_data",
-    "answer": "Exact 43% (3/7) · Hit 57% (4/7) · 🧊 Cold streak: 1 scored game without points."
+    "answer": "Exact 33% (3/9) · Hit 44% (4/9) · 🧊 Cold streak: 3 scored games without points."
   },
   {
     "q": "who picked Brazil as champion in Alpha Wolves?",
@@ -612,12 +612,12 @@
   {
     "q": "what are Argentina's last 3 games?",
     "route": "recent_form",
-    "answer": "Argentina — last 3 games (most recent first): L W W\n• L 1-2 vs England (Semi-Final)\n• W 2-1 vs Colombia (Quarter-Final)\n• W 1-0 vs Cape Verde (Round of 32)"
+    "answer": "Argentina — last 3 games (most recent first): L L W\n• L 2-3 vs Portugal (Third Place)\n• L 1-2 vs England (Semi-Final)\n• W 2-1 vs Colombia (Quarter-Final)"
   },
   {
     "q": "how has Argentina been doing recently?",
     "route": "recent_form",
-    "answer": "Argentina — last 4 games (most recent first): L W W W\n• L 1-2 vs England (Semi-Final)\n• W 2-1 vs Colombia (Quarter-Final)\n• W 1-0 vs Cape Verde (Round of 32)\n• W 2-0 vs Austria (Group Stage)"
+    "answer": "Argentina — last 5 games (most recent first): L L W W W\n• L 2-3 vs Portugal (Third Place)\n• L 1-2 vs England (Semi-Final)\n• W 2-1 vs Colombia (Quarter-Final)\n• W 1-0 vs Cape Verde (Round of 32)\n• W 2-0 vs Austria (Group Stage)"
   },
   {
     "q": "who is top of group A?",
