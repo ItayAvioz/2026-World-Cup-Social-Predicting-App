@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1210" viewBox="0 0 1240 1210" font-family="Segoe UI, Arial, sans-serif">
   <rect width="1240" height="1210" fill="#0a0a0a"/>
-  <text x="620" y="42" fill="#ffffff" font-size="25" font-weight="700" text-anchor="middle">ask bot — 12-stage pipeline &amp; tools (DEV only) · v29-v32: context gate + shape rules + enforced validation</text>
+  <text x="620" y="42" fill="#ffffff" font-size="25" font-weight="700" text-anchor="middle">ask bot — 12-stage pipeline &amp; tools (DEV only) · v29-v33: context gate + shape rules + enforced validation + login-wall choke point</text>
 
   <!-- legend -->
   <g font-size="13">
@@ -124,7 +124,7 @@
     <text x="716" y="386" fill="#eaeaea" font-weight="600">globalStandings / userPicksPublic</text><text x="960" y="386" fill="#9a9a9a">global board · a user's public picks</text>
     <text x="716" y="406" fill="#eaeaea" font-weight="600">gameOdds / championOdds / wcGroupTable</text><text x="1000" y="406" fill="#9a9a9a">odds · WC groups A–L</text>
   </g>
-  <text x="716" y="419" fill="#7fbfa0" font-size="10">v32: fuzzy typo repair · outcome aggregates · platform popularity · done() ENFORCES (self-heal on any flag)</text>
+  <text x="716" y="419" fill="#7fbfa0" font-size="10">v32: fuzzy typo repair · outcome aggregates · platform popularity · done() ENFORCES (self-heal on any flag) · v33: NEED_LOGIN choke point (public Q never walled; noPrivate re-route) · friendly-excluded team/player/cards scope</text>
 
   <!-- group B: registry / intent tools -->
   <rect x="700" y="424" width="500" height="196" rx="9" fill="#101010" stroke="#333"/>

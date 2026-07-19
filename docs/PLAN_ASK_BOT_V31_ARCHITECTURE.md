@@ -4,7 +4,27 @@
 quality, accurate, professional, and reliable" — not more point-fixes, but closing the
 *architecture* gaps that keep producing the same bug shape.
 
-## STATUS (2026-07-18, v32): the §7 deferred list is now largely CLOSED — see below.
+## STATUS (2026-07-19, v33 — FINAL fine-tuning round, EF v71): the tool-bound-auth class is closed at its choke point.
+
+**v33 (EF v71, 2026-07-19)** — the last improvement round, driven entirely by the **1000-question
+8-area audit** (docs/ASK_BOT_1000Q_TEST_2026-07-19.csv + _SUMMARY: 890 PASS / 49 PARTIAL /
+61 FAIL, avg 94.4/100). Four WIDE fixes: (1) **login-wall choke point in `done()`** — 53/61
+audit failures were anon questions with zero personal wording walled by a misclassified private
+tool; the wall now requires personal wording (I/my/we/our) or a named friend group (honest
+"members only" copy — never "your personal data"); everything else re-routes once with private
+tools disabled (`noPrivate` threading). This closes the class V6 was reserved for — the general
+per-tool auth map is no longer needed for the wall itself. New BLOCKING suite
+`anon_public_test.mjs` (17 verbatim audit rows) pins it. (2) **friendly-excluded scope** for
+cardsTotal/teamStat (now exact, games-table-computed)/playerStatScoped — "in the tournament"
+finally means ONE thing across sibling tools (audit finding #2; club test games in phase='group'
+stay in scope by design). (3) **isTemplate shape/entity exemptions** — the audit's 49 PARTIALs
+were validator false-positives on correct deterministic templates. (4) **grounded= leak guard**
+in answerCrew. + popularity family completed (least/rarest/majority-gap/bet-on/anyone-picking),
+app_census widened (created/total/smallest). Gate: all NINE suites green (the 8 v32 suites +
+anon_public 17). Still deferred (unchanged, needs its own cycle): FULL D2 typed-rows
+ToolResult, V3 entity-registry gate, rulesFAQ PR3.
+
+## PREVIOUS STATUS (2026-07-18, v32): the §7 deferred list is now largely CLOSED — see below.
 
 **v32 fine-tuning cycle (EF v66, 2026-07-18)** — driven by a real user session transcript (10
 annotated failures) + the v31 observe-mode validation telemetry. Every fix targeted a failure

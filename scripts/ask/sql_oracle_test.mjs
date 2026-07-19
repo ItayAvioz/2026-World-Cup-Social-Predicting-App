@@ -81,16 +81,24 @@ const CASES = [
     id: 'mancity-redcards',
     auth: 'anon',
     question: 'how many red cards does Manchester City have in total?',
-    oracle: async () => (await rest('game_team_stats?select=red_cards&team=eq.Manchester%20City', KEY)).reduce((s, r) => s + (r.red_cards ?? 0), 0),
+    // v33 SPEC: friendlies excluded — team/player/cards tools now share the tournament_progress
+    // scope (phase<>'friendly'), closing the 1000-question audit's finding #2.
+    oracle: async () => {
+      const fr = await rest('games?select=id&phase=eq.friendly', KEY)
+      const friendly = new Set(fr.map((g) => g.id))
+      const rows = await rest('game_team_stats?select=game_id,red_cards&team=eq.Manchester%20City', KEY)
+      return rows.filter((r) => !friendly.has(r.game_id)).reduce((s, r) => s + (r.red_cards ?? 0), 0)
+    },
     extract: /(\d+)\s+red card/i,
   },
   {
     id: 'mancity-goals',
     auth: 'anon',
     question: 'how many goals has Manchester City scored in total?',
-    // Same formula the M139 fix established server-side: 90-min score + ET-period goals, pens excluded.
+    // Same formula the M139 fix established server-side: 90-min score + ET-period goals, pens
+    // excluded. v33 SPEC: +phase<>'friendly' (see mancity-redcards note).
     oracle: async () => {
-      const rows = await rest('games?select=team_home,team_away,score_home,score_away,et_score_home,et_score_away&or=(team_home.eq.Manchester%20City,team_away.eq.Manchester%20City)&score_home=not.is.null', KEY)
+      const rows = await rest('games?select=team_home,team_away,score_home,score_away,et_score_home,et_score_away&or=(team_home.eq.Manchester%20City,team_away.eq.Manchester%20City)&score_home=not.is.null&phase=neq.friendly', KEY)
       return rows.reduce((s, g) => s + (g.team_home === 'Manchester City'
         ? (g.score_home ?? 0) + (g.et_score_home ?? 0)
         : (g.score_away ?? 0) + (g.et_score_away ?? 0)), 0)

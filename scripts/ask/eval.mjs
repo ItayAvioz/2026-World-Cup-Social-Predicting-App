@@ -31,6 +31,9 @@ results.shape = run('shape_test.mjs (topic × question-shape matrix)', 'scripts/
 results.scope_matrix = run('scope_matrix_test.mjs (scope correctness)', 'scripts/ask/scope_matrix_test.mjs')
 results.sql_oracle = run('sql_oracle_test.mjs (numbers vs SQL ground truth)', 'scripts/ask/sql_oracle_test.mjs')
 results.context_isolation = run('context_isolation_test.mjs (context-bleed immunity, curated)', 'scripts/ask/context_isolation_test.mjs')
+// v33: encodes the 1000-question audit's #1 finding (53/61 failures = login-walled public
+// questions) as a permanent gate — see docs/ASK_BOT_1000Q_TEST_SUMMARY_2026-07-19.md.
+results.anon_public = run('anon_public_test.mjs (no login wall on public questions)', 'scripts/ask/anon_public_test.mjs')
 
 console.log('\n========== ADVISORY (not gating, run by hand) ==========')
 console.log('  node scripts/ask/audit_probe.mjs out.json            (82Q exploratory sweep)')

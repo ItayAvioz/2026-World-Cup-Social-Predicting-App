@@ -70,7 +70,37 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 69** = the **v32 fine-tuning cycle** (2026-07-18/19, two rounds:
+> Current: DEV runs EF **version 71** = the **v33 final fine-tuning round** (2026-07-19; v70 +
+> one gate-caught fix: "biggest/largest/smallest" added to groupRefCandidate's STOP list — the
+> new anon_public suite caught "what is the biggest group?" being read as a group NAMED
+> "biggest" and walled), driven
+> entirely by the **1000-question 8-area audit** (docs/ASK_BOT_1000Q_TEST_2026-07-19.csv +
+> _SUMMARY). Four WIDE fixes, no point patches: (1) **the login-wall choke point** — 53 of the
+> audit's 61 failures were ANON questions with zero personal wording misrouted into a private
+> tool and walled; `done()` now intercepts every NEED_LOGIN: personal wording (I/my/we/our)
+> keeps the wall, a named friend group gets an honest "visible to its members only" wall (never
+> "your personal data"), and everything else re-routes ONCE with private tools disabled
+> (`noPrivate` threading through RouteDeps/RuleCtx/private_registry/REGISTRY dispatch). This
+> closes the recurring tool-bound-auth CLASS at the choke point instead of per-intent (it had
+> been re-fixed 3× in v31/v32 and kept reappearing). Guarded by the new BLOCKING suite
+> `anon_public_test.mjs` (17 cases, all verbatim audit FAIL rows). (2) **scope consistency** —
+> cardsTotal/teamStat/playerStat summed ALL rows (warm-up friendlies included) while
+> tournament_progress excludes them, so "in the tournament" meant two different things in
+> sibling answers; all three now exclude phase='friendly' (club test games in phase='group'
+> remain in scope — deliberate DEV data), teamStat computes EXACT sums from `games` (90'+ET,
+> pens excluded, knockout_winner W/D/L — no more "about N"), playerStatScoped recomputes from
+> game_player_stats (the tournament_stats VIEWS still include friendlies — EF-side fix only, no
+> DEV-only migration that would break dev↔prod view parity). sql_oracle mancity oracles updated
+> to the new scope. (3) **template exemptions for shape/entity validators** — deterministic
+> list/lookup templates ("Games today: …", "X has no upcoming games scheduled", "The Final
+> is …", leaderboard/recent-form strips) were every remaining shape false-positive in the audit
+> (49 PARTIALs); exempted like refusals (isTemplate), +"Which game?" added to REFUSAL_ANSWER_RE.
+> (4) **internal-flag leak guard** — one audit answer was literally "grounded=false" (rag_crew
+> model echoing its schema); flag-shaped text is discarded before it can ship. Plus the
+> popularity family completed from audit rows: least/rarest (ascending tally), "majority top
+> scorer pick", "most users bet on", "is anyone picking X"; app_census +created/total/smallest.
+>
+> Previous: EF v69 = the **v32 fine-tuning cycle** (2026-07-18/19, two rounds:
 > round 1 from a real user session transcript + the v31 observe-mode validation telemetry;
 > round 2 from a **600-question 8-area sweep** — the 8-agent×75-question workflow hit the
 > monthly subagent spend limit, so the identical sweep ran INLINE via `scripts/ask/area_probe.mjs`
@@ -410,6 +440,19 @@ the suite that matters: `wide_test` sat at 99/99 while this one caught 6 live fa
 i" pronoun bug, a how-to phrasing gated behind login, a typo that replayed the previous answer
 verbatim, a 57-row table for a one-name question, an unnamed "which group" answer, a trivia count
 answered with the point-value FAQ). Target: 17/17.
+
+**`scripts/ask/anon_public_test.mjs` — v33 BLOCKING: no login wall on public questions.** 17 cases,
+every one a verbatim FAIL row from the 1000-question audit (docs/ASK_BOT_1000Q_TEST_2026-07-19.csv):
+public anon questions must never see "personal data"/a login demand; named-group anon questions get
+the honest members-only wall; personal anon questions (my/we) keep the classic wall. This pins the
+tool-bound-auth class that re-appeared in every cycle from v31 on.
+
+**`scripts/ask/sweep_questions_1000.mjs` + `area_probe_resumable.mjs` + `build_factbank.mjs` +
+`grade_1000.mjs` — the 1000-question audit pipeline (advisory, re-runnable).** 8 areas × 125
+difficulty-tagged questions → resumable live probe (JSONL, survives timeouts) → DB fact-bank →
+scored CSV + verdicts. Output: docs/ASK_BOT_1000Q_TEST_2026-07-19.csv + _SUMMARY. ⚠️ build_factbank
+paginates past PostgREST's 1000-row cap — an unpaginated pull silently truncated player stats and
+produced FALSE mismatches on the first grading run.
 
 **`scripts/ask/audit_probe.mjs out.json` — 82-question adversarial sweep across every domain.**
 Exploratory, not graded (yet) — print question→route→answer and read it. This found the worst bug

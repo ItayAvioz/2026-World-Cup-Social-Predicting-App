@@ -800,6 +800,20 @@ function playerStat(p: any, dim: string | null): string {
   if (dim === 'cards' || dim === 'yellow' || dim === 'red') return `${p.player_name} (${p.team}) has ${p.total_yellow_cards} yellow and ${p.total_red_cards} red cards in ${p.games_played} games.`
   return `${p.player_name} (${p.team}) has ${p.total_goals} goal${p.total_goals === 1 ? '' : 's'} in ${p.games_played} games.`
 }
+// v33 (audit finding #2): player_tournament_stats VIEW includes warm-up friendlies — recompute
+// the totals from game_player_stats minus friendly games so a player's numbers use the same
+// "tournament" scope as every other tool. Falls back to the view row if the recompute is empty.
+async function playerStatScoped(sb: Sb, p: any, dim: string | null): Promise<string> {
+  const { data: fr } = await sb.from('games').select('id').eq('phase', 'friendly')
+  const friendly = new Set((fr ?? []).map((r: any) => r.id))
+  const { data: rows } = await sb.from('game_player_stats').select('game_id, goals, assists, yellow_cards, red_cards').eq('player_name', p.player_name)
+  const use = ((rows ?? []) as any[]).filter((r) => !friendly.has(r.game_id))
+  if (use.length) {
+    const sum = (k: string) => use.reduce((s, r) => s + (r[k] ?? 0), 0)
+    p = { ...p, games_played: use.length, total_goals: sum('goals'), total_assists: sum('assists'), total_yellow_cards: sum('yellow_cards'), total_red_cards: sum('red_cards') }
+  }
+  return playerStat(p, dim)
+}
 // P1: per-team aggregate ("how many games has Brazil played", "how many goals has Brazil scored")
 // v31: per-team discipline/set-piece totals summed straight from game_team_stats — "how many
 // red cards does Manchester City have?" used to fall to the generic W/D/L line (a confidently
@@ -814,23 +828,37 @@ const TEAM_GTS_DIM: Record<string, { cols: string[]; noun: string }> = {
   shots: { cols: ['shots_total'], noun: 'shot' },
 }
 async function teamStat(sb: Sb, team: string, dim: string | null): Promise<string> {
-  const data = must(await sb.from('team_tournament_stats').select('team, games_played, wins, draws, losses, avg_goals_scored, avg_goals_conceded').eq('team', team).limit(1)) as any[]
-  const r = (data ?? [])[0]
-  if (r && (dim === 'goals_or_attack' || dim === 'goals')) return `${team} have scored about ${Math.round((r.avg_goals_scored as number) * (r.games_played as number))} goals in ${r.games_played} games (${(+r.avg_goals_scored).toFixed(1)} per game).`
-  if (r && dim === 'defense') return `${team} have conceded about ${Math.round((r.avg_goals_conceded as number) * (r.games_played as number))} goals in ${r.games_played} games (${(+r.avg_goals_conceded).toFixed(1)} per game).`
+  // v33 (audit finding #2): computed straight from `games` with phase<>'friendly' — the
+  // tournament_stats VIEWS include warm-up friendlies, so per-team goals/games disagreed with
+  // the friendly-excluding tournament_progress tool ("in the tournament" meant two scopes).
+  // Bonus: exact sums replace the old avg*games "about N" rounding. Goals = 90' + ET period,
+  // pens excluded (the M139 formula); W/D/L uses knockout_winner for decided KO games.
+  const { data: gs } = await sb.from('games').select('id, team_home, team_away, score_home, score_away, et_score_home, et_score_away, knockout_winner').or(`team_home.eq.${team},team_away.eq.${team}`).neq('phase', 'friendly').not('score_home', 'is', null)
+  const games = (gs ?? []) as any[]
+  const n = games.length
+  if (!n) return `I don't have any completed games for ${team} yet.`
+  let gf = 0, ga = 0, w = 0, dr = 0, l = 0
+  for (const g of games) {
+    const home = g.team_home === team
+    gf += home ? (g.score_home ?? 0) + (g.et_score_home ?? 0) : (g.score_away ?? 0) + (g.et_score_away ?? 0)
+    ga += home ? (g.score_away ?? 0) + (g.et_score_away ?? 0) : (g.score_home ?? 0) + (g.et_score_home ?? 0)
+    const winner = g.knockout_winner ?? (g.score_home > g.score_away ? g.team_home : g.score_away > g.score_home ? g.team_away : null)
+    if (winner === team) w++
+    else if (winner) l++
+    else dr++
+  }
+  if (dim === 'goals_or_attack' || dim === 'goals') return `${team} have scored ${gf} goal${gf === 1 ? '' : 's'} in ${n} games (${(gf / n).toFixed(1)} per game).`
+  if (dim === 'defense') return `${team} have conceded ${ga} goal${ga === 1 ? '' : 's'} in ${n} games (${(ga / n).toFixed(1)} per game).`
   if (dim && TEAM_GTS_DIM[dim]) {
     const m = TEAM_GTS_DIM[dim]
-    const rows = (must(await sb.from('game_team_stats').select(m.cols.join(', ')).eq('team', team)) ?? []) as any[]
+    const ids = games.map((g) => g.id)
+    const rows = (must(await sb.from('game_team_stats').select(['game_id', ...m.cols].join(', ')).eq('team', team).in('game_id', ids)) ?? []) as any[]
     if (rows.length) {
       const tot = rows.reduce((s, row) => s + m.cols.reduce((x, c) => x + (row[c] ?? 0), 0), 0)
       return `${team} have ${tot} ${m.noun}${tot === 1 ? '' : 's'} in ${rows.length} game${rows.length === 1 ? '' : 's'}.`
     }
   }
-  if (r) return `${team} have played ${r.games_played} games (${r.wins}W ${r.draws}D ${r.losses}L).`
-  // fallback: count directly from games when the stats view has no row yet
-  const { data: gs } = await sb.from('games').select('score_home').or(`team_home.eq.${team},team_away.eq.${team}`).neq('phase', 'friendly').not('score_home', 'is', null)
-  const n = (gs ?? []).length
-  return n ? `${team} have played ${n} game${n === 1 ? '' : 's'} in the tournament.` : `I don't have any completed games for ${team} yet.`
+  return `${team} have played ${n} games (${w}W ${dr}D ${l}L).`
 }
 // P1: game detail — extra time / penalties / result attributes
 async function gameDetail(sb: Sb, a: string, b: string): Promise<string> {
@@ -1030,7 +1058,12 @@ async function myTriviaScore(sbUser: Sb, me: string): Promise<string> {
 // ANYWHERE in the facts?", and every player card contains "0 yellow, 0 red". A SUM() must
 // never reach a similarity search: RAG describes, SQL counts.
 async function cardsTotal(sb: Sb, color: 'red' | 'yellow' | 'both'): Promise<string> {
-  const rows = (must(await sb.from('game_team_stats').select('red_cards, yellow_cards')) ?? []) as any[]
+  // v33 (audit finding #2): warm-up friendlies excluded — this tool summed ALL game_team_stats
+  // rows while tournament_progress/goals scope to phase<>'friendly', so "in the tournament"
+  // silently meant two different things in two sibling answers.
+  const { data: fr } = await sb.from('games').select('id').eq('phase', 'friendly')
+  const friendly = new Set((fr ?? []).map((r: any) => r.id))
+  const rows = ((must(await sb.from('game_team_stats').select('game_id, red_cards, yellow_cards')) ?? []) as any[]).filter((r) => !friendly.has(r.game_id))
   const red = rows.reduce((s, r) => s + (r.red_cards ?? 0), 0)
   const yellow = rows.reduce((s, r) => s + (r.yellow_cards ?? 0), 0)
   if (color === 'red') return `There have been ${red} red card${red === 1 ? '' : 's'} in the tournament so far.`
@@ -1154,7 +1187,9 @@ function groupRefCandidate(q: string): string | null {
   // v23: any "<words> group" now qualifies (was preposition-anchored only, so "the legends
   // group predictions" slipped through and dumped ALL the caller's groups). Filler tokens
   // are stripped from the front; if nothing meaningful remains it's not a group name.
-  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'entire', 'global', 'overall', 'app', 'main', 'current', 'live', 'full', 'complete', 'world', 'worldwide', 'total', 'league', 'points', 'today', 'todays'])
+  // v33: size adjectives added — "what is the BIGGEST group?" extracted "biggest" as a
+  // friend-group name, which blocked app_census AND triggered the named-group login wall.
+  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'entire', 'global', 'overall', 'app', 'main', 'current', 'live', 'full', 'complete', 'world', 'worldwide', 'total', 'league', 'points', 'today', 'todays', 'biggest', 'largest', 'smallest', 'bigger', 'smaller', 'big', 'small'])
   const NOUN_STOP = new Set(['stage', 'stages', 'prediction', 'predictions', 'member', 'members', 'leaderboard', 'standings', 'standing', 'table', 'board', 'chat', 'rank', 'ranking', 'game', 'games', 'player', 'players', 'team', 'teams', 'scorer', 'scorers', 'trivia', 'bracket', 'champion'])
   // v26: "<Name> leaderboard/standings/table" (no literal word "group") is also a group-name
   // reference — "Beta Sharks leaderboard" was grabbed by the bare global-leaderboard cue.
@@ -1477,7 +1512,10 @@ async function mostPopularPick(sbUser: Sb, groups: Grp[], target: Grp | null, wa
 // looks like (rulesFAQ exclusion, detectRuleTopic exclusion, my_data branch, most_popular_pick
 // rule) — they had drifted into four hand-copied variants. Also covers the top-N form
 // ("top 3 chosen top scorer"), which none of the copies matched.
-const POPULARITY_RE = /most (chosen|picked|popular|common)|(top|best) ?\d+ (chosen|picked|popular|most)|majority (pick|chose|picked)|everyone'?s? pick|how many( \w+)?\b[\s\S]{0,20}\b(picked|chose|chosen|selected|bet on)\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)/
+// v33 (audit): +the NEGATIVE direction (least chosen / rarest), +"majority top scorer pick"
+// (the word-gap form), +"most users bet on", +"is anyone picking X" — all real sweep questions
+// that fell out of this family and got login-walled via a my_data classify.
+const POPULARITY_RE = /most (chosen|picked|popular|common)|least (chosen|picked|popular|common)|\brarest\b|(top|best) ?\d+ (chosen|picked|popular|most)|majority( \w+){0,3} (pick|chose|picked)|everyone'?s? pick|how many( \w+)?\b[\s\S]{0,20}\b(picked|chose|chosen|selected|bet on)\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)|most (users|players|people)\b[\s\S]{0,15}\b(picked|chose|bet on|selected)|\banyone\b[\s\S]{0,12}\b(picking|picked|chosen?)\b/
 // v32: PLATFORM-WIDE pick popularity — "most chosen champion by users / in all the app".
 // A live session asked exactly this and got a groups-only answer. Post-lock picks are PUBLIC
 // data (they're printed on every leaderboard — see the public/private-line audit), so the
@@ -1492,7 +1530,9 @@ async function platformPopularPick(sbService: Sb, wantScorer: boolean, q: string
   if (!rows.length) return `Nobody has made a ${kind} pick yet.`
   const tally = new Map<string, number>()
   for (const r of rows) if (r[col]) tally.set(r[col] as string, (tally.get(r[col] as string) ?? 0) + 1)
-  const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1])
+  // v33: least/rarest = same tally, ascending (only names actually picked can qualify).
+  const wantLeast = /\bleast\b|\brarest\b/.test(q.toLowerCase())
+  const sorted = [...tally.entries()].sort((a, b) => (wantLeast ? a[1] - b[1] : b[1] - a[1]))
   if (team) {
     const n = tally.get(team) ?? 0
     return `${n} of ${rows.length} ${kind} picks across the app are ${team} (${Math.round((n / rows.length) * 100)}%).`
@@ -1500,7 +1540,7 @@ async function platformPopularPick(sbService: Sb, wantScorer: boolean, q: string
   const tn = q.toLowerCase().match(/\b(?:top|best|first)\s*(\d{1,2})\b/)
   const n = tn ? Math.min(Math.max(+tn[1], 1), 10) : 3
   const list = sorted.slice(0, n).map(([name, cnt], i) => `${i + 1}. ${name} — ${cnt} pick${cnt === 1 ? '' : 's'} (${Math.round((cnt / rows.length) * 100)}%)`).join('\n')
-  return `Most chosen ${kind} across the whole app (${rows.length} picks, one per user per group):\n${list}`
+  return `${wantLeast ? 'Least' : 'Most'} chosen ${kind} across the whole app (${rows.length} picks, one per user per group):\n${list}`
 }
 // v27: match-day-scoped points ("how did my group do yesterday?") — the 07:30-UTC
 // match-day boundary the whole app uses (M110). offset 0 = current match-day, -1 = previous.
@@ -1571,6 +1611,7 @@ async function appCensus(sb: Sb, kind: 'groups' | 'users' | 'exact', q: string):
     const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1])
     if (!sorted.length) return 'No groups exist yet.'
     if (/biggest|largest/.test(q)) { const [n, cnt] = sorted[0]; return `The biggest group is ${n} with ${cnt} member${cnt === 1 ? '' : 's'}.` }
+    if (/smallest/.test(q)) { const [n, cnt] = sorted[sorted.length - 1]; return `The smallest group is ${n} with ${cnt} member${cnt === 1 ? '' : 's'}.` }  // v33
     return `There are ${sorted.length} groups in the app: ` + sorted.map(([n, cnt]) => `${n} (${cnt})`).join(', ') + '.'
   }
   if (kind === 'users') {
@@ -1780,6 +1821,9 @@ async function answerCrew(openai: OpenAI, question: string, cards: { content: st
   ] })
   let text = '', grounded = false
   try { const p = JSON.parse(w.choices[0]?.message?.content ?? '{}'); text = String(p.answer ?? '').trim(); grounded = p.grounded !== false } catch { /* fall through to fallback */ }
+  // v33 (audit finding #4): a model echoing the schema key ("grounded=false") once shipped as
+  // the user-visible answer. Internal-flag-shaped text is never an answer.
+  if (/^[\s{"']*grounded\b/i.test(text)) { text = ''; grounded = false }
   // v29 V4: a number must appear in the SAME single card, not merely somewhere across the
   // whole concatenated fact set — the old set-membership check is why "0 red cards" passed
   // (every player card contains "0 yellow, 0 red", so a bare "0" was always in scope).
@@ -1932,7 +1976,7 @@ const REGISTRY: Tool[] = [
 
 // v19: the whole per-question routing pipeline, callable once per clause so compound
 // questions answer BOTH parts. Returns {answer, pub(lic spec), extra} instead of a Response.
-type RouteDeps = { openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[]; lastAnswer?: string; isolatedRetry?: boolean }
+type RouteDeps = { openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[]; lastAnswer?: string; isolatedRetry?: boolean; noPrivate?: boolean }
 type RouteOut = { answer: string; pub: Record<string, unknown>; extra: Record<string, unknown> }
 
 // ---- v28: the deterministic override chain, as an ORDERED RULE TABLE ----
@@ -1953,7 +1997,7 @@ type RuleCtx = {
   question: string; qlow: string; spec: Spec; agg: ReturnType<typeof detectAgg>; firstPerson: boolean
   history: string[]; lastAnswer?: string
   openai: OpenAI; sbPublic: Sb; sbUser: Sb; sbService: Sb; me: () => Promise<string | null>; names: string[]
-  groupScoped: boolean; namedGroup: ReturnType<typeof groupRefCandidate>
+  groupScoped: boolean; namedGroup: ReturnType<typeof groupRefCandidate>; noPrivate: boolean
 }
 type RuleHit = { answer: string; extra?: Record<string, unknown> }
 type Rule = { id: string; run: (c: RuleCtx) => Promise<RuleHit | null> }
@@ -2072,7 +2116,9 @@ const ROUTE_RULES: Rule[] = [
   // v32 (round-2 sweep): app census — public-tier facts that used to login-wall.
   { id: 'app_census', run: async (c) => {
     if (c.namedGroup || c.groupScoped || c.firstPerson) return null
-    if (/\b(what|which|list|all|how many)\b[\s\S]{0,20}\bgroups?\b[\s\S]{0,22}\b(exist|are there|in the app)\b|\blist all groups\b|\b(biggest|largest) group\b/.test(c.qlow) && !/group [a-l]\b/.test(c.qlow))
+    // v33: +created/total/smallest forms — "how many total groups have been created?" and
+    // "what is the smallest group in the app?" were login-walled via a my_data classify.
+    if (/\b(what|which|list|all|how many)\b[\s\S]{0,20}\bgroups?\b[\s\S]{0,26}\b(exist|are there|in the app|been created|created)\b|\blist all groups\b|\b(biggest|largest|smallest) group\b/.test(c.qlow) && !/group [a-l]\b/.test(c.qlow))
       return hit(await appCensus(c.sbPublic, 'groups', c.qlow), { route: 'app_census' })
     if (/how many (users|players|people)\b[\s\S]{0,25}\b(registered|in the app|are there|play\b|total)\b/.test(c.qlow))
       return hit(await appCensus(c.sbPublic, 'users', c.qlow), { route: 'app_census' })
@@ -2192,7 +2238,9 @@ const ROUTE_RULES: Rule[] = [
   { id: 'most_popular_pick', run: async (c) => {
     // v32 round-2: +"to win"/"winner" — "how many users chose Spain to win?" has neither
     // 'champion' nor 'top scorer' and was login-walled via a group_standings classify.
-    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot|\bto win\b|\bwinner\b/.test(c.qlow))) return null
+    // v33: +"bet on" as a topical cue — "what team did most users bet on?" is a champion-pick
+    // question in this app (the only thing users bet a team on) and was login-walled.
+    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot|\bto win\b|\bwinner\b|\bbet on\b/.test(c.qlow))) return null
     const wantScorer = /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)
     // v32: PLATFORM-WIDE is the default — "most chosen champion by users / top 3 chosen in all
     // the app" means across everyone (public post-lock data, no login needed); a live session
@@ -2241,6 +2289,7 @@ const ROUTE_RULES: Rule[] = [
   // v24: a my_data/group_history-classified question with NO first-person/group/predict cue
   // but WITH a team is really a public team question ("did holland win there last game").
   { id: 'private_registry', run: async (c) => {
+    if (c.noPrivate) return null  // v33: login-wall re-route — public rules only on this pass
     const PRIVATE = new Set(['my_data', 'group_standings', 'group_history'])
     // v32: group_standings + a NAMED TEAM + zero group/leaderboard wording is a public team
     // question in disguise ("what is Brighton's xG this tournament?" was login-walled).
@@ -2440,7 +2489,7 @@ const ROUTE_RULES: Rule[] = [
       let p = await resolvePlayer(c.sbPublic, c.question, c.names)
       // v27: "how many goals does HE have?" — the player lives in the previous ANSWER
       if (!p && c.lastAnswer && /\b(he|him|his|she|her|they|them)\b/.test(c.qlow)) p = await resolvePlayer(c.sbPublic, c.lastAnswer, c.names)
-      if (p) return hit(playerStat(p, c.spec.dim), { route: 'player_stat' })
+      if (p) return hit(await playerStatScoped(c.sbPublic, p, c.spec.dim), { route: 'player_stat' })
     }
     // tournament-wide progress is a SCHEDULE answer — never let it grab a first-person question
     if ((wantsGames || /goal/.test(c.qlow)) && !c.firstPerson) return hit(await tournamentProgress(c.sbPublic, c.question), { route: 'tournament_progress' })
@@ -2577,7 +2626,7 @@ function checkNumericProvenance(answer: string, route: string, llmUsed: boolean,
 // shape/entity flag in the observe-mode logs was one of these (a privacy refusal "failing" a
 // count question, unknown-team "failing" a when question). Exempting them is what makes the
 // observe->enforce flip safe.
-const REFUSAL_ANSWER_RE = /^(i can only show|i don'?t|i couldn'?t|i'?m not sure|i'?m having trouble|no |nobody|you'?re not in any group|you haven'?t|please sign in|sorry|could you give|which stat do you mean|i appreciate|i focus on)/i
+const REFUSAL_ANSWER_RE = /^(i can only show|i don'?t|i couldn'?t|i'?m not sure|i'?m having trouble|no |nobody|you'?re not in any group|you haven'?t|please sign in|sorry|could you give|which stat do you mean|which game\b|i appreciate|i focus on)/i
 // V5: an answer about a NAMED team must actually mention that team (catches wrong-subject
 // substitution — the answer's entity silently differing from the question's).
 function checkOnTopicEntity(answer: string, spec: Spec): boolean {  // true = FAIL
@@ -2691,6 +2740,23 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   const done = async (answer: string, extra: Record<string, unknown> = {}): Promise<RouteOut> => {
     const ans = answer || "Sorry, I couldn't find an answer."
     const shape = deriveShape(question, spec)
+    // v33 (1000-question audit, finding #1): the login-wall choke point. 53 of the sweep's 61
+    // failures were ANON questions with ZERO personal wording that an intent misclassify sent
+    // into a private tool. A login wall is only correct when the asker references THEMSELVES
+    // (I/my/we/our) or a friend group. Anything else gets ONE re-route with private tools
+    // disabled; if the public pipeline can't answer either, say so honestly. Fixing this HERE
+    // (not per-intent) closes the whole recurring tool-bound-auth class at once.
+    if (ans === NEED_LOGIN && !d.isolatedRetry && !d.noPrivate) {
+      const personal = firstPerson || /\b(we|our|us)\b/.test(qlow)
+      const named = groupRefCandidate(question)
+      if (!personal && named)
+        return { answer: `Please sign in — "${named}" looks like a friend group, and a group's leaderboard, members and predictions are visible to its members only.`, pub: pubSpec, extra: { ...extra, login_wall: 'named_group', expected_shape: shape } }
+      if (!personal) {
+        const retry = await routeQuestion(question, [], { ...d, lastAnswer: undefined, isolatedRetry: true, noPrivate: true }, undefined)
+        if (retry.answer && retry.answer !== NEED_LOGIN) return { ...retry, extra: { ...retry.extra, self_healed: 'login_wall' } }
+        return { answer: "I couldn't match that to public app data — try naming a team, game or stat, or sign in for questions about you or your groups.", pub: pubSpec, extra: { ...extra, login_wall: 'unmatched', expected_shape: shape } }
+      }
+    }
     const fails: string[] = []
     const prevQ = history.length ? history[history.length - 1]?.trim().toLowerCase() : ''
     const isRepeat = !!(d.lastAnswer && ans === d.lastAnswer && prevQ && prevQ !== question.trim().toLowerCase())
@@ -2698,10 +2764,16 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
     // v32: refusal/clarify answers are exempt from shape+entity (see REFUSAL_ANSWER_RE) —
     // real traffic proved every one of those flags was a false positive on an honest refusal.
     const isRefusal = !!extra.clarify || REFUSAL_ANSWER_RE.test(ans)
-    if (!isRefusal && checkShape(shape, ans, spec)) fails.push('shape')
+    // v33 (audit finding #3): deterministic list/lookup TEMPLATES legitimately answer yes/no,
+    // when and count questions without the literal shape marker ("is there a game tonight?" ->
+    // "Games today: ...", "when is Portugal playing?" -> "Portugal has no upcoming games
+    // scheduled."). Every such flag in the 1000-question audit was a false positive on a
+    // correct answer — exempt the templates the same way refusals are exempted.
+    const isTemplate = /^(games (today|tomorrow|yesterday|[a-z]{3} \d{1,2}):|the (final|next game) is |[\p{L}][\p{L} .'-]* has no upcoming games|global leaderboard \(|\d+(\.\d+)? (yellow|red|goals?|assists?)\b)/iu.test(ans) || /last \d+ games? \(most recent first\)/i.test(ans)
+    if (!isRefusal && !isTemplate && checkShape(shape, ans, spec)) fails.push('shape')
     const factsText = typeof extra.facts === 'string' ? (extra.facts as string) : ''
     if (checkNumericProvenance(ans, String(extra.route ?? ''), !!extra.llm_used, factsText, question)) fails.push('numeric')
-    if (!isRefusal && checkOnTopicEntity(ans, spec)) fails.push('off_topic_entity')
+    if (!isRefusal && !isTemplate && checkOnTopicEntity(ans, spec)) fails.push('off_topic_entity')
     delete extra.facts  // validation input only — retrieved card text never ships in the payload
     // v32 ENFORCE (the observe->enforce flip, driven by the logged observe-mode data): one
     // isolated context-stripped re-route on ANY failure. A repeat ships the retry whenever it
@@ -2725,7 +2797,7 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   // First non-null wins; `route` defaults to the rule id, so EVERY answer is now attributable
   // in ask_log (a rule can still override it — e.g. `odds` reports champion_odds vs game_odds).
   const groupScoped = /\b(our|my)\b[\s\S]{0,20}\bgroups?\b|\bgroup (standings|leaderboard|table)\b/.test(qlow)
-  const rctx: RuleCtx = { question, qlow, spec, agg, firstPerson, history, lastAnswer: d.lastAnswer, openai, sbPublic, sbUser, sbService, me, names, groupScoped, namedGroup: groupRefCandidate(question) }
+  const rctx: RuleCtx = { question, qlow, spec, agg, firstPerson, history, lastAnswer: d.lastAnswer, openai, sbPublic, sbUser, sbService, me, names, groupScoped, namedGroup: groupRefCandidate(question), noPrivate: !!d.noPrivate }
   for (const r of ROUTE_RULES) {
     const h = await r.run(rctx)
     if (h) return done(h.answer, { llm_used: false, route: r.id, ...h.extra })
@@ -2752,6 +2824,9 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
 
     // registry dispatch for intent-based tools (schedule/who_scored/my_data/group_*)
     for (const t of REGISTRY) {
+      // v33: on a login-wall re-route the private tools are OFF — the whole point of the pass
+      // is to let the public pipeline (rules/stats/LLM below) have a shot at the question.
+      if (d.noPrivate && (t.id === 'my_data' || t.id === 'group_standings' || t.id === 'group_history')) continue
       if (t.match(spec)) { const r = await t.run({ spec, question, sbPublic, sbUser, sbService, openai, me, names }); return done(r.answer, { llm_used: !!r.llm, route: t.id }) }
     }
 

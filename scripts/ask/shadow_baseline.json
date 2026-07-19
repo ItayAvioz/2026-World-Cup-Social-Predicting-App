@@ -127,7 +127,7 @@
   {
     "q": "what is man city avg goals per game?",
     "route": "team_stat",
-    "answer": "Manchester City have scored about 13 goals in 5 games (2.6 per game)."
+    "answer": "Manchester City have scored 12 goals in 4 games (3.0 per game)."
   },
   {
     "q": "what is real madrid w/d/l recors? by order",
@@ -147,7 +147,7 @@
   {
     "q": "how the trivia work?",
     "route": "rules_llm",
-    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there are no retries. If you miss a question, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently until after the last trivia question closes. Enjoy playing!"
+    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there are no retries. If you miss a question, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently until all trivia questions close after the last one on July 21. Enjoy the challenge!"
   },
   {
     "q": "explain on road tp final. how it works?",
@@ -157,7 +157,7 @@
   {
     "q": "explain on the app",
     "route": "rules_llm",
-    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and Top Scorer for each group, and participate in daily trivia. The app features private groups for friendly competition, and you can track your stats and standings easily. For more details, check the \"How to Play\" section in the app!"
+    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and a Top Scorer for each group, and participate in trivia for extra points. \n\nYou can create or join private groups, where you can compete with friends and see how you rank globally and within your group. The app features a dashboard for easy navigation, a match page for detailed game stats, and an AI tab for nightly summaries and standings. \n\nFeel free to ask if you have specific questions about any features!"
   },
   {
     "q": "How am I doing?",
@@ -212,12 +212,12 @@
   {
     "q": "how many goals has Manchester City scored in total?",
     "route": "team_stat",
-    "answer": "Manchester City have scored about 13 goals in 5 games (2.6 per game)."
+    "answer": "Manchester City have scored 12 goals in 4 games (3.0 per game)."
   },
   {
     "q": "how many red cards does Manchester City have in total?",
     "route": "team_stat",
-    "answer": "Manchester City have 0 red cards in 5 games."
+    "answer": "Manchester City have 0 red cards in 4 games."
   },
   {
     "q": "how many games went to penalties?",
@@ -342,7 +342,7 @@
   {
     "q": "xplain hw trivia wrks",
     "route": "rules_llm",
-    "answer": "Trivia in the app consists of one question per day, available at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there's only one shot — no retries. If you miss it, it counts as wrong. You earn 1 point for each correct answer, and trivia points are banked silently, landing all at once after the last trivia question closes. Enjoy the challenge!"
+    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there are no retries. If you miss a question, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently until after the last trivia question closes. Enjoy the challenge!"
   },
   {
     "q": "how many membrs can b in a group",
@@ -427,7 +427,7 @@
   {
     "q": "explain how the trivia works",
     "route": "rules_llm",
-    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer, and there's only one shot with no retries. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently and will be added to your total after the last trivia question closes. Enjoy playing!"
+    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer, with only one attempt allowed. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently and revealed all at once after the last trivia question closes. Enjoy the challenge!"
   },
   {
     "q": "which team is the most chosen for champion? and how much?",
@@ -477,12 +477,12 @@
   {
     "q": "where i can see my predictions?",
     "route": "rules_llm",
-    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and completed game history with full stats. Enjoy tracking your picks!"
+    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and your history of completed games. Enjoy checking them out!"
   },
   {
     "q": "where i can see game stat?",
     "route": "rules_llm",
-    "answer": "You can see game stats on the Match Page. After the game finishes, it will show full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, xG, and the goal timeline. Just tap on any game to access this information!"
+    "answer": "You can see game stats by tapping on any game in the Match Page. After the game, you'll find full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, and xG. Enjoy exploring the details!"
   },
   {
     "q": "show the group D standings",
