@@ -4,7 +4,30 @@
 quality, accurate, professional, and reliable" — not more point-fixes, but closing the
 *architecture* gaps that keep producing the same bug shape.
 
-## STATUS (2026-07-20, v34 — the LAST planned fine-tuning round, EF v72): shipped, gate green, adversarially reviewed.
+## STATUS (2026-07-21, v35 — the ACTUAL last fine-tuning round, EF v73): shipped, gate green, adversarially reviewed (2 corrections applied).
+
+**v35 (EF v73, 2026-07-21)** — driven by a fresh 3-way 1000-question comparison (07-19 v69 →
+07-20 v71 → 07-21 v72, confirming zero real regressions from v34) plus 200 brand-new hard
+questions never asked before (docs/ASK_BOT_1000Q_3WAY_AND_HARD200_2026-07-21.md), which surfaced
+4 new bug classes. Fixes: (1) `global_standings`'s "the world" cue false-triggered on "world cup"
++ `POPULARITY_RE`'s "chosen by" gap widened. (2) `teamStat`'s per-team card/corner dim query
+silently substituted the W/D/L record on a real data-coverage gap (35/94 finished games have no
+`game_team_stats`) instead of declining honestly. (3) `groupRefCandidate` grabbed ordinary
+fragments ("globl", "anyone"+stray "s", "countin") as candidate friend-group names. (4) compound
+clause-2 lost its team scope because `splitCompound` strips the leading "and" that the
+context-borrow gate keys on. Full detail in `supabase/functions/ask/README.md`'s version header.
+
+**Adversarially reviewed before shipping** (4-agent parallel review + synthesis gate) — found 2
+MUST-FIX regressions with concrete traced counter-examples and both were corrected before deploy:
+fix 3's first draft (blanket "group stage"→"phase" replacement) broke the common legitimate
+phrasing "\<real group name\> group stage predictions"; corrected to a precise STOP-list entry.
+Fix 4's first draft (unconditional context-force) silently contaminated a self-sufficient clause
+2 that already disambiguated itself, contradicting the pinned `v34_findings_test.mjs`
+`cardstotal-scoped` case; corrected with a self-sufficiency cue gate. Both corrections re-verified
+against the full TEN-suite eval gate (all green, including the exact previously-contradicted
+pinned case) before deploy.
+
+## PREVIOUS STATUS (2026-07-20, v34 — "the LAST planned fine-tuning round", EF v72): shipped, gate green, adversarially reviewed.
 
 **v34 (EF v72, 2026-07-20)** — closed out by a retest (docs/ASK_BOT_1000Q_RETEST_2026-07-20.md)
 against the identical 1000-question corpus (890→960 PASS pre-fix) plus a real-conversation

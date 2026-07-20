@@ -341,6 +341,11 @@ const TYPO_FIXES: [RegExp, string][] = [
   [/\bavilable\b/gi, 'available'],
   [/\bfroup\b/gi, 'group'],
   [/\bmembrs\b/gi, 'members'],
+  // v35: "globl leaderboard" — "globl" (typo of "global") isn't in groupRefCandidate's STOP
+  // set (only the correctly-spelled "global" is), so it was captured as a candidate friend-group
+  // name and wrongly login-walled a public question. Same short-typo-below-the-fuzzy-floor class
+  // as mny/mucg/hw below.
+  [/\bglobl\b/gi, 'global'],
   // "teh" before a group-suffix word ("show teh global leaderbord") defeated groupRefCandidate's
   // stoplist — "teh global" read as a candidate GROUP NAME and the global board demanded login.
   [/\bteh\b/gi, 'the'],
@@ -871,6 +876,13 @@ async function teamStat(sb: Sb, team: string, dim: string | null): Promise<strin
       const tot = rows.reduce((s, row) => s + m.cols.reduce((x, c) => x + (row[c] ?? 0), 0), 0)
       return `${team} have ${tot} ${m.noun}${tot === 1 ? '' : 's'} in ${rows.length} game${rows.length === 1 ? '' : 's'}.`
     }
+    // v35 (finding 2): a real data-coverage gap — game_team_stats has ZERO rows for any of this
+    // team's finished games (confirmed live: 35/94 finished games have no game_team_stats at all,
+    // e.g. Brazil, Morocco) — used to fall through silently to the W/D/L line below, answering a
+    // completely different question than the one asked ("how many yellow cards..." got a win/
+    // draw/loss record with no card info at all, no explanation). Decline honestly instead of
+    // ever substituting an unrelated stat for the one actually requested.
+    return `I don't have ${m.noun} data for ${team} yet.`
   }
   return `${team} have played ${n} games (${w}W ${dr}D ${l}L).`
 }
@@ -1207,7 +1219,16 @@ function groupRefCandidate(q: string): string | null {
   // are stripped from the front; if nothing meaningful remains it's not a group name.
   // v33: size adjectives added — "what is the BIGGEST group?" extracted "biggest" as a
   // friend-group name, which blocked app_census AND triggered the named-group login wall.
-  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'entire', 'global', 'overall', 'app', 'main', 'current', 'live', 'full', 'complete', 'world', 'worldwide', 'total', 'league', 'points', 'today', 'todays', 'biggest', 'largest', 'smallest', 'bigger', 'smaller', 'big', 'small'])
+  // v35: +'anyone' (parallel to the existing 'everyone') — "...count toward ANYONE'S leaderboard
+  // points?" grabbed "anyone" as a candidate name. +bare 's' — the character-strip above turns a
+  // possessive ("anyone's") into two tokens ("anyone", "s"), and that stray "s" isn't a real word.
+  // +'counting'/'countin' (parallel to the existing 'winning'/'leading' verb-form entries) —
+  // "...not COUNTIN THE grup stage?" grabbed "countin" as a candidate name. (An earlier attempt
+  // neutralized "group stage" as a phrase before either pattern ran, but that broke the far more
+  // common legitimate phrasing "<real group name> group stage predictions" — reviewed and
+  // reverted; STOP-listing the specific verb form is precise and doesn't touch "group stage" at
+  // all, so a real preceding group name is never affected.)
+  const STOP = new Set(['my', 'our', 'your', 'the', 'a', 'an', 'this', 'that', 'his', 'her', 'their', 'its', 'first', 'second', 'third', 'other', 'another', 'new', 'old', 'whole', 'every', 'each', 'any', 'some', 'one', 'same', 'which', 'what', 'whats', 'who', 'whos', 'when', 'why', 'how', 'hows', 'is', 'are', 'was', 'were', 'did', 'do', 'does', 'has', 'have', 'had', 'will', 'would', 'can', 'in', 'of', 'for', 'from', 'about', 'winning', 'leading', 'leads', 'lead', 'wins', 'win', 'counting', 'countin', 'best', 'worst', 'top', 'list', 'show', 'and', 'all', 'everyone', 'anyone', 's', 'entire', 'global', 'overall', 'app', 'main', 'current', 'live', 'full', 'complete', 'world', 'worldwide', 'total', 'league', 'points', 'today', 'todays', 'biggest', 'largest', 'smallest', 'bigger', 'smaller', 'big', 'small'])
   const NOUN_STOP = new Set(['stage', 'stages', 'prediction', 'predictions', 'member', 'members', 'leaderboard', 'standings', 'standing', 'table', 'board', 'chat', 'rank', 'ranking', 'game', 'games', 'player', 'players', 'team', 'teams', 'scorer', 'scorers', 'trivia', 'bracket', 'champion'])
   // v26: "<Name> leaderboard/standings/table" (no literal word "group") is also a group-name
   // reference — "Beta Sharks leaderboard" was grabbed by the bare global-leaderboard cue.
@@ -1533,7 +1554,11 @@ async function mostPopularPick(sbUser: Sb, groups: Grp[], target: Grp | null, wa
 // v33 (audit): +the NEGATIVE direction (least chosen / rarest), +"majority top scorer pick"
 // (the word-gap form), +"most users bet on", +"is anyone picking X" — all real sweep questions
 // that fell out of this family and got login-walled via a my_data classify.
-const POPULARITY_RE = /most (chosen|picked|popular|common)|least (chosen|picked|popular|common)|\brarest\b|(top|best) ?\d+ (chosen|picked|popular|most)|majority( \w+){0,3} (pick|chose|picked)|everyone'?s? pick|how many( \w+)?\b[\s\S]{0,20}\b(picked|chose|chosen|selected|bet on)\b|who picked|(chosen|picked) by (the )?(users|players|everyone|all)|most (users|players|people)\b[\s\S]{0,15}\b(picked|chose|bet on|selected)|\banyone\b[\s\S]{0,12}\b(picking|picked|chosen?)\b/
+// v35 (finding 1): "(chosen|picked) by (the)? (users|...)" required the noun to sit DIRECTLY
+// before "by" — but the natural phrasing has an object between them ("chosen CHAMPION by most
+// users?", "chosen TOP SCORER by users?"), and didn't allow "most/many" before the subject noun
+// either. Widened with a bounded gap + optional most/many — confirmed failing case now matches.
+const POPULARITY_RE = /most (chosen|picked|popular|common)|least (chosen|picked|popular|common)|\brarest\b|(top|best) ?\d+ (chosen|picked|popular|most)|majority( \w+){0,3} (pick|chose|picked)|everyone'?s? pick|how many( \w+)?\b[\s\S]{0,20}\b(picked|chose|chosen|selected|bet on)\b|who picked|(chosen|picked)[\s\S]{0,25}\bby\b (the )?(most |many )?(users|players|everyone|all)|most (users|players|people)\b[\s\S]{0,15}\b(picked|chose|bet on|selected)|\banyone\b[\s\S]{0,12}\b(picking|picked|chosen?)\b/
 // v32: PLATFORM-WIDE pick popularity — "most chosen champion by users / in all the app".
 // A live session asked exactly this and got a groups-only answer. Post-lock picks are PUBLIC
 // data (they're printed on every leaderboard — see the public/private-line audit), so the
@@ -2112,7 +2137,13 @@ const ROUTE_RULES: Rule[] = [
   // "overall"); a NAMED group ("the Kanta Bayam group") is never global — it must reach the
   // group tools so a foreign name gets the privacy refusal, not a global-leaderboard dump.
   { id: 'global_standings', run: async (c) => {
-    const globalCue = !c.groupScoped && !c.namedGroup && (/\b(global|overall|worldwide|whole app|entire competition|the (whole )?world|all players|every player|across (all|every) groups?|all groups|everyone|rank everyone|globally)\b/.test(c.qlow) || /\b(top|best)\s+\d+\s+(player|globally)/.test(c.qlow) || /\b(most|total)\s+points\b/.test(c.qlow) || /\bleaderboard\b|\bstandings\b/.test(c.qlow))
+    // v35 (finding 1): "the (whole )?world" was meant for "the whole world"/"rank the world"
+    // phrasing, but this is a WORLD CUP app — "the world" also matches as a bare substring of
+    // ANY mention of "the world cup" (extremely common), so e.g. "how many people picked PSG
+    // TO WIN THE WORLD CUP?" falsely tripped globalCue and dumped the global leaderboard instead
+    // of ever reaching the popularity tool. Negative lookahead excludes "world cup" specifically
+    // — "the whole world"/"rank everyone in the world" etc. are unaffected.
+    const globalCue = !c.groupScoped && !c.namedGroup && (/\b(global|overall|worldwide|whole app|entire competition|the (whole )?world\b(?!\s*cup)|all players|every player|across (all|every) groups?|all groups|everyone|rank everyone|globally)\b/.test(c.qlow) || /\b(top|best)\s+\d+\s+(player|globally)/.test(c.qlow) || /\b(most|total)\s+points\b/.test(c.qlow) || /\bleaderboard\b|\bstandings\b/.test(c.qlow))
     if (!globalCue || c.spec.intent === 'rules') return null
     // v32 (round-2 sweep): "WHERE is the global leaderboard?" is a NAVIGATION question — it
     // used to dump the actual leaderboard rows instead of saying where it lives.
@@ -2658,7 +2689,7 @@ function checkOnTopicEntity(answer: string, spec: Spec): boolean {  // true = FA
 
 // v27: `prev` = the previous turn's RESOLVED spec (client-echoed prev_spec, or clause 1's
 // spec for compound clause 2) — structured borrowing beats text re-parsing.
-async function routeQuestion(question: string, history: string[], d: RouteDeps, prev?: { teams?: string[]; dim?: string | null; topic?: string }): Promise<RouteOut> {
+async function routeQuestion(question: string, history: string[], d: RouteDeps, prev?: { teams?: string[]; dim?: string | null; topic?: string; isTail?: boolean }): Promise<RouteOut> {
   const { openai, sbPublic, sbUser, sbService, me, names } = d
   // v29 S1: pure courtesy — never touches data, auth, or the LLM. Before this, a stray
   // "thanks!" landed on a misclassified private intent and demanded a login.
@@ -2724,7 +2755,24 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
   // then the old text re-parse of prior questions.
   // v31 D1: every borrow below is now GATED on detectContextNeed() — the current question
   // must itself carry a follow-up signal before anything is inherited from a previous turn.
-  const ctxNeed = detectContextNeed(question)
+  // v35 (finding 4): splitCompound STRIPS the leading "and"/"what about" before passing clause
+  // 2's text here, so CTX_LEADING_CONJ (the text signal that gates team/group/shape borrowing)
+  // never fires for a compound clause 2 — the exact scenario this mechanism exists to serve.
+  // Confirmed live: "...Manchester City scored...? and how many red cards?" answered TOURNAMENT-
+  // WIDE instead of staying Man-City-scoped, because clause 2's bare "how many red cards?" text
+  // alone carries no follow-up signal. `prev.isTail` is set ONLY at the compound-clause-2 call
+  // site below — a structural fact already known, not a text heuristic — so this restores the
+  // intended borrowing without changing what text reaches the embedding classifier or any regex.
+  // Reviewed (workflow): an UNCONDITIONAL force regressed a self-sufficient clause 2 that already
+  // carries its OWN explicit scope — "...Brazil scored? and how many red cards IN THE TOURNAMENT?"
+  // got wrongly contaminated with Brazil instead of keeping the tournament-wide answer, silently
+  // overriding the pinned `cardsTotal-scoped` regression case. Gated: only force the borrow when
+  // clause 2's own text has no self-sufficiency cue of its own (tournament-wide/general phrasing)
+  // — a clause that already disambiguates itself is never touched.
+  const SELF_SUFFICIENT_RE = /\b(tournament|overall|in general|generally|altogether|combined|globally|app.?wide|platform.?wide|across (the|all)|in (total|the app))\b/
+  const isTailAndVague = !!prev?.isTail && !SELF_SUFFICIENT_RE.test(question.toLowerCase())
+  const ctxNeed0 = detectContextNeed(question)
+  const ctxNeed = isTailAndVague ? { ...ctxNeed0, allow: { ...ctxNeed0.allow, team: true, group: true, shape: true } } : ctxNeed0
   const ctxTelemetry: ContextTelemetry = { used: false, source: null, fields: [] }
   if (ctxNeed.allow.team && teams.length === 0 && !phase && prev?.teams?.length) {
     const t = prev.teams.filter((tm) => names.includes(tm)).slice(0, 3)
@@ -3008,7 +3056,7 @@ serve(async (req) => {
     // v31 D4: ...plus clause 1's rule TOPIC (if it hit RULE_TOPICS), so a pronoun follow-up
     // clause ("...and when do they land?") can render another shape of the same topic.
     const r1Topic = typeof r1.extra?.route === 'string' && (r1.extra.route as string).startsWith('rule_topic:') ? (r1.extra.route as string).slice('rule_topic:'.length) : undefined
-    let r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic })
+    let r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic, isTail: true })
     // v34 (retest finding, confirmed 3/3 on unrelated topics): clause 2 naturally elides the
     // noun clause 1 already established ("how much games went to extra time? and how much TO
     // PENALTIES?" — clause 2 never says "games"; "how many yellow cards were shown? and how

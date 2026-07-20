@@ -70,8 +70,52 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 72** = **v34, the LAST planned ask-bot fine-tuning round**
-> (2026-07-20). Driven by the 2026-07-20 retest + a real-conversation review
+> Current: DEV runs EF **version 73** = **v35, the actual last fine-tuning round** (2026-07-21).
+> Driven by a fresh 1000-question 3-way comparison + 200 brand-new hard questions
+> (docs/ASK_BOT_1000Q_3WAY_AND_HARD200_2026-07-21.md), which surfaced 4 new bug classes on top
+> of the (confirmed clean) v34 fixes. 4 fixes: (1) **`global_standings`'s "the (whole )?world"
+> false-triggered on "world cup"** — this is a WORLD CUP app, so ANY mention of "the world cup"
+> (extremely common) matched the bare "the world" substring and dumped the global leaderboard
+> before the popularity tool ever got a chance ("how many people picked PSG to win the **world
+> cup**?"); fixed with a negative lookahead `(?!\s*cup)`. Also widened `POPULARITY_RE`'s
+> `(chosen|picked) by (users|...)` alternative — required the noun to sit directly before "by",
+> but real phrasing has an object between them ("chosen **champion** by most users?"); allowed a
+> bounded gap + optional most/many. (2) **`teamStat`'s per-team card/corner/foul/offside/shots
+> query silently substituted the W/D/L record when `game_team_stats` had zero rows** for that
+> team's games — confirmed live as a real, wide data-coverage gap (35/94 finished games have NO
+> game_team_stats at all, e.g. Brazil, Morocco), not a routing bug; a card question got a
+> completely unrelated win/draw/loss answer with no explanation. Now returns an honest "I don't
+> have {dim} data for {team} yet." (3) **`groupRefCandidate` (the "looks like a friend group,
+> please sign in" matcher) grabbed ordinary sentence fragments** — a typo'd "globl" (missing from
+> the STOP list, which only has the correctly-spelled "global"), "anyone" + a stray possessive
+> "s" remnant, and "countin" (typo of "counting", preceding a typo'd "grup stage" in an unrelated
+> tournament-phase question) — all three added to TYPO_FIXES/STOP, parallel to existing entries
+> (`froup`, `winning`/`leading`). (4) **compound clause-2 lost its team scope** — `splitCompound`
+> strips the leading "and" before clause 2 reaches `routeQuestion`, so the `CTX_LEADING_CONJ`
+> signal that gates ALL team/group/shape context-borrowing can never fire for a compound clause 2
+> — the exact scenario it exists to serve ("...Manchester City scored...? and how many red
+> cards?" answered tournament-wide instead of staying Man-City-scoped). Fixed via a new
+> `prev.isTail` flag (set only at the one compound-clause-2 call site — a structural fact, not a
+> text heuristic) that forces the borrow gate open, **but only when clause 2 itself carries no
+> self-sufficiency cue** (tournament/overall/in general/combined/etc.) — a clause that already
+> disambiguates itself (e.g. "...and how many red cards **in the tournament**?") is never touched.
+>
+> **Adversarially reviewed before shipping** (4-agent parallel review, one per fix, + a
+> synthesis gate) — found and required correction of exactly the 2 riskiest fixes before deploy:
+> fix 3's first attempt (a blanket "group stage"→"phase" text replacement) broke the far more
+> common legitimate phrasing "**\<real group name\> group stage predictions**" by deleting the
+> "group" anchor before the name-capture regex ever ran; corrected to a precise STOP-list entry
+> for the specific verb-form typo instead, which never touches "group stage" at all. Fix 4's
+> first attempt (unconditionally forcing the borrow for every compound clause 2) silently
+> contaminated a **self-sufficient** clause 2 that already disambiguated itself, directly
+> contradicting the pinned `v34_findings_test.mjs` `cardstotal-scoped` case; corrected with the
+> self-sufficiency cue gate described above. Both corrections verified against the full eval
+> gate (all TEN suites green, including the exact previously-contradicted pinned case) before
+> deploy. Fixes 1 and 2 shipped as originally designed — no correction needed.
+>
+> Previous: EF v72 = **v34, "the LAST planned ask-bot fine-tuning round"** (2026-07-20; turned
+> out not to be — a fresh audit the next day found 4 more real bug classes, see above). Driven
+> by the 2026-07-20 retest + a real-conversation review
 > (docs/ASK_BOT_1000Q_RETEST_2026-07-20.md), 7 fixes: (1) **cardsTotal/playerStatScoped now
 > require `score_home IS NOT NULL`** (not just `phase<>'friendly'`) — matches `teamStat`'s
 > already-correct scope; closes a gap where `game_team_stats`/`game_player_stats` had rows
@@ -497,6 +541,14 @@ difficulty-tagged questions → resumable live probe (JSONL, survives timeouts) 
 scored CSV + verdicts. Output: docs/ASK_BOT_1000Q_TEST_2026-07-19.csv + _SUMMARY. ⚠️ build_factbank
 paginates past PostgREST's 1000-row cap — an unpaginated pull silently truncated player stats and
 produced FALSE mismatches on the first grading run.
+
+**`scripts/ask/hard_200.mjs` + `grade_hard200.mjs` — 200 brand-new hard questions (advisory,
+re-runnable), first authored 2026-07-21.** 25/topic × 8 topics, drafted via a parallel 8-agent
+draft+critique Workflow grounded in the app's real scoring rules and known live bug classes
+(never a rephrase of the 1000-question corpus). No historical baseline by design — grades on the
+same MATCHERS/heuristics as `grade_1000.mjs` (shares the same factbank) but reports standalone,
+since these questions were never asked before. Surfaced all 4 v35 bug classes. Output:
+docs/ASK_BOT_HARD200_TEST_2026-07-21.csv.
 
 **`scripts/ask/audit_probe.mjs out.json` — 82-question adversarial sweep across every domain.**
 Exploratory, not graded (yet) — print question→route→answer and read it. This found the worst bug
