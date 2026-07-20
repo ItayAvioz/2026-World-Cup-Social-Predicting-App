@@ -1,0 +1,185 @@
+[
+  {
+    "id": "plural-red-games",
+    "q": "which are the games with most red cards?",
+    "family": "plural_game_dim",
+    "ok": false,
+    "route": "stat_leaderboard",
+    "misses": [
+      "!players are tied",
+      "!player with the most red cards"
+    ],
+    "answer": "12 players are tied for player with the most red cards with 1 red cards each: Zaid Romero (Getafe), Nicolás González (Atletico Madrid), Ryan Christie (Bournemouth), Kwasi Sibo (Oviedo), Thiago Almada (Atletico Madrid), Javi López (Oviedo), Joachim Andersen (Fulham), Tanguy Nianzou (Sevilla), Pedro Bigas (Elche), Jonah Sticker (SC Paderborn 07), Lisandro Martínez (Manchester United), Denzel Dumfries (Netherlands)."
+  },
+  {
+    "id": "plural-red-games2",
+    "q": "in which games were the most red cards drawn?",
+    "family": "plural_game_dim",
+    "ok": false,
+    "route": "stat_leaderboard",
+    "misses": [
+      "!players are tied",
+      "!player with the most red cards"
+    ],
+    "answer": "12 players are tied for player with the most red cards with 1 red cards each: Zaid Romero (Getafe), Nicolás González (Atletico Madrid), Ryan Christie (Bournemouth), Kwasi Sibo (Oviedo), Thiago Almada (Atletico Madrid), Javi López (Oviedo), Joachim Andersen (Fulham), Tanguy Nianzou (Sevilla), Pedro Bigas (Elche), Jonah Sticker (SC Paderborn 07), Lisandro Martínez (Manchester United), Denzel Dumfries (Netherlands)."
+  },
+  {
+    "id": "plural-yellow-games",
+    "q": "which games had the most yellow cards?",
+    "family": "plural_game_dim",
+    "ok": false,
+    "route": "stat_leaderboard",
+    "misses": [
+      "!players are tied"
+    ],
+    "answer": "5 players are tied for most-booked player with 3 yellow cards each: Djene Dakonam (Getafe), Omar El Hilali (Espanyol), José Ángel Carmona (Sevilla), Ander Barrenetxea (Real Sociedad), Marc Cucurella (Chelsea)."
+  },
+  {
+    "id": "plural-corners-games",
+    "q": "which games had the most corners?",
+    "family": "plural_game_dim",
+    "ok": true,
+    "route": "stat_leaderboard",
+    "misses": [],
+    "answer": "Paris Saint Germain wins the most corners, 11.0 per game."
+  },
+  {
+    "id": "plural-goals-matches",
+    "q": "which matches had the most goals?",
+    "family": "plural_game_dim",
+    "ok": false,
+    "route": "stat_leaderboard",
+    "misses": [
+      "!players are tied"
+    ],
+    "answer": "3 players are tied for top scorer with 4 goals each: Jérémy Doku (Manchester City), Marcus Rashford (Barcelona), Jean-Philippe Mateta (Crystal Palace)."
+  },
+  {
+    "id": "singular-control-red",
+    "q": "which game had the most red cards?",
+    "family": "plural_game_dim_control",
+    "ok": true,
+    "route": "stat_leaderboard",
+    "misses": [],
+    "answer": "2 games are tied for the most red cards (2 each): Fulham 0-1 Bournemouth (Group Stage), Oviedo 0-0 Getafe (Group Stage)."
+  },
+  {
+    "id": "plural-winners-champion",
+    "q": "who are the 3 teams most chosen by users as world cup winners?",
+    "family": "plural_popularity",
+    "ok": false,
+    "route": "clarify",
+    "misses": [
+      "across the whole app",
+      "!which stat do you mean"
+    ],
+    "answer": "Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards?"
+  },
+  {
+    "id": "plural-winners-champion2",
+    "q": "which team is the most chosen world cup winners pick?",
+    "family": "plural_popularity",
+    "ok": false,
+    "route": "clarify",
+    "misses": [
+      "!which stat do you mean"
+    ],
+    "answer": "Which stat do you mean — goals, assists, defense, possession, corners, fouls, or cards?"
+  },
+  {
+    "id": "singular-control-winner",
+    "q": "who are the 3 teams most chosen by users as world cup winner?",
+    "family": "plural_popularity_control",
+    "ok": true,
+    "route": "most_popular_pick_platform",
+    "misses": [],
+    "answer": "Most chosen champion across the whole app (42 picks, one per user per group):\n1. Brazil — 4 picks (10%)\n2. Spain — 2 picks (5%)\n3. Argentina — 2 picks (5%)"
+  },
+  {
+    "id": "compound-elided-noun",
+    "q": "how much games went to extra time? and how much to penalties?",
+    "family": "compound_elision",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "!focus on the"
+    ],
+    "answer": "No World Cup games have gone to extra time yet.\nFriendlies that did:\n• Paris Saint Germain 1-1 Arsenal (friendly) After extra time: 1-1. Penalties: 4-3. Paris Saint Germain advanced.\n\nI focus on the WorldCup 2026 app and tournament details! If you have any questions about the tournament, feel free to ask!"
+  },
+  {
+    "id": "compound-elided-noun2",
+    "q": "how many games ended in a draw? and how many in a win?",
+    "family": "compound_elision",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "!focus on the"
+    ],
+    "answer": "21 of the 94 finished games ended level after 90 minutes (22%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)\n\nI focus on the World Cup 2026 app and tournament details! If you have any questions about the tournament or the app, feel free to ask!"
+  },
+  {
+    "id": "compound-elided-noun3",
+    "q": "how many yellow cards were shown? and how many red?",
+    "family": "compound_elision",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "red",
+      "!focus on the"
+    ],
+    "answer": "There have been 288 yellow cards in the tournament so far.\n\nI focus on the World Cup 2026 app and tournament details! If you have any questions related to the event, feel free to ask!"
+  },
+  {
+    "id": "friendly-scope-arsenal",
+    "q": "how many games has arsenal played?",
+    "family": "friendly_scope",
+    "ok": true,
+    "route": "team_stat",
+    "misses": [],
+    "answer": "Arsenal have played 2 games (1W 0D 1L)."
+  },
+  {
+    "id": "friendly-scope-psg",
+    "q": "how many games has paris saint germain played?",
+    "family": "friendly_scope",
+    "ok": true,
+    "route": "team_stat",
+    "misses": [],
+    "answer": "I don't have any completed games for Paris Saint Germain yet."
+  },
+  {
+    "id": "typo-compound-played",
+    "q": "how mucg games played? and how much remain?",
+    "family": "typo_compound",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "!upcoming games are scheduled"
+    ],
+    "answer": "No upcoming games are scheduled.\n\n94 of 170 games have been played; 76 remain."
+  },
+  {
+    "id": "typo-compound-played2",
+    "q": "how mny games have ben played?",
+    "family": "typo_compound",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "!upcoming games are scheduled",
+      "played"
+    ],
+    "answer": "No upcoming games are scheduled."
+  },
+  {
+    "id": "typo-compound-played3",
+    "q": "hw many games played so far?",
+    "family": "typo_compound",
+    "ok": false,
+    "route": "schedule",
+    "misses": [
+      "!upcoming games are scheduled",
+      "played"
+    ],
+    "answer": "No upcoming games are scheduled."
+  }
+]

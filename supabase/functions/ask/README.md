@@ -70,7 +70,43 @@ If the CLI says `Access token not provided`, run `npx supabase login` once (brow
 > rule table pushed the bundle to 121.5KB — past the ceiling — which is what finally forced the CLI.
 > Don't resurrect them; `supabase login` is the fix.
 >
-> Current: DEV runs EF **version 71** = the **v33 final fine-tuning round** (2026-07-19; v70 +
+> Current: DEV runs EF **version 72** = **v34, the LAST planned ask-bot fine-tuning round**
+> (2026-07-20). Driven by the 2026-07-20 retest + a real-conversation review
+> (docs/ASK_BOT_1000Q_RETEST_2026-07-20.md), 7 fixes: (1) **cardsTotal/playerStatScoped now
+> require `score_home IS NOT NULL`** (not just `phase<>'friendly'`) — matches `teamStat`'s
+> already-correct scope; closes a gap where `game_team_stats`/`game_player_stats` had rows
+> attached to 3 unplayed group games and a `TBD vs TBD` placeholder (including real stat rows
+> for Mbappé/Haaland on the placeholder — confirmed live, pinned by a new sql_oracle case).
+> (2) **plural "games"/"matches"** in `dimToMetric`'s `gameWord` — was singular-only, so "which
+> **games** had the most red cards?" fell to the player leaderboard instead of the game one;
+> fixed once, closes red/yellow/goals/corners together. (3) **compound clause-2 noun elision**
+> — "how much games went to extra time? and how much **to penalties**?" elides "games" in
+> clause 2, which then had no topical anchor and fell to the off-topic steer-back (confirmed
+> 3/3 on unrelated topics: ET/pens, draws/wins, cards). Fix: when clause 2 resolves to
+> off-topic, retry the FULL unsplit question — `cardsTotal`/`etPensList` already handle combined
+> multi-cue phrasing when they see the whole sentence. **Adversarially reviewed** (3-agent
+> workflow) before shipping: closed the one real gap found (a genuinely-unrelated clause 2
+> could silently lose acknowledgment) by requiring the full-sentence retry's route to match
+> clause 1's route — a real misroute now falls through unchanged instead of overwriting a
+> correct answer. (4) **`REFUSAL_ANSWER_RE`** now recognizes `i'?m sorry` (only
+> `i'?m not sure`/`i'?m having trouble` were covered before) — a plain "I'm sorry, but..."
+> refusal was shape-flagged. (5) **plural "winners"** in the popularity topical gate (same class
+> as #2). (6) **`rules_llm` shape-only retry carve-out** — LLM answers still skip retry for
+> numeric/entity failures (unchanged, provenance can't improve on a 2nd call) but now get ONE
+> retry for a pure shape miss (e.g. a yes/no rules question answered without a lead-in
+> yes/no), with a strengthened retry-only prompt instruction; reviewed and confirmed the
+> `isolatedRetry` recursion guard blocks this identically to every other failure class — no new
+> loop risk. (7) **TYPO_FIXES** += mny/mucg/hw — short (2-3 letter) typos of "many"/"much"/"how"
+> were below the fuzzy-repair length floor, so `detectOp` missed its exact "how many/how much"
+> phrase and a typo'd count question fell to the default next-game answer instead of the count.
+> New BLOCKING suite `v34_findings_test.mjs` (19 cases, gate is now TEN suites) pins all 7 +
+> the review-driven safety guard. Gate run also surfaced 15 stale test assertions across 4
+> existing suites — all traced to the World Cup Final actually being played between test runs
+> (predictions correctly reveal at kickoff, "next game" correctly becomes "none", a leaderboard
+> tie legitimately skips a rank number) — recalibrated to assert the bug class, not pinned
+> tournament-progress-dependent values, per the same clock-robust pattern used in v32/v33.
+>
+> Previous: EF v71 = the **v33 final fine-tuning round** (2026-07-19; v70 +
 > one gate-caught fix: "biggest/largest/smallest" added to groupRefCandidate's STOP list — the
 > new anon_public suite caught "what is the biggest group?" being read as a group NAMED
 > "biggest" and walled), driven
@@ -446,6 +482,14 @@ every one a verbatim FAIL row from the 1000-question audit (docs/ASK_BOT_1000Q_T
 public anon questions must never see "personal data"/a login demand; named-group anon questions get
 the honest members-only wall; personal anon questions (my/we) keep the classic wall. This pins the
 tool-bound-auth class that re-appeared in every cycle from v31 on.
+
+**`scripts/ask/v34_findings_test.mjs` — v34 BLOCKING (LAST fine-tuning round): pins all 7
+fixes.** 19 cases across 9 families: plural games/matches dim-routing (+singular control),
+plural "winners" popularity gate (+control), compound clause-2 noun elision (3 unrelated
+topics), typo'd "games played" (mny/mucg/hw), cardsTotal's finished-game scope, the
+review-driven "genuinely off-topic clause 2 must not misroute" safety guard, and the
+`REFUSAL_ANSWER_RE` "I'm sorry" fix. Every case traces to a verified live example from the
+2026-07-20 retest + real-conversation review (docs/ASK_BOT_1000Q_RETEST_2026-07-20.md).
 
 **`scripts/ask/sweep_questions_1000.mjs` + `area_probe_resumable.mjs` + `build_factbank.mjs` +
 `grade_1000.mjs` — the 1000-question audit pipeline (advisory, re-runnable).** 8 areas × 125

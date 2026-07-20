@@ -347,6 +347,14 @@ const TYPO_FIXES: [RegExp, string][] = [
   // v32 round-2: 4-letter typos are BELOW the fuzzy layer's length floor (len-4 repair against
   // real words is too dangerous) — confirmed one-offs land here instead.
   [/\bdrow(s|n)?\b/gi, 'draw'],
+  // v34: short typos of "how many/much" (2-3 letters, below the fuzzy floor) made detectOp()
+  // miss its exact "how many|how much" phrase match entirely — op stayed 'lookup' instead of
+  // 'count', so a typo'd count question fell to the default next-game/schedule answer instead
+  // of the real count. Not "ben"→"been" (collides with the name Ben) — "mny"/"mucg" alone are
+  // sufficient to restore the literal "how many"/"how much" phrase detectOp needs.
+  [/\bmny\b/gi, 'many'],
+  [/\bmucg\b/gi, 'much'],
+  [/\bhw\b/gi, 'how'],
 ]
 // v32: FUZZY keyword repair — the wider fix behind the one-off TYPO_FIXES list. Live sessions
 // keep producing distance-1/2 misspellings of ROUTING-CRITICAL keywords ("catds"→cards,
@@ -528,7 +536,10 @@ function dimToMetric(dim: string | null, q: string): string | null {
   // to the player leaderboard (e.g. answered a tied PLAYER list for a question about a GAME).
   // Scoped to the 4 dims actually aggregable per-game (game_team_stats cards/corners + games
   // goals) — see gameGoalsLeaderboard/gameCardLeaderboard below.
-  const gameWord = /\bgame\b|\bmatch\b/.test(ql)
+  // v34: plural forms ("which GAMES had the most red cards?", "which MATCHES had the most
+  // goals?") missed the singular-only regex entirely -> fell to the player/team leaderboard
+  // instead of the game-level one. Confirmed across red/yellow/goals/corners.
+  const gameWord = /\bgames?\b|\bmatch(es)?\b/.test(ql)
   const team = /\bteam\b|\bside\b/.test(ql)
   switch (dim) {
     case 'assists': return 'assists'; case 'defense': return 'defense'; case 'possession': return 'possession'
@@ -804,10 +815,13 @@ function playerStat(p: any, dim: string | null): string {
 // the totals from game_player_stats minus friendly games so a player's numbers use the same
 // "tournament" scope as every other tool. Falls back to the view row if the recompute is empty.
 async function playerStatScoped(sb: Sb, p: any, dim: string | null): Promise<string> {
-  const { data: fr } = await sb.from('games').select('id').eq('phase', 'friendly')
-  const friendly = new Set((fr ?? []).map((r: any) => r.id))
+  // v34 (retest finding B): same score_home IS NOT NULL gap as cardsTotal — confirmed live,
+  // game_player_stats has rows for real players (Mbappé, Haaland) attached to the TBD-vs-TBD
+  // placeholder fixture, which would have inflated their goal counts.
+  const { data: excl } = await sb.from('games').select('id').or('phase.eq.friendly,score_home.is.null')
+  const excluded = new Set((excl ?? []).map((r: any) => r.id))
   const { data: rows } = await sb.from('game_player_stats').select('game_id, goals, assists, yellow_cards, red_cards').eq('player_name', p.player_name)
-  const use = ((rows ?? []) as any[]).filter((r) => !friendly.has(r.game_id))
+  const use = ((rows ?? []) as any[]).filter((r) => !excluded.has(r.game_id))
   if (use.length) {
     const sum = (k: string) => use.reduce((s, r) => s + (r[k] ?? 0), 0)
     p = { ...p, games_played: use.length, total_goals: sum('goals'), total_assists: sum('assists'), total_yellow_cards: sum('yellow_cards'), total_red_cards: sum('red_cards') }
@@ -1061,9 +1075,13 @@ async function cardsTotal(sb: Sb, color: 'red' | 'yellow' | 'both'): Promise<str
   // v33 (audit finding #2): warm-up friendlies excluded — this tool summed ALL game_team_stats
   // rows while tournament_progress/goals scope to phase<>'friendly', so "in the tournament"
   // silently meant two different things in two sibling answers.
-  const { data: fr } = await sb.from('games').select('id').eq('phase', 'friendly')
-  const friendly = new Set((fr ?? []).map((r: any) => r.id))
-  const rows = ((must(await sb.from('game_team_stats').select('game_id, red_cards, yellow_cards')) ?? []) as any[]).filter((r) => !friendly.has(r.game_id))
+  // v34 (retest finding B): phase<>'friendly' alone wasn't enough — game_team_stats had rows
+  // attached to 3 unplayed group games and 2 TBD placeholder fixtures (score_home IS NULL),
+  // inflating the total by 1 red / 23 yellow. teamStat already required score_home IS NOT
+  // NULL; this now matches (the CLAUDE.md-authoritative "finished" definition everywhere else).
+  const { data: excl } = await sb.from('games').select('id').or('phase.eq.friendly,score_home.is.null')
+  const excluded = new Set((excl ?? []).map((r: any) => r.id))
+  const rows = ((must(await sb.from('game_team_stats').select('game_id, red_cards, yellow_cards')) ?? []) as any[]).filter((r) => !excluded.has(r.game_id))
   const red = rows.reduce((s, r) => s + (r.red_cards ?? 0), 0)
   const yellow = rows.reduce((s, r) => s + (r.yellow_cards ?? 0), 0)
   if (color === 'red') return `There have been ${red} red card${red === 1 ? '' : 's'} in the tournament so far.`
@@ -2240,7 +2258,9 @@ const ROUTE_RULES: Rule[] = [
     // 'champion' nor 'top scorer' and was login-walled via a group_standings classify.
     // v33: +"bet on" as a topical cue — "what team did most users bet on?" is a champion-pick
     // question in this app (the only thing users bet a team on) and was login-walled.
-    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot|\bto win\b|\bwinner\b|\bbet on\b/.test(c.qlow))) return null
+    // v34: \bwinner\b missed its own plural "winners" ("...as world cup winners?") — the
+    // very next question in a real conversation, worded "...as champion?", worked fine.
+    if (!(POPULARITY_RE.test(c.qlow) && /champion|top scorer|golden boot|\bto win\b|\bwinners?\b|\bbet on\b/.test(c.qlow))) return null
     const wantScorer = /top scorer|golden boot/.test(c.qlow) && !/champion/.test(c.qlow)
     // v32: PLATFORM-WIDE is the default — "most chosen champion by users / top 3 chosen in all
     // the app" means across everyone (public post-lock data, no login needed); a live session
@@ -2626,7 +2646,9 @@ function checkNumericProvenance(answer: string, route: string, llmUsed: boolean,
 // shape/entity flag in the observe-mode logs was one of these (a privacy refusal "failing" a
 // count question, unknown-team "failing" a when question). Exempting them is what makes the
 // observe->enforce flip safe.
-const REFUSAL_ANSWER_RE = /^(i can only show|i don'?t|i couldn'?t|i'?m not sure|i'?m having trouble|no |nobody|you'?re not in any group|you haven'?t|please sign in|sorry|could you give|which stat do you mean|which game\b|i appreciate|i focus on)/i
+// v34: "I'm sorry, but ..." — a very natural LLM refusal/apology lead-in — wasn't covered
+// (only "i'm not sure"/"i'm having trouble" were); a fine, honest refusal got shape-flagged.
+const REFUSAL_ANSWER_RE = /^(i can only show|i don'?t|i couldn'?t|i'?m not sure|i'?m having trouble|i'?m sorry|no |nobody|you'?re not in any group|you haven'?t|please sign in|sorry|could you give|which stat do you mean|which game\b|i appreciate|i focus on)/i
 // V5: an answer about a NAMED team must actually mention that team (catches wrong-subject
 // substitution — the answer's entity silently differing from the question's).
 function checkOnTopicEntity(answer: string, spec: Spec): boolean {  // true = FAIL
@@ -2781,7 +2803,16 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
     // retry only if it is CLEAN and different — so a false-positive check can never make an
     // answer worse, only recover a real misroute. LLM answers skip the retry (a second LLM
     // round can't fix provenance and doubles cost) except for repeats.
-    if (fails.length && !d.isolatedRetry && (isRepeat || !extra.llm_used)) {
+    // v34 (retest finding C.2): narrow carve-out — rules_llm answers that ONLY fail shape (a
+    // wording/formatting miss, e.g. a yes/no rules question answered without a leading
+    // yes/no) get one retry too. Unlike rag_crew, rules_llm doesn't cite retrieved per-question
+    // facts, so a second call can't make provenance worse — and it's empirically NOT fully
+    // deterministic despite seed=42 (the same question, same prompt, produced two different
+    // completions a day apart this session), so a retry has a real chance to land differently.
+    // Numeric/entity failures on rules_llm still skip the retry (unchanged) — those are
+    // grounding problems a second free-form call is no more likely to fix.
+    const allowLlmRetry = extra.route === 'rules_llm' && fails.length === 1 && fails[0] === 'shape'
+    if (fails.length && !d.isolatedRetry && (isRepeat || !extra.llm_used || allowLlmRetry)) {
       const retry = await routeQuestion(question, [], { ...d, lastAnswer: undefined, isolatedRetry: true }, undefined)
       const rf = Array.isArray(retry.extra?.validation_fail) ? (retry.extra.validation_fail as string[]) : []
       const accept = isRepeat ? (!!retry.answer && retry.answer !== d.lastAnswer) : (!!retry.answer && retry.answer !== ans && rf.length === 0)
@@ -2840,7 +2871,10 @@ async function routeQuestion(question: string, history: string[], d: RouteDeps, 
         // v29: FACTS (incl. today's date) computed fresh per-request — RULES_PROMPT alone had
         // no clock, so it once told a user trivia "hasn't started, it's before June 11" on a
         // date five weeks past that.
-        const sys = RULES_PROMPT + factsBlock()
+        // v34: on the isolated shape-only retry (see done()'s allowLlmRetry), add a direct
+        // steer so the second attempt has a real shot at fixing what the first one missed —
+        // not just hoping a second seeded sample happens to differ.
+        const sys = RULES_PROMPT + factsBlock() + (d.isolatedRetry ? '\n\nBe direct and complete. If this is a yes/no question, start your answer with "Yes" or "No".' : '')
         assertPublicPayload('rulesLLM', sys, question)
         const res = await openai.chat.completions.create({ model: CHAT_MODEL, temperature: 0.2, seed: 42, max_tokens: 350, messages: [{ role: 'system', content: sys }, { role: 'user', content: question }] })
         return done(res.choices[0]?.message?.content?.trim() ?? '', { llm_used: true, route: 'rules_llm' })
@@ -2966,14 +3000,43 @@ serve(async (req) => {
     // so it can borrow entities), then join the two answers.
     // v31 D4: routing sees the NORMALIZED text (compound/typo repairs); preGuard already ran
     // on the RAW text above, and finish() logs the RAW text — the audit trail never changes.
-    const parts = splitCompound(normalizeQuestion(question))
+    const normalizedQ = normalizeQuestion(question)
+    const parts = splitCompound(normalizedQ)
     const r1 = await routeQuestion(parts[0], history, deps, prevSpec)
     if (parts.length === 1) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
     // v27: clause 2 receives clause 1's RESOLVED spec (not just its text)
     // v31 D4: ...plus clause 1's rule TOPIC (if it hit RULE_TOPICS), so a pronoun follow-up
     // clause ("...and when do they land?") can render another shape of the same topic.
     const r1Topic = typeof r1.extra?.route === 'string' && (r1.extra.route as string).startsWith('rule_topic:') ? (r1.extra.route as string).slice('rule_topic:'.length) : undefined
-    const r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic })
+    let r2 = await routeQuestion(parts[1], [...history, parts[0]], deps, { teams: (r1.pub.teams as string[]) ?? [], dim: (r1.pub.dim as string | null) ?? null, topic: r1Topic })
+    // v34 (retest finding, confirmed 3/3 on unrelated topics): clause 2 naturally elides the
+    // noun clause 1 already established ("how much games went to extra time? and how much TO
+    // PENALTIES?" — clause 2 never says "games"; "how many yellow cards were shown? and how
+    // many RED?" — clause 2 never says "cards"). Split alone, clause 2 has no topical anchor
+    // and falls to the off-topic steer-back. Rather than trying to detect and re-inject
+    // whichever noun was elided (draws/games/cards/... — no single word generalizes), retry
+    // the FULL unsplit sentence: the deterministic tools already handle combined multi-cue
+    // phrasing correctly when they see the whole question (etPensList's both-cues branch,
+    // cardsTotal's wantRed&&wantYellow branch) — they just never got the chance to, once the
+    // (grammatically ordinary) elided tail was isolated.
+    // Reviewed (workflow, 2026-07-20): the fix also fires when clause 2 is GENUINELY unrelated
+    // ("...champion pick worth? and what's your favorite color?"), not just eliding a noun —
+    // ROUTE_RULES/rulesFAQ are unanchored regex checks over the whole string, so clause 1's
+    // topic can win the full-sentence re-route either way. Accepted as low-severity (clause 1
+    // still answers correctly; clause 2's off-topic acknowledgment is silently dropped rather
+    // than wrong) — see v34_findings_test.mjs 'compound-genuinely-offtopic*' for the pinned,
+    // verified behavior. The one raised risk that WOULD need fixing — the single shared
+    // embedding over concatenated, semantically-mixed text dragging rFull to a THIRD, wrong
+    // topic that overwrites a correct r1 — is closed by requiring rFull's route to match r1's:
+    // a genuine elided-noun case always re-resolves through the SAME tool (both cardsTotal and
+    // etPensList's combined branches keep the same route id); a cross-contaminated misroute
+    // would not, and falls through unchanged to the normal concatenation below (never worse
+    // than pre-v34 behavior).
+    if (r2.extra?.route === 'off_topic' || r2.extra?.route === 'off_topic_degraded') {
+      const rFull = await routeQuestion(normalizedQ, history, deps, prevSpec)
+      if (rFull.extra?.route === r1.extra?.route && rFull.extra?.route !== 'off_topic' && rFull.extra?.route !== 'off_topic_degraded')
+        return await finish({ step: 'final', ok: true, spec: rFull.pub, ...rFull.extra }, rFull.answer)
+    }
     // v26: a clause-2 clarify/parse-failure must not pollute a good clause-1 answer.
     if (r2.extra?.clarify && !r1.extra?.clarify) return await finish({ step: 'final', ok: true, spec: r1.pub, ...r1.extra }, r1.answer)
     // v32 round-2: symmetric — if clause 1 could not even be understood (clarify), clause 2

@@ -22,7 +22,7 @@
   {
     "q": "provide W/D/L finished games ditrbutions",
     "route": "outcome_distribution",
-    "answer": "Of 93 finished games (90-minute results): 57 home wins (61%) · 21 draws (23%) · 15 away wins (16%)."
+    "answer": "Of 94 finished games (90-minute results): 58 home wins (62%) · 21 draws (22%) · 15 away wins (16%)."
   },
   {
     "q": "what is the most chossen top scorer by users?",
@@ -47,7 +47,7 @@
   {
     "q": "in finisgeh games, how much end with draw?",
     "route": "outcome_draws",
-    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 94 finished games ended level after 90 minutes (22%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "which games ended 0-0?",
@@ -62,12 +62,12 @@
   {
     "q": "how much games were finished in draw result?",
     "route": "outcome_draws",
-    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 94 finished games ended level after 90 minutes (22%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "how much games finish in draw?",
     "route": "outcome_draws",
-    "answer": "21 of the 93 finished games ended level after 90 minutes (23%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
+    "answer": "21 of the 94 finished games ended level after 90 minutes (22%). (Knockout draws are then decided in extra time/penalties — 90-minute result shown.)"
   },
   {
     "q": "when ai summary created?",
@@ -82,7 +82,7 @@
   {
     "q": "what was the last finish game?",
     "route": "last_game",
-    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
+    "answer": "Netherlands 1-0 England (Final) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "how much users can be in group?",
@@ -142,7 +142,7 @@
   {
     "q": "what is the coming next game?",
     "route": "next_game",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "how the trivia work?",
@@ -157,7 +157,7 @@
   {
     "q": "explain on the app",
     "route": "rules_llm",
-    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and a Top Scorer for each group, and participate in trivia for extra points. \n\nYou can create or join private groups, where you can compete with friends and see how you rank globally and within your group. The app features a dashboard for easy navigation, a match page for detailed game stats, and an AI tab for nightly summaries and standings. \n\nFeel free to ask if you have specific questions about any features!"
+    "answer": "The WorldCup 2026 Social Predictions app allows you to predict scores, climb leaderboards, and engage with friends in a fun way during the tournament. You can make predictions for each game, choose a Champion and Top Scorer for each group, and participate in a knockout bracket game. \n\nThe app features a dashboard for tracking your predictions, group standings, and trivia questions. You can create or join private groups, and the app automatically predicts for you if you miss a game. Points are awarded based on the accuracy of your predictions, and there's a nightly AI roast for some light-hearted fun. \n\nFor more details on how to navigate the app, you can check the \"How to Play\" section. If you have specific questions about features or rules, feel free to ask!"
   },
   {
     "q": "How am I doing?",
@@ -187,7 +187,7 @@
   {
     "q": "what is the next game?",
     "route": "next_game",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "which team has the best defense?",
@@ -227,7 +227,7 @@
   {
     "q": "show the global leaderboard",
     "route": "global_standings",
-    "answer": "Global leaderboard (one row per player per group):\n1. Itay_Avioz (TestA) — 53 pts\n2. Itay_Avioz (Test3) — 49 pts\n3. Dani (Demo) — 48 pts\n4. Itay_Avioz (Test2) — 42 pts\n5. bob_wc (The Legends) — 29 pts"
+    "answer": "Global leaderboard (one row per player per group):\n1. Dani (Demo) — 94 pts\n2. Dani (Kanta Bayam) — 74 pts\n2. Dani (TestA) — 74 pts\n4. Itay_Avioz (TestA) — 53 pts\n5. Itay_Avioz (Test3) — 49 pts"
   },
   {
     "q": "what is my rank in beta sharks?",
@@ -242,7 +242,7 @@
   {
     "q": "which team is the most popular champion pick across the whole app?",
     "route": "global_standings",
-    "answer": "Global leaderboard (one row per player per group):\n1. Itay_Avioz (TestA) — 53 pts\n2. Itay_Avioz (Test3) — 49 pts\n3. Dani (Demo) — 48 pts\n4. Itay_Avioz (Test2) — 42 pts\n5. bob_wc (The Legends) — 29 pts"
+    "answer": "Global leaderboard (one row per player per group):\n1. Dani (Demo) — 94 pts\n2. Dani (Kanta Bayam) — 74 pts\n2. Dani (TestA) — 74 pts\n4. Itay_Avioz (TestA) — 53 pts\n5. Itay_Avioz (Test3) — 49 pts"
   },
   {
     "q": "which team is most picked as champion in Beta Sharks?",
@@ -332,17 +332,17 @@
   {
     "q": "show teh global leaderbord",
     "route": "global_standings",
-    "answer": "Global leaderboard (one row per player per group):\n1. Itay_Avioz (TestA) — 53 pts\n2. Itay_Avioz (Test3) — 49 pts\n3. Dani (Demo) — 48 pts\n4. Itay_Avioz (Test2) — 42 pts\n5. bob_wc (The Legends) — 29 pts"
+    "answer": "Global leaderboard (one row per player per group):\n1. Dani (Demo) — 94 pts\n2. Dani (Kanta Bayam) — 74 pts\n2. Dani (TestA) — 74 pts\n4. Itay_Avioz (TestA) — 53 pts\n5. Itay_Avioz (Test3) — 49 pts"
   },
   {
     "q": "wen is teh finall",
     "route": "schedule",
-    "answer": "The Final is Netherlands vs England, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "The Final was Netherlands 1-0 England (Jul 19, 19:00 UTC (22:00 Israel))."
   },
   {
     "q": "xplain hw trivia wrks",
     "route": "rules_llm",
-    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for 24 hours. You have 40 seconds to answer, and there are no retries. If you miss a question, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently until after the last trivia question closes. Enjoy the challenge!"
+    "answer": "Trivia in the app consists of one question per day, available at 22:00 Israel time. Each question stays open for 24 hours, giving you a chance to answer. You have 40 seconds to respond, and there are no retries if you miss it. Each correct answer earns you 1 point, but these points are banked silently and will be revealed all at once after the last trivia question closes on July 21. Enjoy the challenge!"
   },
   {
     "q": "how many membrs can b in a group",
@@ -362,7 +362,7 @@
   {
     "q": "wat is teh nxt game",
     "route": "schedule",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "how many members can be in a froup?",
@@ -382,12 +382,12 @@
   {
     "q": "what was the lastgame?",
     "route": "last_game",
-    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
+    "answer": "Netherlands 1-0 England (Final) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "whats the nextgame?",
     "route": "next_game",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "who is the topscorer?",
@@ -402,7 +402,7 @@
   {
     "q": "who lead the globalleaderboard?",
     "route": "global_standings",
-    "answer": "Global leaderboard (one row per player per group):\n1. Itay_Avioz (TestA) — 53 pts\n2. Itay_Avioz (Test3) — 49 pts\n3. Dani (Demo) — 48 pts\n4. Itay_Avioz (Test2) — 42 pts\n5. bob_wc (The Legends) — 29 pts"
+    "answer": "Global leaderboard (one row per player per group):\n1. Dani (Demo) — 94 pts\n2. Dani (Kanta Bayam) — 74 pts\n2. Dani (TestA) — 74 pts\n4. Itay_Avioz (TestA) — 53 pts\n5. Itay_Avioz (Test3) — 49 pts"
   },
   {
     "q": "what is the leaderboard for the xzq99 group",
@@ -412,7 +412,7 @@
   {
     "q": "when is the final?",
     "route": "schedule",
-    "answer": "The Final is Netherlands vs England, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "The Final was Netherlands 1-0 England (Jul 19, 19:00 UTC (22:00 Israel))."
   },
   {
     "q": "how much games were penalties score in regular time?",
@@ -427,7 +427,7 @@
   {
     "q": "explain how the trivia works",
     "route": "rules_llm",
-    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer, with only one attempt allowed. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently and revealed all at once after the last trivia question closes. Enjoy the challenge!"
+    "answer": "Trivia questions are available in the Trivia tab, with one question per day at 22:00 Israel time. Each question stays open for a full 24-hour window. You have 40 seconds to answer once you open the question, and there are no retries. If you miss it, it counts as wrong. Each correct answer earns you 1 point, and these points are banked silently, landing all at once after the last trivia question closes on July 21. Enjoy the challenge!"
   },
   {
     "q": "which team is the most chosen for champion? and how much?",
@@ -437,7 +437,7 @@
   {
     "q": "what is my best positive streak in Alpha Wolves?",
     "route": "my_data",
-    "answer": "Alpha Wolves — Exact 40% (2/5) · Hit 60% (3/5) · 🔥 Best hot streak: 2 scored games in a row with points."
+    "answer": "Alpha Wolves — Exact 33% (2/6) · Hit 50% (3/6) · 🔥 Best hot streak: 2 scored games in a row with points."
   },
   {
     "q": "where i can road to final?",
@@ -447,7 +447,7 @@
   {
     "q": "what was the last game finished?",
     "route": "last_game",
-    "answer": "Portugal 3-2 Argentina (Third Place) after 90'. It did not go to extra time or penalties."
+    "answer": "Netherlands 1-0 England (Final) after 90'. It did not go to extra time or penalties."
   },
   {
     "q": "how many members can be in a group?",
@@ -462,7 +462,7 @@
   {
     "q": "in which of my groups i have the best streak?",
     "route": "my_data",
-    "answer": "You're doing best in Alpha Wolves: Exact 40% (2/5) · Hit 60% (3/5) · 🧊 Cold streak: 1 scored game without points."
+    "answer": "You're doing best in Alpha Wolves: Exact 33% (2/6) · Hit 50% (3/6) · 🧊 Cold streak: 2 scored games without points."
   },
   {
     "q": "who finished 1 in group d?",
@@ -472,17 +472,17 @@
   {
     "q": "what is the nexg game?",
     "route": "schedule",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "where i can see my predictions?",
     "route": "rules_llm",
-    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and your history of completed games. Enjoy checking them out!"
+    "answer": "You can see your predictions in the \"Predictions\" tab under the \"Picks\" section. Here, you'll find all your upcoming predictions and completed games with full stats. Enjoy checking your picks!"
   },
   {
     "q": "where i can see game stat?",
     "route": "rules_llm",
-    "answer": "You can see game stats by tapping on any game in the Match Page. After the game, you'll find full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, and xG. Enjoy exploring the details!"
+    "answer": "You can see game stats on the Match Page. After the game, it provides full match stats, including possession, shots, on-target, pass accuracy, corners, fouls, cards, offsides, xG, and the goal timeline. Just tap on any game to access this information!"
   },
   {
     "q": "show the group D standings",
@@ -502,7 +502,7 @@
   {
     "q": "what is my best streak in Alpha Wolves?",
     "route": "my_data",
-    "answer": "Alpha Wolves — Exact 40% (2/5) · Hit 60% (3/5) · 🔥 Best hot streak: 2 in a row with points · 🧊 Worst cold streak: 1 in a row without."
+    "answer": "Alpha Wolves — Exact 33% (2/6) · Hit 50% (3/6) · 🔥 Best hot streak: 2 in a row with points · 🧊 Worst cold streak: 2 in a row without."
   },
   {
     "q": "where i can see ai summary?",
@@ -577,7 +577,7 @@
   {
     "q": "when is the next game?",
     "route": "next_game",
-    "answer": "The next game is Netherlands vs England — Final, Jul 19, 19:00 UTC (22:00 Israel)."
+    "answer": "No upcoming games are scheduled."
   },
   {
     "q": "what stadium is the final played in?",
@@ -592,7 +592,7 @@
   {
     "q": "what is my exact percentage and hit rate?",
     "route": "my_data",
-    "answer": "Exact 33% (3/9) · Hit 44% (4/9) · 🧊 Cold streak: 3 scored games without points."
+    "answer": "Exact 27% (3/11) · Hit 36% (4/11) · 🧊 Cold streak: 5 scored games without points."
   },
   {
     "q": "who picked Brazil as champion in Alpha Wolves?",

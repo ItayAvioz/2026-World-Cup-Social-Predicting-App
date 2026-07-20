@@ -57,7 +57,9 @@ const POISONS = [
 // PROBES — self-contained questions whose answer must NOT depend on any prior turn.
 // [id, auth, question, [expected substrings; '!'-prefixed = must NOT appear]]
 const PROBES = [
-  ['next-game', 'anon', 'what is the next game?', ['next game', '!red card']],
+  // v34: clock-robust — dropped the literal "next game" pin (post-tournament, "No upcoming
+  // games are scheduled." is correct); '!red card' is the actual bleed-immunity guard and stays.
+  ['next-game', 'anon', 'what is the next game?', ['game', '!red card']],
   ['pens-list', 'anon', 'which games went to penalties?', ['penalties', '!possession']],  // the P0 audit scenario: 2 stale teams flip it to game_detail
   ['trivia-count', 'anon', 'how many trivia questions are there in total?', ['40']],
   ['exact-rule', 'anon', 'how many points for an exact score?', ['3 point']],

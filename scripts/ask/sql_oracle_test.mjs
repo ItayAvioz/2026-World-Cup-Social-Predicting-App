@@ -157,6 +157,22 @@ const CASES = [
     },
     extract: /1\.\s+[^—\n]+—\s*([\d.]+)/,
   },
+  {
+    // v34 (retest finding B): cardsTotal was scoped to phase<>'friendly' only — missed 3
+    // unplayed group games + 2 TBD-placeholder rows that still had game_team_stats attached
+    // (score_home IS NULL). Oracle applies the full "finished" definition CLAUDE.md states
+    // everywhere else: phase<>'friendly' AND score_home IS NOT NULL.
+    id: 'total-red-cards-finished',
+    auth: 'anon',
+    question: 'how many red cards in the tournament?',
+    oracle: async () => {
+      const finished = await rest(`games?select=id&phase=neq.friendly&score_home=not.is.null`, KEY)
+      const ids = new Set(finished.map((g) => g.id))
+      const rows = await rest('game_team_stats?select=game_id,red_cards', KEY)
+      return rows.filter((r) => ids.has(r.game_id)).reduce((s, r) => s + (r.red_cards ?? 0), 0)
+    },
+    extract: /(\d+)\s+red card/i,
+  },
 ]
 
 const out = []

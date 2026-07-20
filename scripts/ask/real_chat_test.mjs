@@ -33,8 +33,11 @@ const T = [
   // ---- CLASS C: context bleed — NEVER repeat the previous answer for a new question ----
   // Typo "nexg" matched nothing, so the borrow logic replayed the PREVIOUS answer verbatim
   // (a red-cards list) for a schedule question. Worst failure class: confidently wrong.
-  ['C1-typo-next', 'anon', 'what is the nexg game?', ['next game', '!red card']],
-  ['C2-typo-next-ctx', 'anon', 'what is the nexg game?', ['next game', '!red card'],
+  // v34: clock-robust — dropped the literal "next game" pin (post-tournament, "No upcoming
+  // games are scheduled." is correct and doesn't contain that phrase); '!red card' is the
+  // actual regression guard (proves it isn't replaying the stale prior answer) and stays.
+  ['C1-typo-next', 'anon', 'what is the nexg game?', ['game', '!red card']],
+  ['C2-typo-next-ctx', 'anon', 'what is the nexg game?', ['game', '!red card'],
     ['who is the player with most red cards?']],
 
   // ---- CLASS D: answer shaping — answer the question ASKED, not the tool's default dump ----

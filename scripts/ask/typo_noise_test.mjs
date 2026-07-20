@@ -48,14 +48,18 @@ const T = [
   ['TY-globallb', 'auth', 'who lead the globalleaderboard?', ['global leaderboard', '!Beta Sharks:']],
   ['TY-wentto', 'anon', 'which games wentto penalties', ['penalties']],
   ['TY-topscorer', 'anon', 'who is the topscorer?', ['goal']],
-  ['TY-nextgame', 'anon', 'whats the nextgame?', ['next game']],
+  // v34: clock-robust — post-tournament, "No upcoming games are scheduled." is correct and has
+  // no literal "next game" phrase; asserts correct typo-normalization routing, not that a next
+  // game currently exists.
+  ['TY-nextgame', 'anon', 'whats the nextgame?', ['game', '!have been played']],
   ['TY-lastgame', 'anon', 'what was the lastgame?', ['-', '!next game']],
   // ---- confirmed live word typos ----
   ['TY-chossen', 'auth', 'which team is the most chossen for champion?', ['!worth 10 points']],
   ['TY-choosen', 'auth', 'which team is the most choosen for champion?', ['!worth 10 points']],
   ['TY-froup', 'anon', 'how many members can be in a froup?', ['12']],
   // ---- classic keyboard noise on known-good questions ----
-  ['TY-nxt', 'anon', 'wat is teh nxt game', ['next game']],
+  // v34: clock-robust — same as TY-nextgame above.
+  ['TY-nxt', 'anon', 'wat is teh nxt game', ['game', '!have been played']],
   ['TY-scorrer', 'anon', 'hwo is teh top scorrer', ['goal']],
   ['TY-exact', 'anon', 'how many points 4 an exact score?', ['3 point']],
   ['TY-membrs', 'anon', 'how many membrs can b in a group', ['12']],

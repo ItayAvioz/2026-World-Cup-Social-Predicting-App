@@ -34,6 +34,9 @@ results.context_isolation = run('context_isolation_test.mjs (context-bleed immun
 // v33: encodes the 1000-question audit's #1 finding (53/61 failures = login-walled public
 // questions) as a permanent gate — see docs/ASK_BOT_1000Q_TEST_SUMMARY_2026-07-19.md.
 results.anon_public = run('anon_public_test.mjs (no login wall on public questions)', 'scripts/ask/anon_public_test.mjs')
+// v34 (last planned fine-tuning round): pins the 5 conversation-review findings + their
+// generalized prevalence — see docs/ASK_BOT_1000Q_RETEST_2026-07-20.md.
+results.v34_findings = run('v34_findings_test.mjs (plural dims, compound elision, typo\'d counts)', 'scripts/ask/v34_findings_test.mjs')
 
 console.log('\n========== ADVISORY (not gating, run by hand) ==========')
 console.log('  node scripts/ask/audit_probe.mjs out.json            (82Q exploratory sweep)')

@@ -4,7 +4,24 @@
 quality, accurate, professional, and reliable" — not more point-fixes, but closing the
 *architecture* gaps that keep producing the same bug shape.
 
-## STATUS (2026-07-19, v33 — FINAL fine-tuning round, EF v71): the tool-bound-auth class is closed at its choke point.
+## STATUS (2026-07-20, v34 — the LAST planned fine-tuning round, EF v72): shipped, gate green, adversarially reviewed.
+
+**v34 (EF v72, 2026-07-20)** — closed out by a retest (docs/ASK_BOT_1000Q_RETEST_2026-07-20.md)
+against the identical 1000-question corpus (890→960 PASS pre-fix) plus a real-conversation
+review that surfaced 5 new findings. 7 fixes, all data-independent code/language bugs except
+one (cardsTotal/playerStatScoped's missing `score_home IS NOT NULL` guard, which only became
+consequential because DEV has malformed stat rows on unplayed/TBD games — the code gap itself
+is general-purpose insurance, same pattern already proven in `teamStat`). Full list in
+`supabase/functions/ask/README.md`'s version header; test suite `v34_findings_test.mjs`
+(19 cases, gate = TEN suites). **Adversarially reviewed before shipping** (3-agent workflow,
+covering the two design-heavy fixes + the four regex/query fixes) — 2/3 review areas clean, one
+real gap found and closed (a genuinely-unrelated compound clause 2 could silently misroute;
+fixed by requiring the full-sentence retry's route to match clause 1's). Gate run also
+surfaced 15 stale assertions across 4 existing suites, all traced to the World Cup Final having
+been played between test runs (not a regression) — recalibrated to assert the bug class, not
+tournament-state-dependent literal values.
+
+## PREVIOUS STATUS (2026-07-19, v33 — FINAL fine-tuning round, EF v71): the tool-bound-auth class is closed at its choke point.
 
 **v33 (EF v71, 2026-07-19)** — the last improvement round, driven entirely by the **1000-question
 8-area audit** (docs/ASK_BOT_1000Q_TEST_2026-07-19.csv + _SUMMARY: 890 PASS / 49 PARTIAL /
