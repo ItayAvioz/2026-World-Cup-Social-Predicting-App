@@ -827,3 +827,52 @@ Confirmed 0 NULLs remain in either row. Goal reconciliation checked (score 0–2
 `game_player_stats` goals — Porro + Oyarzabal — no scorer-lag gap on this game). Display-only, zero
 scoring impact. Note this game only exists in PROD (not staged in DEV DB) — DEV was used purely as
 the read-only `probe_stats` verification source, per the standard workflow.
+
+---
+
+## 2026-07-20 — FINAL Spain 0–0 (ET 1–0) Argentina: % Accuracy Passes + xG lag, + missing red-card event
+
+**Game:** `29ec6a41-638e-451c-b7ff-2e9de2c5747b` · api_fixture_id `1591866` · phase `final` (Jul 19).
+
+### A) % Accuracy Passes + xG lag (reported via screenshot)
+**Symptom:** Match Stats showed `—` for **% Accuracy Passes** and **xG** for both teams. All other
+rows (possession 65/35, total passes 852/463, shots 20/2, on target 12/0, inside box 9/1, corners
+9/4, fouls 21/25, cards, offsides) were present. Same routine passes/xG lag as the SF (France–Spain)
+and prior cases — `passes_total` already populated, only `passes_accuracy`/`xg` NULL.
+**Verify-first (DEV `probe_stats` 1591866, read-only):** api now reports Spain 852 passes, accurate
+762 (**89%**), xG **1.94** · Argentina 463 passes, accurate 357 (**77%**), xG **0.22**. Possession,
+total passes, shots and fouls matched the stored PROD rows exactly → same fixture, only the two
+lagging fields were NULL.
+**Fix (PROD):**
+```sql
+UPDATE game_team_stats SET passes_accuracy=89, xg=1.94 WHERE game_id='29ec6a41-638e-451c-b7ff-2e9de2c5747b' AND team='Spain';
+UPDATE game_team_stats SET passes_accuracy=77, xg=0.22 WHERE game_id='29ec6a41-638e-451c-b7ff-2e9de2c5747b' AND team='Argentina';
+```
+Confirmed 0 NULLs remain in either team row.
+
+### B) Missing red-card event (found by the follow-up completeness sweep)
+**Symptom:** team stats + `game_player_stats` both carried Argentina's red card (**Enzo Fernández**,
+`red_cards=1`), but `game_events` held only the Ferrán Torres goal (106') — no `red_card` row, so the
+Game-page history omitted the sending-off.
+**Verify-first (DEV `probe_events` 1591866, read-only):** api confirms **Red Card — Enzo Fernández,
+90+3', comments "Foul"** (second yellow: 83' Argument + 90+3' Foul → red). Event was published late,
+after the KO+120 one-shot sync (same lag class as the Australia–Egypt shootout events).
+**Fix (PROD):** inserted the single missing row (guarded by NOT EXISTS on a red_card for this game):
+`game_events (team='Argentina', player_name='Enzo Fernández', event_type='red_card', minute=90,
+minute_extra=3, detail='Red Card', comments='Foul', sort_order=1)`. UI orders by
+`minute, minute_extra`, so it renders before the 106' goal correctly.
+
+### Full completeness verification (no other gaps)
+- Team stats: 2 rows, **0 NULL columns** after fix A.
+- Player block: 26+26 rows, all with minutes + ratings, no all-NULL display rows.
+- Goal reconciliation: 1 goal event = Σ player goals 1 (Ferran Torres) = 90'+ET total (0–0 + ET 1–0) ✓;
+  Nico Williams assist captured.
+- Events: goal + red card (complete — no pens, `went_to_penalties=false`).
+- 55/55 predictions scored; 1 odds row; `knockout_winner='Spain'`, ET fields consistent.
+- **Drift left untouched (cosmetic, populated):** Argentina team-stat yellows 5 vs api's revised 6 vs
+  player-row sum 4 — second-yellow accounting (api counts Enzo's 2 yellows in the team total but his
+  player row stores it as the red). Matches the UI screenshot (5); per standing precedent, populated
+  drift is never rewritten.
+
+Display-only, zero scoring impact (prediction points read `games.score_home/away`; champion/bracket
+points read `knockout_winner`, which was already correct).
