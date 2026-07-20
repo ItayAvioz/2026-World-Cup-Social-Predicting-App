@@ -1,6 +1,6 @@
 # PLAN — Per-Group Captain Scoring (DEV ONLY)
 
-**Status: ✅ IMPLEMENTED + VERIFIED on DEV 2026-07-19 (branch `feature/group-scoring`, M141–M146). PROD untouched. Feature inert until a captain locks a config.**
+**Status: ✅ IMPLEMENTED + VERIFIED on DEV 2026-07-19/20 (branch `feature/group-scoring`, M141–M147). PROD untouched. Feature inert until a captain locks a config.**
 
 ## Concept
 
@@ -20,6 +20,7 @@ Rules: one match mode controls both W/D/L and Exact (no mixing). Exact is **non-
 ## Key decisions (locked during planning)
 
 1. **Lock-on-confirm** (not "tournament start" — moot for 2026): captain edits freely, Step-5 Confirm sets `locked_at`; config only affects the leaderboard once LOCKED. Server-enforced (`config_locked`).
+   - **M147 (2026-07-20) restored spec §17's tournament-KO auto-lock on top of this**, for the next tournament: `save_group_scoring_config` also rejects any edit past a deadline (`config_deadline_passed`), mirrored client-side in `isConfigDeadlinePassed()`. Uses a **placeholder date `2030-06-01T00:00:00Z`**, deliberately far enough out to never fire for 2026. Both mechanisms are independent and both must pass: not-locked-by-captain AND not-past-deadline. **Before reusing the app for a future tournament, update the real kickoff date in BOTH the RPC guard and the frontend constant** — this is not automatic.
 2. **Odds-unavailable → System fallback per pick** (`odds_source='unavailable'` or NULL snapshot → 3/1 for that pick). Explicit, never silent miscalculation.
 3. **`phase IN ('group','friendly')` = group-stage bucket** — friendlies are deliberate DEV test data driving the leaderboard (dev-data-scope-decision).
 4. **Existing groups / no config / unlocked config / all-System config → previous SQL verbatim** (fast path). Regression-gated byte-identical.
@@ -35,6 +36,7 @@ Rules: one match mode controls both W/D/L and Exact (no mixing). Exact is **non-
 - Guarded stamp triggers (M143) — INSERT stamps; UPDATE re-stamps only on genuine pick change (anti odds-chasing + immune to bulk points UPDATEs); exception-safe
 - Odds pipeline plumbing (M144) — debounced flag-gated kick fn, INSERT-trigger wiring, api_fixture_id backfill/correction trigger, 4h cadence edit (dormant), top-up fn
 - `save_group_scoring_config` RPC (M145) — captain-only, full §18 validation, lock-on-confirm
+- Tournament-KO deadline guard (M147) — placeholder date, dual client+server enforcement
 - `fn_group_custom_scores` engine + `get_group_leaderboard` DROP+CREATE with numeric totals + fast/custom branch (M146)
 
 **Frontend (`src/features/group-scoring/`):**
@@ -53,7 +55,7 @@ Note: test oracles are computed at runtime from the DB (dirty-DEV rule — never
 ## Still open / next steps
 
 - **UI e2e on gh-pages** (localhost has no auth): enable wc2026_test_mode as admin, run the wizard end-to-end, verify decimals render.
-- **PROD promotion (future tournament)**: run the odds/cron census on PROD first (never checked); apply M141–M146; decide `af-odds-daily` revival (4h) + `champion-odds-daily` (external hook expired 2026-06-11); flip `odds_kick_enabled`; widen UI gate beyond testMode.
+- **PROD promotion (future tournament)**: run the odds/cron census on PROD first (never checked); apply M141–M147; **set the real tournament kickoff date in both `save_group_scoring_config` and `CONFIG_EDIT_DEADLINE`** (M147 placeholder must be replaced); decide `af-odds-daily` revival (4h) + `champion-odds-daily` (external hook expired 2026-06-11); flip `odds_kick_enabled`; widen UI gate beyond testMode.
 - **Odds-mode data reality**: DEV has odds for 12/13 friendlies + 53/136 group games, 0 knockout; snapshots exist only for predictions made after M143. Historical picks scored under Odds fall back to System.
 - Scope-cut follow-ups if wanted: per-group point labels on Game.jsx/AiFeed, custom scoring in AI summaries (`get_group_summary_data` — note its rank has a username tiebreaker, deliberate divergence).
 - Optional cleanup: DROP dead `fn_schedule_odds_sync()` (stale 400-ing contract, name collision hazard).

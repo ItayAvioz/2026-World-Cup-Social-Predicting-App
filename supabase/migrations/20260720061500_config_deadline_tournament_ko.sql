@@ -1,0 +1,14 @@
+-- M147: date-based auto-lock for scoring-config edits (spec 17 restored for the NEXT tournament).
+-- Applied to DEV via MCP apply_migration 2026-07-20 (version = actual schema_migrations entry
+-- named config_deadline_tournament_ko).
+-- save_group_scoring_config: body verbatim from M145 (md5 954bc7f4fed14e04eace2d63e85bebf0 dumped
+-- first); ONLY one guard added after the not_captain check:
+--   IF now() >= TIMESTAMPTZ '2030-06-01T00:00:00Z' THEN RAISE EXCEPTION 'config_deadline_passed';
+-- PLACEHOLDER DATE 2030-06-01T00:00:00Z - deliberately non-relevant so it cannot fire this cycle.
+-- Before next-tournament reuse, set the REAL tournament kickoff in BOTH places (dual enforcement,
+-- PAGE_SPECS deadline pattern):
+--   1) this RPC guard
+--   2) src/features/group-scoring/constants.js CONFIG_EDIT_DEADLINE
+-- Verified 2026-07-20: guard present in live body; a save before the deadline still succeeds
+-- (draft created + deleted, state restored).
+-- Authoritative SQL: supabase_migrations.schema_migrations (deployed DB = source of truth).

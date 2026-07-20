@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import Modal from '../../components/Modal.jsx'
-import { SYSTEM_DEFAULTS } from './constants.js'
+import { SYSTEM_DEFAULTS, isConfigDeadlinePassed } from './constants.js'
 
 const STEPS = ['Group Stage', 'Knockout', 'Picks', 'Extras', 'Confirm']
 
@@ -98,7 +98,7 @@ export default function ScoringRulesModal({ isOpen, onClose, group, isCaptain, o
   }, [isOpen, group])
 
   if (!group) return null
-  const readOnly = !isCaptain || locked
+  const readOnly = !isCaptain || locked || isConfigDeadlinePassed()
   const set = (k) => (v) => setD(prev => ({ ...prev, [k]: v }))
 
   const warnings = []
@@ -141,6 +141,7 @@ export default function ScoringRulesModal({ isOpen, onClose, group, isCaptain, o
       setError(
         msg.includes('not_captain') ? 'Only the group captain can change scoring rules.'
         : msg.includes('config_locked') ? 'Rules are locked and can no longer be changed.'
+        : msg.includes('config_deadline_passed') ? 'The tournament has started — scoring rules can no longer be changed.'
         : msg.includes('invalid_multiplier') ? 'The odds multiplier must be greater than 0.'
         : msg.includes('invalid_custom_points') ? 'Custom points must be filled in and cannot be negative.'
         : msg.includes('invalid_timing') ? 'Choose when the points are counted.'
@@ -163,6 +164,7 @@ export default function ScoringRulesModal({ isOpen, onClose, group, isCaptain, o
             <div key={k} className="gs-summary-row"><span className="gs-summary-k">{k}</span><span>{v}</span></div>
           ))}
           {locked && <p className="grp-modal-note">🔒 Rules are locked.</p>}
+          {!locked && isCaptain && isConfigDeadlinePassed() && <p className="grp-modal-note">🔒 The tournament has started — rules can no longer be changed.</p>}
           {!isCaptain && !locked && hasConfig && <p className="grp-modal-note">Draft — not confirmed by the captain yet.</p>}
         </div>
       ) : (
