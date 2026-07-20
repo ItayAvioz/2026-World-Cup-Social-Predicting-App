@@ -1,0 +1,21 @@
+-- M144: odds refresh plumbing. All dormant in DEV: kick gated by app_flags.odds_kick_enabled=false,
+-- recurring schedulers are function edits only (NOT invoked - DEV stays externally silent).
+-- Applied to DEV via MCP apply_migration 2026-07-19 (version 20260719184050).
+-- Contents (full bodies live in the DB; fn_auto_schedule_game/fn_schedule_af_odds_sync dumped before edit):
+--   1) fn_schedule_game_odds_kick(p_game_id uuid) - debounced one-shot cron 'odds-kick-pending'
+--      (now()+7min) POSTing {"mode":"sync_af_odds"} to football-api-sync; early-RETURN unless
+--      app_flags.odds_kick_enabled; skips if a pending kick job already exists (burst debounce);
+--      self-unschedules in its own cron body.
+--   2) fn_auto_schedule_game() - ONLY change: added a guarded PERFORM fn_schedule_game_odds_kick(NEW.id)
+--      inside the existing IF NEW.kick_off_time > now() AND NEW.api_fixture_id IS NOT NULL block.
+--   3) fn_trg_odds_fixture_backfill() + trigger trg_games_odds_fixture_backfill
+--      AFTER UPDATE OF api_fixture_id ON games
+--      WHEN (NEW.api_fixture_id IS NOT NULL AND NEW.api_fixture_id IS DISTINCT FROM OLD.api_fixture_id
+--            AND NEW.kick_off_time > now())
+--      - covers both NULL->value backfill and value->value corrections (INSERT trigger cannot see these).
+--   4) fn_schedule_af_odds_sync() - ONLY the cron expression changed '15 7 * * *' -> '0 */4 * * *'.
+--      NOT invoked; registering af-odds-daily stays a deliberate, PROD-scoped decision.
+--   5) fn_restamp_unavailable_odds() - top-up: re-stamps odds_source='unavailable' predictions whose
+--      game now has a game_odds row and has not kicked off (updates odds columns only, so the
+--      pred_home/pred_away stamp triggers do not fire).
+-- Authoritative SQL: supabase_migrations.schema_migrations version 20260719184050 (deployed DB = source of truth).

@@ -9,6 +9,9 @@ import { TEAMS, isGameFinished } from '../lib/teams.js'
 import { getVenue } from '../lib/venues.js'
 import Layout from '../components/Layout.jsx'
 import Modal from '../components/Modal.jsx'
+import ScoringRulesModal from '../features/group-scoring/ScoringRulesModal.jsx'
+import { GROUP_SCORING_DEV, isTestMode } from '../features/group-scoring/constants.js'
+import { fmtPts } from '../features/group-scoring/format.js'
 
 const RENAME_DEADLINE = new Date('2026-06-11T19:00:00Z')
 const TEAM_CODE = Object.fromEntries(TEAMS.filter(t => t.code).map(t => [t.name, t.code]))
@@ -65,6 +68,7 @@ export default function Groups() {
   const [joinOpen,    setJoinOpen]    = useState(false)
   const [renameOpen,  setRenameOpen]  = useState(false)
   const [renameGroup, setRenameGroup] = useState(null)
+  const [scoringGroup, setScoringGroup] = useState(null)
 
   // Form values
   const [createName, setCreateName] = useState('')
@@ -375,7 +379,7 @@ export default function Groups() {
     const lines = rows.map(r => {
       const medal = MEDAL[r.group_rank] ?? `#${r.group_rank}`
       const champ = r.champion_team ? ` 🏆${r.champion_team}` : ''
-      return `${medal} ${r.username}${champ} — ${r.total_points ?? 0}pt`
+      return `${medal} ${r.username}${champ} — ${fmtPts(r.total_points)}pt`
     })
     shareText(`${groupName}\n🏆 Group Board\n\n${lines.join('\n')}\n\n— WC2026`)
   }
@@ -643,6 +647,11 @@ export default function Groups() {
                           </button>
                         )
                       )}
+                      {GROUP_SCORING_DEV && isTestMode() && (
+                        <button className="btn btn-outline btn-xs" onClick={() => setScoringGroup(group)}>
+                          {isCaptain ? '⚙️ Scoring' : '📊 Rules'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -705,7 +714,7 @@ export default function Groups() {
                                 {row.top_scorer_player ?? '—'}
                               </span>
                               <span className={`grp-lb-pts${row._placeholder ? ' grp-lb-pts--muted' : ''}`}>
-                                {row.total_points ?? 0}
+                                {fmtPts(row.total_points)}
                               </span>
                             </div>
                           )
@@ -1004,6 +1013,20 @@ export default function Groups() {
           <p className="grp-modal-note">Group names lock on June 11, 2026 at 22:00 IDT.</p>
         </form>
       </Modal>
+
+      {/* ── Group scoring rules (captain wizard / member view) ── */}
+      <ScoringRulesModal
+        isOpen={!!scoringGroup}
+        onClose={() => setScoringGroup(null)}
+        group={scoringGroup}
+        isCaptain={scoringGroup?.created_by === user?.id}
+        onSaved={(confirmed) => {
+          setScoringGroup(null)
+          cache.invalidate()  // clear all — group totals also feed dashboard ranks cache
+          loadGroups({ skipCache: true })
+          showToast(confirmed ? 'Scoring rules locked ✓' : 'Draft saved')
+        }}
+      />
 
     </Layout>
   )

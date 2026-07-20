@@ -1,0 +1,11 @@
+-- M145: captain-only config writer RPC save_group_scoring_config (19 args, SECURITY DEFINER).
+-- Applied to DEV via MCP apply_migration 2026-07-19 (version 20260719184127).
+-- Trivia-model security: group_scoring_config has no client writes; all writes go through this RPC.
+-- Guards: not_authenticated / not_captain (groups.created_by = auth.uid()) / config_locked (locked_at set).
+-- Validation: invalid_mode, invalid_basis, invalid_custom_points (NULL or negative), invalid_multiplier (<=0),
+--   invalid_timing (required only when trivia/bracket included).
+-- Normalization on write: system mode NULLs custom+multiplier fields; odds keeps multiplier only;
+--   custom keeps X/Y only; timing NULLed when not included.
+-- p_confirm=true sets locked_at=now() - config only takes effect on the leaderboard once LOCKED.
+-- REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO authenticated.
+-- Authoritative SQL: supabase_migrations.schema_migrations version 20260719184127 (deployed DB = source of truth).

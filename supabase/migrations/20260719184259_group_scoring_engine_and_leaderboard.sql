@@ -1,0 +1,23 @@
+-- M146: per-group scoring engine + get_group_leaderboard branch.
+-- Applied to DEV via MCP apply_migration 2026-07-19 (version 20260719184259).
+-- 1) NEW fn_group_custom_scores(p_group_id) RETURNS (user_id, total_points numeric, exact_scores bigint):
+--    recomputes a configured group's totals from raw facts (predictions x games + odds snapshots):
+--    - phase bucket: ('group','friendly') = group-stage mode; every other phase = knockout mode
+--    - knockout_result_basis 'extra_time': actual = score + COALESCE(et_score, 0) per team
+--      (NEVER COALESCE(et_score, score) - M139 lesson); penalties never affect scoring
+--    - non-additive exact in all modes; odds mode picks the snapshot odds matching the PREDICTED
+--      outcome (home->odds_home_win, draw->odds_draw, away->odds_away_win) x exact multiplier;
+--      NULL snapshot ('unavailable') falls back to System 3/1 for that pick
+--    - champion/top-scorer correctness = canonical points_earned = 10; value resolved per mode
+--      (champion odds mode uses champion_pick.odds_value snapshot, fallback 10)
+--    - trivia term: global SUM(trivia_answers.points_earned), gated by trivia_included + timing
+--      (immediate = now; tournament_finish = 2026-07-21T19:00:00Z, System-parity constant)
+--    - bracket term: fn_knockout_points(user), gated by bracket_included + timing
+--      (tournament_finish = 2026-07-20T07:00:00Z, System-parity constant)
+-- 2) get_group_leaderboard(p_group_id): DROP + CREATE (return type change: total_points bigint -> numeric).
+--    Same row shape/order otherwise. Branch: engine ONLY for a LOCKED config that differs from System
+--    defaults; else the previous SQL verbatim (regression-gated byte-identical, 41+45 rows, 0 diffs).
+--    global_rank subquery stays canonical System in BOTH branches - captain config never touches global.
+-- Verified 2026-07-19: 19/19 SQL tests green (T2 stamp semantics, T3 RPC+custom oracle, T4 odds oracle
+-- over 282 stamped predictions, T5 ET-basis + immediate extras oracle, T6 kick/debounce/backfill, T7 restore).
+-- Authoritative SQL: supabase_migrations.schema_migrations version 20260719184259 (deployed DB = source of truth).

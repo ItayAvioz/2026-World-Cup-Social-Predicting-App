@@ -48,6 +48,7 @@ export default function HowToPlay({ isOpen, onClose }) {
                 <tr><td>🧠 Daily Trivia</td><td className="htp-pts">1 pt</td></tr>
               </tbody>
             </table>
+            <p className="htp-note">Your group captain may set custom scoring rules for your group board — check “Rules” on the Groups page. The global leaderboard always uses the points above.</p>
             <p className="htp-note">Points are not cumulative. An exact score earns 3 pts total — inclusive of the outcome.</p>
             <div className="htp-callout">
               <strong>The Safety Net:</strong> Missed a prediction? The app auto-predicts a random score for you. You can still earn points on pure luck.
